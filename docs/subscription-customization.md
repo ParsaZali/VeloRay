@@ -120,8 +120,9 @@ They do not grant new inbound access and are not a replacement for service group
 - Per-client `hwid_limit`: `0` inherits the global policy, `-1` disables the
   HWID requirement/cap for that account, `1..1000` overrides the cap.
 - The existing **Devices** field remains the concurrent-IP limit.
-- Browser pages and chart requests are available without an HWID; config
-  downloads apply the policy. HEAD checks do not register devices or bypass caps.
+- Browser pages and chart requests are available without an HWID. While HWID
+  is required, built-in and custom pages receive no raw URIs, WireGuard profiles
+  or HTTP/SOCKS credentials; configuration downloads apply the policy. HEAD checks do not register devices or bypass caps.
 - Registration and admission use one PostgreSQL transaction/advisory lock per
   billed account. Shared-account connections share their registry and cap.
 - Client → Devices → **Revoke** blocks that identifier from future downloads;

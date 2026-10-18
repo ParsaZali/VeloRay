@@ -218,6 +218,14 @@ func TestIntegrationHWIDLimitConcurrentRevocationAndScope(t *testing.T) {
 	if fetch("GET", "browser", "portal") != 200 {
 		t.Fatal("browser portal must remain available")
 	}
+	for _, pageFormat := range []string{"portal", "html"} {
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/sub/"+str(c, "subscription_token")+"?format="+pageFormat, nil))
+		if w.Code != 200 || strings.Contains(w.Body.String(), str(c, "credential")) || strings.Contains(w.Body.String(), "vless://") {
+			t.Fatal("browser page bypassed HWID admission", w.Code)
+		}
+	}
+
 	var wg sync.WaitGroup
 	results := make(chan int, 16)
 	for index := 0; index < 16; index++ {
@@ -298,5 +306,29 @@ func TestIntegrationDeliveryHostsDiagnosticsAndMetrics(t *testing.T) {
 	s.prometheus(w, httptest.NewRequest(http.MethodGet, "/api/metrics", nil), admin)
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "# TYPE veloray_nodes gauge") || strings.Contains(w.Body.String(), str(c, "credential")) || strings.Contains(w.Body.String(), str(c, "subscription_token")) {
 		t.Fatal("metrics invalid or contain secrets", w.Body.String())
+	}
+}
+
+func TestHWIDPortalRedactsCredentialsForEveryTemplate(t *testing.T) {
+	s, c, i, n, cfg := portalFixture(t)
+	c["credential"] = "private-credential-marker"
+	cfg["subscription_hwid_limit"] = 1
+	path := filepath.Join(s.Config.TemplateRoot, "probe.html")
+	document := `<html>{{.Link}} {{.Profile}} {{.Proxy}}{{range .Connections}}{{.Link}}{{end}}</html>`
+	if err := os.WriteFile(path, []byte(document), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg["subscription_template_path"] = "probe.html"
+	for _, page := range []string{"default", "compact", "dashboard", "custom"} {
+		cfg["subscription_template"] = page
+		for _, protocol := range []string{"vless", "http", "socks", "wireguard"} {
+			i["protocol"] = protocol
+			w := httptest.NewRecorder()
+			uri := "vless://private-credential-marker@vpn.example"
+			s.portal(w, httptest.NewRequest("GET", "/sub/test?format=portal", nil), c, i, n, cfg, uri, "private-wireguard-profile", Data{"name": "Primary", "link": uri})
+			if strings.Contains(w.Body.String(), "private-credential-marker") || strings.Contains(w.Body.String(), "private-wireguard-profile") {
+				t.Fatal("credentials surfaced", page, protocol)
+			}
+		}
 	}
 }

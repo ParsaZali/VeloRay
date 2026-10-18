@@ -337,6 +337,22 @@ var portalTemplate = template.Must(template.New("portal").Parse(`<!doctype html>
 `))
 
 func (s *Server) portal(w http.ResponseWriter, r *http.Request, c, i, n, cfg Data, link, profile string, details ...Data) {
+	// A browser page must not become an alternate credential-download path
+	// around HWID admission. Keep account metadata and the subscription URL,
+	// but remove every raw URI/profile before any built-in or custom template.
+	_, hwidRequired := hwidPolicy(c, cfg)
+	if hwidRequired {
+		cfg = clone(cfg)
+		cfg["subscription_show_connection_uri"] = false
+		link, profile = "", ""
+		safeDetails := make([]Data, 0, len(details))
+		for _, entry := range details {
+			safe := clone(entry)
+			delete(safe, "link")
+			safeDetails = append(safeDetails, safe)
+		}
+		details = safeDetails
+	}
 	url := strings.TrimRight(s.Config.PublicURL, "/") + "/sub/" + str(c, "subscription_token")
 	used, limit := num(c, "used_traffic_bytes"), num(c, "traffic_limit_bytes")
 	expiry := "No expiry"
@@ -372,7 +388,7 @@ func (s *Server) portal(w http.ResponseWriter, r *http.Request, c, i, n, cfg Dat
 			d["Expiry"] = "بدون انقضا"
 		}
 	}
-	if oneOf(str(i, "protocol"), "http", "socks") {
+	if !hwidRequired && oneOf(str(i, "protocol"), "http", "socks") {
 		d["Proxy"] = fmt.Sprintf("Host: %s\nPort: %d\nUsername: %s\nPassword: %s", str(n, "public_host"), num(i, "port"), str(obj(c, "protocol_settings"), "username"), str(c, "credential"))
 	}
 	if flag(cfg, "subscription_show_qr") {
