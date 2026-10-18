@@ -203,7 +203,9 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 		}
 		key := accountKey(client)
 		series := principalDeltas[key]
-		if delta > int64(^uint64(0)>>1)-series[0] { return errors.New("principal traffic overflow") }
+		if delta > int64(^uint64(0)>>1)-series[0] {
+			return errors.New("principal traffic overflow")
+		}
 		series[0] += delta
 		if parts[3] == "uplink" {
 			series[1] += delta
@@ -214,8 +216,14 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 		if chargedClients[key] == nil {
 			chargedClients[key] = client
 		}
+		firstConnection := str(chargedClients[key], "last_traffic_at") == "" && num(chargedClients[key], "raw_lifetime_traffic_bytes") == 0
 		if e = applyDirectionalTrafficDelta(chargedClients[key], parts[3], delta); e != nil {
 			return e
+		}
+		if firstConnection {
+			if e = audit(ctx, q, 0, "client.first_connection", key, Data{}); e != nil {
+				return e
+			}
 		}
 		if delta > int64(^uint64(0)>>1)-totalDelta {
 			return errors.New("node traffic overflow")
@@ -246,9 +254,13 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 		}
 	}
 	for key, delta := range principalDeltas {
-		if delta[0] <= 0 { continue }
+		if delta[0] <= 0 {
+			continue
+		}
 		_, err := q.Exec(ctx, `INSERT INTO vr_client_traffic_windows(at,principal_key,bytes,upload_bytes,download_bytes) VALUES($1,$2,$3,$4,$5) ON CONFLICT(principal_key,at) DO UPDATE SET bytes=vr_client_traffic_windows.bytes+excluded.bytes,upload_bytes=vr_client_traffic_windows.upload_bytes+excluded.upload_bytes,download_bytes=vr_client_traffic_windows.download_bytes+excluded.download_bytes`, time.Now().UTC().Truncate(5*time.Minute), key, delta[0], delta[1], delta[2])
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 	}
 	for owner, delta := range ownerDeltas {
 		if owner <= 0 || delta[0] <= 0 {
@@ -336,7 +348,7 @@ func (s *Server) change(ctx context.Context, ids []int64, actor Actor, action, t
 		if e != nil {
 			return nil, e
 		}
-		cfg, e := buildConfig(ctx, tx, fresh)
+		cfg, e := s.buildConfig(ctx, tx, fresh)
 		if e != nil {
 			return nil, fail(400, e.Error())
 		}

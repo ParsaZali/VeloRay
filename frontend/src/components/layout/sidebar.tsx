@@ -6,6 +6,9 @@ import { VeloRayWordmark } from "@/components/brand/veloray-mark";
 import { FaIcon } from "@/components/ui/fa-icon";
 export type RouteKey =
   | "dashboard"
+  | "customers"
+  | "services"
+  | "profiles"
   | "clients"
   | "outbounds"
   | "routing"
@@ -25,6 +28,8 @@ const groups = [
   {
     label: "Management",
     items: [
+      { key: "customers", label: "Customers", icon: "users" },
+      { key: "services", label: "Services and plans", icon: "layer-group" },
       { key: "clients", label: "Clients", icon: "users" },
       { key: "inbounds", label: "Inbounds", icon: "diagram-project" },
       {
@@ -39,6 +44,7 @@ const groups = [
     label: "Infrastructure",
     items: [
       { key: "nodes", label: "Nodes", icon: "server" },
+      { key: "profiles", label: "Config profiles", icon: "file-code" },
       { key: "xray", label: "Xray Core", icon: "microchip" },
     ],
   },
@@ -74,6 +80,8 @@ export function Sidebar({
   const access: Record<string, string> = {
     dashboard: "dashboard.read",
     clients: "clients.read",
+    customers: "clients.read",
+    services: "clients.read",
     inbounds: "inbounds.read",
     nodes: "nodes.read",
     outbounds: "outbounds.read",
@@ -106,7 +114,7 @@ export function Sidebar({
               {g.items
                 .filter(
                   (item) =>
-                    (!["accounts", "imports"].includes(item.key) ||
+                    (!["accounts", "imports", "profiles"].includes(item.key) ||
                       isSuperuser) &&
                     (!access[item.key] || can(session, access[item.key])),
                 )

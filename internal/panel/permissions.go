@@ -218,6 +218,16 @@ func (s *Server) roleAuthorize(a Actor, method, path string) error {
 	} // Only safe defaults are exposed to restricted accounts.
 	resource := strings.Split(path, "/")[0]
 	switch resource {
+	case "customers":
+		resource = "clients"
+	case "services":
+		if method == http.MethodGet {
+			resource = "clients"
+		} else if !flag(a.User, "is_superuser") || a.Scope != "admin" {
+			return fail(403, "administrator access required")
+		} else {
+			return nil
+		}
 	case "metrics":
 		if method != http.MethodGet || !flag(a.User, "is_superuser") {
 			return fail(403, "administrator read access required")
@@ -231,7 +241,7 @@ func (s *Server) roleAuthorize(a Actor, method, path string) error {
 		resource = "traffic"
 	case "system-info":
 		resource = "nodes"
-	case "audit", "admin", "imports", "telegram", "webhooks", "updates", "subscription-template":
+	case "profiles", "snippets", "audit", "admin", "imports", "telegram", "webhooks", "updates", "subscription-template":
 		if !flag(a.User, "is_superuser") || a.Scope != "admin" {
 			return fail(403, "administrator access required")
 		}

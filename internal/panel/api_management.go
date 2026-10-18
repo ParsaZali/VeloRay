@@ -44,14 +44,20 @@ func (s *Server) resetAPIKey(w http.ResponseWriter, r *http.Request, id int64, a
 }
 func openAPISpec(base string) Data {
 	paths := Data{}
-	for _, kind := range []string{"nodes", "inbounds", "clients", "outbounds", "routing_rules", "admin/api-keys"} {
+	for _, kind := range []string{"customers", "services", "profiles", "snippets", "nodes", "inbounds", "clients", "outbounds", "routing_rules", "admin/api-keys"} {
 		path := "/api/" + kind
 		paths[path] = Data{"get": Data{"summary": "List " + kind, "responses": Data{"200": Data{"description": "OK"}}}, "post": Data{"summary": "Create " + kind, "requestBody": Data{"required": true, "content": Data{"application/json": Data{"schema": Data{"type": "object"}}}}, "responses": Data{"201": Data{"description": "Created"}}}}
 		paths[path+"/{id}"] = Data{"parameters": []any{Data{"name": "id", "in": "path", "required": true, "schema": Data{"type": "integer"}}}, "get": Data{"responses": Data{"200": Data{"description": "OK"}}}, "patch": Data{"responses": Data{"200": Data{"description": "Updated"}}}, "delete": Data{"responses": Data{"204": Data{"description": "Deleted"}}}}
 	}
-	for _, endpoint := range []string{"ips", "devices", "delivery-check"} {
+	for _, endpoint := range []string{"ips", "devices", "delivery-check", "subscription-history"} {
 		paths["/api/clients/{id}/"+endpoint] = Data{"get": Data{"summary": "List client " + endpoint, "parameters": []any{Data{"name": "id", "in": "path", "required": true, "schema": Data{"type": "integer"}}}, "responses": Data{"200": Data{"description": "OK"}}}}
 	}
+	for _, kind := range []string{"profiles", "snippets"} {
+		paths["/api/"+kind+"/{id}/revisions"] = Data{"get": Data{"summary": "List encrypted configuration revision metadata", "responses": Data{"200": Data{"description": "Up to 50 revisions"}}}}
+		paths["/api/"+kind+"/{id}/restore"] = Data{"post": Data{"summary": "Restore a revision as a new version and deploy affected nodes", "responses": Data{"200": Data{"description": "Restored"}}}}
+	}
+	paths["/api/profiles/{id}/assign"] = Data{"post": Data{"summary": "Assign a shared profile to node_ids atomically", "responses": Data{"200": Data{"description": "Assignments applied"}}}}
+	paths["/api/customers/{id}/rotate-token"] = Data{"post": Data{"summary": "Rotate a shared subscription and revoke every historical connection token", "responses": Data{"200": Data{"description": "All subscription URLs rotated"}}}}
 	paths["/api/metrics"] = Data{"get": Data{"summary": "Prometheus aggregate metrics; administrator-owned read token required", "responses": Data{"200": Data{"description": "Prometheus text exposition"}}}}
 	paths["/api/subscription-template/validate"] = Data{"post": Data{"summary": "Validate a custom HTML template with sample data; administrator scope required", "responses": Data{"200": Data{"description": "Validation result"}}}}
 	paths["/api/clients/{id}/device-action"] = Data{"post": Data{"summary": "Revoke, allow or forget a registered device", "responses": Data{"200": Data{"description": "Device updated"}}}}

@@ -14,7 +14,7 @@ import (
 
 func clashConfig(c, i, n Data) (Data, error) {
 	p, t := str(i, "protocol"), str(i, "transport")
-	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria") {
+	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "tuic") {
 		return nil, fmt.Errorf("Clash output is unavailable for %s", p)
 	}
 	if !oneOf(t, "raw", "ws", "grpc", "xhttp", "hysteria") {
@@ -40,6 +40,12 @@ func clashConfig(c, i, n Data) (Data, error) {
 		v["type"] = "ss"
 		v["cipher"] = fallback(str(obj(i, "protocol_settings"), "method"), "aes-256-gcm")
 		v["password"] = str(c, "credential")
+	case "tuic":
+		v["type"] = p
+		v["uuid"] = str(c, "credential")
+		v["password"] = str(obj(c, "protocol_settings"), "password")
+		v["congestion-controller"] = fallback(str(obj(i, "protocol_settings"), "congestion_control"), "bbr")
+		v["udp-relay-mode"] = "native"
 	case "hysteria":
 		v["type"] = "hysteria2"
 		v["password"] = str(c, "credential")
@@ -94,7 +100,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 503, Data{"detail": "Subscriptions are temporarily unavailable"})
 		return
 	}
-	rows, e := list(ctx, s.Store.Pool, "clients", "WHERE data->>'subscription_token'=$1", token)
+	rows, e := list(ctx, s.Store.Pool, "clients", "WHERE data->>'subscription_token'=$1 OR account_id IN (SELECT id FROM vr_accounts WHERE data->>'subscription_token'=$1) ORDER BY id LIMIT 1", token)
 	if e != nil {
 		s.respond(w, r, nil, 0, e)
 		return
@@ -104,6 +110,11 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := rows[0]
+	if assetPath == "" && r.Method == "GET" && r.URL.Query().Get("format") != "stats" {
+		history := &subscriptionHistoryWriter{ResponseWriter: w}
+		w = history
+		defer s.recordSubscriptionRequest(r, c, history)
+	}
 	members := rows
 	if account := num(c, "_account"); account > 0 {
 		members, e = list(ctx, s.Store.Pool, "clients", "WHERE account_id=$1 ORDER BY id", account)
@@ -238,6 +249,30 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 			body = output
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	case "xray":
+		profiles := []any{}
+		for _, item := range connections {
+			generated, err := xrayClientConfig(item.client, item.inbound, item.node)
+			if err != nil {
+				writeJSON(w, 400, Data{"detail": err.Error()})
+				return
+			}
+			b, _ := json.Marshal(generated)
+			output, err := applyFeedTemplate(str(cfg, "subscription_xray_template"), string(b), "xray")
+			if err != nil {
+				writeJSON(w, 500, Data{"detail": "Subscription template is invalid"})
+				return
+			}
+			parsed, err := decode([]byte(output))
+			if err != nil {
+				s.respond(w, r, nil, 0, err)
+				return
+			}
+			profiles = append(profiles, parsed)
+		}
+		b, _ := json.MarshalIndent(profiles, "", "  ")
+		body = string(b) + "\n"
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	case "stats":
 		s.subscriptionStats(w, r, c)
 		return
@@ -295,7 +330,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Query().Get("download") == "1" {
-		filenames := map[string]string{"base64": "veloray-subscription.txt", "b64": "veloray-subscription.txt", "raw": "veloray-links.txt", "text": "veloray-links.txt", "clash": "veloray-clash.yaml", "yaml": "veloray-clash.yaml", "singbox": "veloray-singbox.json", "sing-box": "veloray-singbox.json"}
+		filenames := map[string]string{"base64": "veloray-subscription.txt", "b64": "veloray-subscription.txt", "raw": "veloray-links.txt", "text": "veloray-links.txt", "clash": "veloray-clash.yaml", "yaml": "veloray-clash.yaml", "singbox": "veloray-singbox.json", "sing-box": "veloray-singbox.json", "xray": "veloray-xray.json"}
 		if filename := filenames[format]; filename != "" {
 			w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 		}

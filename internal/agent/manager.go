@@ -98,7 +98,7 @@ func InspectConfigPorts(ctx context.Context, run Runtime, service string, raw []
 		}
 		networks := []string{"tcp"}
 		switch {
-		case in.Protocol == "wireguard" || in.Protocol == "hysteria" || in.StreamSettings.Network == "kcp" || in.StreamSettings.Network == "mkcp" || in.StreamSettings.Network == "quic" || in.StreamSettings.Network == "hysteria":
+		case in.Protocol == "tuic" || in.Protocol == "wireguard" || in.Protocol == "hysteria" || in.StreamSettings.Network == "kcp" || in.StreamSettings.Network == "mkcp" || in.StreamSettings.Network == "quic" || in.StreamSettings.Network == "hysteria":
 			networks = []string{"udp"}
 		case in.Protocol == "shadowsocks":
 			networks = []string{"tcp", "udp"}
@@ -658,8 +658,14 @@ func (m *Manager) Apply(ctx context.Context, id string, raw []byte) error {
 	if e = m.persist(); e != nil {
 		return e
 	}
+	additions, live := liveUserAdditions(before, raw)
+	live = live && m.Core != "singbox" && m.status(ctx).Running
 	if e = atomicWrite(m.ConfigPath, raw, 0640); e == nil {
-		e = m.restart(ctx)
+		if live {
+			e = m.addUsersLive(ctx, additions)
+		} else {
+			e = m.restart(ctx)
+		}
 	}
 	if e != nil {
 		rollbackErr := m.restore(ctx, before)

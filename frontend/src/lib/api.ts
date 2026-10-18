@@ -267,8 +267,15 @@ export type AppSettings = {
   subscription_hwid_limit: number;
   subscription_clash_template: string;
   subscription_singbox_template: string;
+  subscription_xray_template: string;
   subscription_update_interval_hours: number;
-  subscription_default_format: "auto" | "base64" | "raw" | "clash" | "singbox";
+  subscription_default_format:
+    | "auto"
+    | "base64"
+    | "raw"
+    | "clash"
+    | "singbox"
+    | "xray";
   subscription_show_analytics: boolean;
   subscription_show_downloads: boolean;
   subscription_theme: "system" | "light" | "dark";

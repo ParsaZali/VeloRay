@@ -82,6 +82,7 @@ const defaults: AppSettings = {
   subscription_hwid_limit: 0,
   subscription_clash_template: "",
   subscription_singbox_template: "",
+  subscription_xray_template: "",
   subscription_update_interval_hours: 12,
   subscription_default_format: "auto",
   subscription_show_analytics: true,
@@ -618,6 +619,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                         <option value="raw">RAW</option>
                         <option value="clash">Clash</option>
                         <option value="singbox">sing-box</option>
+                        <option value="xray">Xray JSON</option>
                       </Select>
                     </Field>
                     <Field label={t("Subscription portal theme")}>

@@ -14,9 +14,9 @@ import (
 )
 
 var editable = map[string]string{
-	"nodes":         "name public_host agent_url agent_token enabled verify_tls config_patch",
+	"nodes":         "profile_id name public_host agent_url agent_token enabled verify_tls config_patch",
 	"inbounds":      "name node core listen port protocol transport security flow path host_header service_name tls_server_name tls_cert_file tls_key_file reality_dest reality_server_name reality_private_key reality_public_key reality_short_id protocol_settings stream_settings enabled",
-	"clients":       "hwid_limit device_limit start_after_first_use duration_days owner_id inbound name credential protocol_settings subscription_token enabled expires_at traffic_limit_bytes renewal_interval_days next_renewal_at traffic_multiplier note",
+	"clients":       "renewal_period renewal_every renewal_timezone hwid_limit device_limit start_after_first_use duration_days owner_id inbound name credential protocol_settings subscription_token enabled expires_at traffic_limit_bytes renewal_interval_days next_renewal_at traffic_multiplier note",
 	"outbounds":     "name node core tag protocol config enabled",
 	"routing_rules": "name node core priority config enabled",
 	"users":         "username email is_active is_staff is_superuser password role permissions allowed_inbounds own_clients_only max_clients traffic_budget_bytes",
@@ -81,7 +81,7 @@ func (s *Server) view(ctx context.Context, q Query, kind string, d Data) (Data, 
 		if !flag(d, "enabled") {
 			out["online"] = false
 			out["connection_status"] = "disabled"
-		} else if observed, err := timestamp(n, "_telemetry_at"); err == nil && time.Since(observed) < 20*time.Second && flag(n, "_online_available") && oneOf(str(i, "protocol"), "vless", "vmess", "trojan", "hysteria") {
+		} else if observed, err := timestamp(n, "_telemetry_at"); err == nil && time.Since(observed) < 20*time.Second && flag(n, "_online_available") && oneOf(str(i, "protocol"), "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell") {
 			connected := flag(obj(n, "_online_clients"), strconv.FormatInt(num(d, "id"), 10))
 			out["online"] = connected
 			out["connection_status"] = "offline"
@@ -93,7 +93,7 @@ func (s *Server) view(ctx context.Context, q Query, kind string, d Data) (Data, 
 		if num(d, "_account") > 0 {
 			var token string
 			var count int
-			if e = q.QueryRow(ctx, `SELECT data->>'subscription_token' FROM vr_clients WHERE account_id=$1 ORDER BY id LIMIT 1`, num(d, "_account")).Scan(&token); e != nil {
+			if e = q.QueryRow(ctx, `SELECT COALESCE((SELECT data->>'subscription_token' FROM vr_accounts WHERE id=$1), data->>'subscription_token') FROM vr_clients WHERE account_id=$1 ORDER BY id LIMIT 1`, num(d, "_account")).Scan(&token); e != nil {
 				return nil, e
 			}
 			if e = q.QueryRow(ctx, `SELECT count(*) FROM vr_clients WHERE account_id=$1`, num(d, "_account")).Scan(&count); e != nil {
@@ -112,6 +112,15 @@ func (s *Server) view(ctx context.Context, q Query, kind string, d Data) (Data, 
 }
 func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Actor) (any, int, error) {
 	ctx := r.Context()
+	if path == "profiles" || path == "snippets" || strings.HasPrefix(path, "profiles/") || strings.HasPrefix(path, "snippets/") {
+		return s.profilesAPI(w, r, path, a)
+	}
+	if path == "customers" || strings.HasPrefix(path, "customers/") {
+		return s.customersAPI(w, r, path, a)
+	}
+	if path == "services" || strings.HasPrefix(path, "services/") {
+		return s.servicesAPI(w, r, path, a)
+	}
 	if strings.HasPrefix(path, "imports/") {
 		return s.importsAPI(w, r, path, a)
 	}
@@ -197,6 +206,17 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 	}
 	if kind == "api_keys" && len(parts) > 2 && parts[2] == "reset" {
 		return s.resetAPIKey(w, r, id, a)
+	}
+	if kind == "clients" && len(parts) == 3 && parts[2] == "subscription-history" {
+		if r.Method != "GET" {
+			return nil, 0, fail(405, "method not allowed")
+		}
+		c, e := get(ctx, s.Store.Pool, "clients", id)
+		if e != nil {
+			return nil, 0, e
+		}
+		out, e := s.subscriptionHistory(ctx, c)
+		return out, 200, e
 	}
 	if kind == "clients" && len(parts) == 3 && parts[2] == "delivery-check" {
 		if r.Method != "GET" {
@@ -322,6 +342,18 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 		ids = nodeIDs(num(old, "node"), num(input, "node"))
 	}
 	if kind == "clients" {
+		if num(old, "_account") > 0 && input["subscription_token"] != nil {
+			return nil, 0, fail(409, "rotate shared subscription tokens through customers")
+		}
+		if num(old, "_account") > 0 && (r.Method == "DELETE" || (input["inbound"] != nil && num(input, "inbound") != num(old, "inbound"))) {
+			return nil, 0, fail(409, "manage shared account membership through customers")
+		}
+		if num(old, "_account") > 0 {
+			ids, e = clientNodes(ctx, s.Store.Pool, old)
+			if e != nil {
+				return nil, 0, e
+			}
+		}
 		for _, in := range nodeIDs(num(old, "inbound"), num(input, "inbound")) {
 			n, e := inboundNode(ctx, s.Store.Pool, in)
 			if e != nil {
@@ -348,6 +380,15 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 			}
 		}
 		if r.Method == "DELETE" {
+			if kind == "inbounds" {
+				var referenced bool
+				if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM vr_clients WHERE inbound_id=$1 AND account_id IS NOT NULL UNION ALL SELECT 1 FROM vr_services WHERE data->'inbound_ids' @> $2::jsonb UNION ALL SELECT 1 FROM vr_accounts WHERE data->'inbound_ids' @> $2::jsonb)`, id, fmt.Sprintf("[%d]", id)).Scan(&referenced); e != nil {
+					return nil, e
+				}
+				if referenced {
+					return nil, fail(409, "remove this inbound from services and shared customers before deleting it")
+				}
+			}
 			if kind == "nodes" {
 				if flag(d, "is_local") {
 					return nil, fail(400, "The local node cannot be deleted")
@@ -373,7 +414,8 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 		prior := clone(d)
 		d = merge(d, input)
 		if kind == "clients" {
-			if num(d, "renewal_interval_days") != num(prior, "renewal_interval_days") {
+			if num(d, "renewal_interval_days") != num(prior, "renewal_interval_days") || str(d, "renewal_period") != str(prior, "renewal_period") || num(d, "renewal_every") != num(prior, "renewal_every") || str(d, "renewal_timezone") != str(prior, "renewal_timezone") {
+				d["_renewal_day"] = 0
 				d["next_renewal_at"] = nil
 			}
 			if flag(d, "enabled") {
@@ -382,6 +424,14 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 		}
 		switch kind {
 		case "nodes":
+			if num(d, "profile_id") < 0 {
+				return nil, fail(400, "invalid profile")
+			}
+			if num(d, "profile_id") > 0 {
+				if _, e := get(ctx, tx, "profiles", num(d, "profile_id")); e != nil {
+					return nil, fail(400, "profile does not exist")
+				}
+			}
 			if token := str(input, "agent_token"); token != "" {
 				if len(token) < 32 {
 					return nil, fail(400, "agent_token must have at least 32 characters")
@@ -466,6 +516,29 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 			if e := validateClient(ctx, tx, d); e != nil {
 				return nil, fail(400, e.Error())
 			}
+			if num(d, "_account") > 0 {
+				related, e := clientNodes(ctx, tx, d)
+				if e != nil {
+					return nil, e
+				}
+				if e = ensureCovered(related, ids); e != nil {
+					return nil, e
+				}
+				members, e := customerMembers(ctx, tx, num(d, "_account"))
+				if e != nil {
+					return nil, e
+				}
+				for _, member := range members {
+					copyAccountFields(member, d)
+					if e = validateClientOwner(ctx, tx, a, member, false); e != nil {
+						return nil, e
+					}
+					if e = validateClient(ctx, tx, member); e != nil {
+						return nil, fail(400, e.Error())
+					}
+				}
+			}
+
 		case "users":
 			if err := validateAccount(ctx, tx, d, prior, input); err != nil {
 				return nil, err
@@ -707,7 +780,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request, kind string, id 
 			if r.Method != "GET" {
 				return nil, 0, fail(405, "method not allowed")
 			}
-			cfg, err := buildConfig(ctx, s.Store.Pool, d)
+			cfg, err := s.buildConfig(ctx, s.Store.Pool, d)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -720,7 +793,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request, kind string, id 
 			if r.Method != "GET" {
 				return nil, 0, fail(405, "method not allowed")
 			}
-			cfg, e := buildConfig(ctx, s.Store.Pool, d)
+			cfg, e := s.buildConfig(ctx, s.Store.Pool, d)
 			return Data{"node": str(d, "name"), "config": cfg}, 200, e
 		case "singbox-status":
 			if r.Method != "GET" {
@@ -775,7 +848,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request, kind string, id 
 			}
 			candidate["node"] = id
 			port := num(candidate, "port")
-			if port < 1 || port > 65535 || net.ParseIP(str(candidate, "listen")) == nil || !oneOf(str(candidate, "protocol"), "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "http", "socks", "tunnel", "tun") || !oneOf(str(candidate, "transport"), "raw", "ws", "grpc", "xhttp", "httpupgrade", "mkcp", "hysteria") {
+			if port < 1 || port > 65535 || net.ParseIP(str(candidate, "listen")) == nil || !oneOf(str(candidate, "protocol"), "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "http", "socks", "tunnel", "tun", "tuic", "naive", "snell") || !oneOf(str(candidate, "transport"), "raw", "ws", "grpc", "xhttp", "httpupgrade", "mkcp", "hysteria") {
 				return nil, 0, fail(400, "valid protocol, transport, IP listen address and port are required")
 			}
 			if port == 10085 || port == 9191 || flag(d, "is_local") && (port == 8610 || port == int64(s.Config.PanelPort)) {
@@ -820,7 +893,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request, kind string, id 
 			out, e := s.change(ctx, []int64{id}, a, "node.deploy", str(d, "name"), func(pgx.Tx) (any, error) { return Data{"status": "applied"}, nil })
 			return out, 200, e
 		case "config-validate":
-			cfg, err := buildConfig(ctx, s.Store.Pool, d)
+			cfg, err := s.buildConfig(ctx, s.Store.Pool, d)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -872,17 +945,24 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request, kind string, id 
 		}
 	}
 	if kind == "clients" && oneOf(action, "reset-usage", "toggle") && r.Method == "POST" {
-		node, e := inboundNode(ctx, s.Store.Pool, num(d, "inbound"))
+		ids, e := clientNodes(ctx, s.Store.Pool, d)
 		if e != nil {
 			return nil, 0, e
 		}
-		out, e := s.change(ctx, []int64{node}, a, "client."+action, str(d, "name"), func(tx pgx.Tx) (any, error) {
+		out, e := s.change(ctx, ids, a, "client."+action, str(d, "name"), func(tx pgx.Tx) (any, error) {
 			c, e := get(ctx, tx, "clients", id)
 			if e == nil {
 				e = clientAccess(a, c)
 			}
 			if e != nil {
 				return nil, e
+			}
+			related, err := clientNodes(ctx, tx, c)
+			if err != nil {
+				return nil, err
+			}
+			if err = ensureCovered(related, ids); err != nil {
+				return nil, err
 			}
 			operation := action
 			if action == "toggle" {
@@ -1143,15 +1223,19 @@ func (s *Server) bulkClients(w http.ResponseWriter, r *http.Request, a Actor) (a
 		if err != nil {
 			return nil, 0, err
 		}
-		node, err := inboundNode(ctx, s.Store.Pool, num(client, "inbound"))
+		related, err := clientNodes(ctx, s.Store.Pool, client)
 		if err != nil {
 			return nil, 0, err
 		}
+		if action == "delete" && num(client, "_account") > 0 {
+			return nil, 0, fail(409, "delete shared accounts through customers")
+		}
 		ids = append(ids, id)
-		nodes = append(nodes, node)
+		nodes = append(nodes, related...)
 	}
 	nodes = nodeIDs(nodes...)
 	out, err := s.change(ctx, nodes, a, "clients.bulk-"+action, fmt.Sprintf("%d accounts", len(ids)), func(tx pgx.Tx) (any, error) {
+		principals := map[string]bool{}
 		for _, id := range ids {
 			client, err := get(ctx, tx, "clients", id)
 			if err == nil {
@@ -1160,19 +1244,21 @@ func (s *Server) bulkClients(w http.ResponseWriter, r *http.Request, a Actor) (a
 			if err != nil {
 				return nil, err
 			}
-			node, err := inboundNode(ctx, tx, num(client, "inbound"))
+			related, err := clientNodes(ctx, tx, client)
 			if err != nil {
 				return nil, err
 			}
-			found := false
-			for _, locked := range nodes {
-				if locked == node {
-					found = true
-				}
+			if err = ensureCovered(related, nodes); err != nil {
+				return nil, err
 			}
-			if !found {
-				return nil, fail(409, "client moved to another node; refresh and retry")
+			if principals[accountKey(client)] {
+				continue
 			}
+			principals[accountKey(client)] = true
+			if action == "delete" && num(client, "_account") > 0 {
+				return nil, fail(409, "delete shared accounts through customers")
+			}
+
 			if action == "delete" {
 				if _, err = tx.Exec(ctx, `DELETE FROM vr_clients WHERE id=$1`, id); err != nil {
 					return nil, err

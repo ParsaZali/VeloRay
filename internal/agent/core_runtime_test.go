@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -19,6 +20,9 @@ func TestRealCoresTrafficAndAuthenticatedIPs(t *testing.T) {
 		t.Run(core, func(t *testing.T) {
 			binaryPath := os.Getenv("VELORAY_TEST_XRAY_BINARY")
 			if core == "singbox" {
+				if os.Getenv("VELORAY_TEST_NO_NETLINK") == "1" {
+					t.Skip("execution environment denies netlink sockets; run on Linux CI")
+				}
 				binaryPath = os.Getenv("VELORAY_TEST_SINGBOX_BINARY")
 			}
 			if binaryPath == "" {
@@ -60,7 +64,7 @@ func TestRealCoresTrafficAndAuthenticatedIPs(t *testing.T) {
 				t.Fatal(e)
 			}
 			cmd := exec.Command(binaryPath, append(args, path)...)
-			var logs bytes.Buffer
+			var logs synchronizedTestBuffer
 			cmd.Stdout = &logs
 			cmd.Stderr = &logs
 			if e = cmd.Start(); e != nil {
@@ -146,4 +150,21 @@ func intText(value int) string {
 			return string(b[i:])
 		}
 	}
+}
+
+// Process output and failure diagnostics are accessed concurrently by os/exec.
+type synchronizedTestBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *synchronizedTestBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(p)
+}
+func (b *synchronizedTestBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.String()
 }

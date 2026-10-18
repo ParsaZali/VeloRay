@@ -27,6 +27,9 @@ export function SubscriptionCheck({
 }) {
   const [result, setResult] = useState<Check | null>(null);
   const [error, setError] = useState("");
+  const [history, setHistory] = useState<
+    { at: string; format: string; client_app: string; status: number }[]
+  >([]);
   useEffect(() => {
     const controller = new AbortController();
     void api<Check>(`/clients/${client.id}/delivery-check/`, {
@@ -39,6 +42,13 @@ export function SubscriptionCheck({
             e instanceof Error ? e.message : t("Could not check subscription"),
           );
       });
+    void api<
+      { at: string; format: string; client_app: string; status: number }[]
+    >(`/clients/${client.id}/subscription-history/`, {
+      signal: controller.signal,
+    })
+      .then(setHistory)
+      .catch(() => {});
     return () => controller.abort();
   }, [client.id]);
   return (
@@ -75,6 +85,27 @@ export function SubscriptionCheck({
               {t("Custom template unavailable; the simple page will be used.")}
             </p>
           )}
+          <details className="text-xs">
+            <summary className="cursor-pointer">
+              {t("Recent subscription requests")}
+            </summary>
+            <ul className="mt-3 space-y-2">
+              {history.map((row, index) => (
+                <li
+                  key={`${row.at}-${index}`}
+                  className="flex flex-wrap justify-between gap-2"
+                >
+                  <time dateTime={row.at}>
+                    {new Date(row.at).toLocaleString()}
+                  </time>
+                  <span>
+                    {row.client_app} · {row.format} · {row.status}
+                  </span>
+                </li>
+              ))}
+              {history.length === 0 && <li>{t("No records yet")}</li>}
+            </ul>
+          </details>
           {result.checks.map((check, index) => (
             <article
               key={`${check.inbound}-${index}`}

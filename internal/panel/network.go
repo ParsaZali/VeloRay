@@ -176,7 +176,7 @@ func singTransport(i Data) Data {
 	}
 	return nil
 }
-func buildSingBoxConfig(ctx context.Context, q Query, node Data) (Data, error) {
+func buildSingBoxConfig(ctx context.Context, q Query, node Data, fieldKey ...string) (Data, error) {
 	ins, e := list(ctx, q, "inbounds", "WHERE node_id=$1", num(node, "id"))
 	if e != nil {
 		return nil, e
@@ -217,6 +217,13 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data) (Data, error) {
 				} else {
 					u["alterId"] = 0
 				}
+			case "tuic":
+				u["uuid"], u["password"] = str(c, "credential"), str(obj(c, "protocol_settings"), "password")
+			case "snell":
+				u["userkey"] = str(c, "credential")
+			case "naive":
+				delete(u, "name")
+				u["username"], u["password"] = name, str(c, "credential")
 			case "http", "socks":
 				delete(u, "name")
 				u["username"] = fallback(str(obj(c, "protocol_settings"), "username"), str(c, "name"))
@@ -237,6 +244,9 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data) (Data, error) {
 		} else {
 			v["users"] = accounts
 		}
+		if !nativeSingInbound(v, i, accounts) {
+			continue
+		}
 		if tls := singTLS(i, node); tls != nil {
 			v["tls"] = tls
 		}
@@ -249,6 +259,11 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data) (Data, error) {
 		return nil, nil
 	}
 	cfg := Data{"log": Data{"level": "info", "timestamp": true}, "inbounds": entries, "outbounds": []any{Data{"type": "direct", "tag": "direct"}}, "route": Data{"final": "direct", "rules": []any{}}, "experimental": Data{"v2ray_api": Data{"listen": "127.0.0.1:10086", "stats": Data{"enabled": true, "users": users, "inbounds": meteredInbounds, "outbounds": []any{}}}, "clash_api": Data{"external_controller": "127.0.0.1:10087", "secret": ""}}}
+	sharedPatch, err := profileConfigPatch(ctx, q, node, "singbox", fieldKey...)
+	if err != nil {
+		return nil, err
+	}
+	cfg = deepMerge(cfg, sharedPatch)
 	if e = applyNetworkEntities(ctx, q, node, cfg, "singbox"); e != nil {
 		return nil, e
 	}
@@ -263,7 +278,7 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data) (Data, error) {
 }
 func singClientOutbound(c, i, n Data) (Data, error) {
 	p, t := str(i, "protocol"), str(i, "transport")
-	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria") || !oneOf(t, "raw", "ws", "grpc", "httpupgrade", "hysteria") {
+	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "tuic", "naive", "snell") || !oneOf(t, "raw", "ws", "grpc", "httpupgrade", "hysteria") {
 		return nil, fmt.Errorf("sing-box output unavailable for %s/%s", p, t)
 	}
 	kind := p
@@ -281,6 +296,21 @@ func singClientOutbound(c, i, n Data) (Data, error) {
 		}
 	} else {
 		v["password"] = str(c, "credential")
+	}
+	switch p {
+	case "tuic":
+		v["uuid"] = str(c, "credential")
+		v["password"] = str(obj(c, "protocol_settings"), "password")
+		v["congestion_control"] = fallback(str(obj(i, "protocol_settings"), "congestion_control"), "bbr")
+		v["udp_relay_mode"] = "native"
+	case "naive":
+		v["username"] = fmt.Sprintf("veloray:%d:%s", num(c, "id"), str(c, "name"))
+	case "snell":
+		delete(v, "password")
+		v["version"] = 6
+		v["psk"] = str(obj(i, "protocol_settings"), "psk")
+		v["userkey"] = str(c, "credential")
+		v["mode"] = fallback(str(obj(i, "protocol_settings"), "mode"), "default")
 	}
 	if p == "shadowsocks" {
 		v["method"] = fallback(str(obj(i, "protocol_settings"), "method"), "aes-256-gcm")

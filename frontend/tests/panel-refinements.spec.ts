@@ -883,3 +883,49 @@ test("subscription settings validate custom file, edit hosts and retain device p
   ).toBe(true);
   expect(errors).toEqual([]);
 });
+
+async function managementPanel(page:Page,path:string){
+ const inbound=(id:number,node_name:string)=>({id,node:id,node_name,name:`Edge ${id}`,protocol:"vless",core:"xray",enabled:true,supports_clients:true});
+ const data:Record<string,any[]>={customers:[],services:[],profiles:[],snippets:[]};
+ await panel(page,path,{inbounds:{json:[inbound(1,"North"),inbound(2,"South")]},...Object.fromEntries(Object.keys(data).map(k=>[k,{json:[]}]))});
+ await page.route("**/api/**",async route=>{
+  const resource=new URL(route.request().url()).pathname.replace(/^\/api\//,"").replace(/\/$/,""),[kind,id,action]=resource.split("/"),rows=data[kind];
+  if(!rows){await route.fallback();return}
+  const method=route.request().method(),item=rows.find(i=>i.id===+id);
+  if(action==="assign"&&method==="POST"){Object.assign(item,route.request().postDataJSON());await route.fulfill({json:{node_ids:item.node_ids}});return}
+  if(action==="revisions"){await route.fulfill({json:[{revision:item.revision,created_at:"2026-10-18T12:00:00Z"}]});return}
+  if(method==="POST"){const v={...route.request().postDataJSON(),id:rows.length+1,revision:1,used_traffic_bytes:123,subscription_url:"https://vpn.example/sub/stable-example-token",connections:[{},{}]};rows.push(v);await route.fulfill({json:v,status:201});return}
+  if(method==="PATCH"){Object.assign(item,route.request().postDataJSON());item.revision++;await route.fulfill({json:item});return}
+  if(method==="DELETE"){rows.splice(rows.indexOf(item),1);await route.fulfill({status:204});return}
+  await route.fulfill({json:id?item:rows.map(({body,...metadata})=>kind==="profiles"||kind==="snippets"?metadata:{...metadata,body})});
+ });
+ await page.reload();await expect(page.getByRole("status",{name:"Loading…"})).toHaveCount(0);
+ return data;
+}
+test("services and customers keep shared policy and managed fields in CRUD forms",async({page})=>{
+ const data=await managementPanel(page,"/services");
+ await page.getByRole("button",{name:"Add service",exact:true}).click();
+ let dialog=page.getByRole("dialog");await dialog.getByLabel("Name",{exact:true}).fill("Standard");await dialog.getByLabel("Edge 1 · North · vless").check();
+ await dialog.getByLabel("Traffic quota (GiB)").fill("10");await dialog.getByLabel("HWID limit",{exact:true}).fill("2");
+ await dialog.getByRole("combobox",{name:"Calendar renewal"}).click();await page.getByRole("option",{name:"Monthly",exact:true}).click();await dialog.getByLabel("Timezone",{exact:true}).fill("Asia/Tehran");
+ await dialog.getByRole("button",{name:"Save",exact:true}).click();await expect(dialog).toHaveCount(0);
+ expect(data.services[0].defaults.traffic_limit_bytes).toBe(10*1073741824);expect(data.services[0].defaults.renewal_period).toBe("month");
+ await page.getByRole("button",{name:"Customers",exact:true}).click();await page.getByRole("button",{name:"Add customer",exact:true}).click();dialog=page.getByRole("dialog");
+ await dialog.getByLabel("Name",{exact:true}).fill("Shared buyer");await dialog.getByLabel("Standard",{exact:true}).check();
+ await dialog.getByRole("combobox",{name:"Apply plan defaults"}).click();await page.getByRole("option",{name:"Standard",exact:true}).click();await expect(dialog.getByLabel("Traffic quota (GiB)")).toHaveValue("10");
+ await dialog.getByLabel("Edge 2 · South · vless").check();await dialog.getByRole("button",{name:"Save",exact:true}).click();await expect(dialog).toHaveCount(0);
+ expect(data.customers[0].service_ids).toEqual([1]);expect(data.customers[0].inbound_ids).toEqual([2]);expect(data.customers[0].hwid_limit).toBe(2);
+ await page.getByRole("button",{name:"Edit Shared buyer",exact:true}).click();await page.getByRole("dialog").getByLabel("Note",{exact:true}).fill("Keeps usage and token");
+ const request=page.waitForRequest(r=>r.method()==="PATCH"&&r.url().includes("/customers/1"));await page.getByRole("dialog").getByRole("button",{name:"Save",exact:true}).click();const body=(await request).postDataJSON();expect(body.used_traffic_bytes).toBeUndefined();expect(body.subscription_token).toBeUndefined();
+ await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+test("profile editor supports reusable snippets, node assignment and history",async({page})=>{
+ const data=await managementPanel(page,"/profiles");
+ await page.getByRole("button",{name:"Snippets",exact:true}).click();await page.getByRole("button",{name:"Add snippet",exact:true}).click();let dialog=page.getByRole("dialog");await dialog.getByLabel("Name",{exact:true}).fill("Shared DNS");await dialog.getByLabel("Policy JSON",{exact:true}).fill('{"dns":{"queryStrategy":"UseIPv4"}}');await dialog.getByRole("button",{name:"Save",exact:true}).click();await expect(dialog).toHaveCount(0);
+ await page.getByRole("button",{name:"Profiles",exact:true}).click();await page.getByRole("button",{name:"Add profile",exact:true}).click();dialog=page.getByRole("dialog");await dialog.getByLabel("Name",{exact:true}).fill("Regional policy");await dialog.getByLabel("Shared DNS",{exact:true}).check();await dialog.getByLabel("Xray policy JSON",{exact:true}).fill('{"routing":{"domainStrategy":"IPIfNonMatch"}}');await dialog.getByRole("button",{name:"Save",exact:true}).click();await expect(dialog).toHaveCount(0);expect(data.profiles[0].body.snippet_ids).toEqual([1]);
+ await page.getByRole("button",{name:"Assign nodes",exact:true}).click();dialog=page.getByRole("dialog");await dialog.getByLabel("Local",{exact:true}).check();await dialog.getByRole("button",{name:"Save",exact:true}).click();await expect(dialog).toHaveCount(0);expect(data.profiles[0].node_ids).toEqual([1]);
+ await page.getByRole("button",{name:"History",exact:true}).click();await expect(page.getByRole("dialog").getByText("Revision 1",{exact:false})).toBeVisible();await page.keyboard.press("Escape");await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+test("management forms remain usable at 390px with a light theme",async({page})=>{
+ await page.setViewportSize({width:390,height:844});await managementPanel(page,"/customers");await page.evaluate(()=>document.documentElement.classList.remove("dark"));await page.getByRole("button",{name:"Add customer",exact:true}).click();await expect(page.getByRole("dialog")).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await page.keyboard.press("Escape");await expect(page.getByRole("dialog")).toHaveCount(0);
+});

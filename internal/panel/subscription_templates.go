@@ -45,6 +45,9 @@ func applyFeedTemplate(raw, generated, format string) (string, error) {
 			if _, ok := result["rules"]; !ok {
 				result["rules"] = original["rules"]
 			}
+		case "xray":
+			result["outbounds"] = original["outbounds"]
+			result["remarks"] = original["remarks"]
 		case "singbox":
 			result["outbounds"] = original["outbounds"]
 			if _, ok := result["route"]; !ok {

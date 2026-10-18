@@ -166,6 +166,9 @@ const protocolOptions = [
   ["trojan", "Trojan", "shield"],
   ["shadowsocks", "Shadowsocks", "ghost"],
   ["hysteria", "Hysteria2", "gauge-high"],
+  ["tuic", "TUIC v5", "bolt"],
+  ["naive", "Naive", "globe"],
+  ["snell", "Snell v6", "shield"],
   ["wireguard", "WireGuard", "link"],
   ["http", "HTTP Proxy", "globe"],
   ["socks", "SOCKS5", "socks"],
@@ -302,7 +305,12 @@ export function InboundsPage() {
     setForm((f) => {
       const n: any = { ...f, [k]: v };
       if (k === "protocol") {
-        if (v === "shadowsocks" || v === "socks") {
+        if (["tuic", "naive", "snell"].includes(v)) {
+          n.core = "singbox";
+          n.transport = "raw";
+          n.security = v === "snell" ? "none" : "tls";
+          n.flow = "";
+        } else if (v === "shadowsocks" || v === "socks") {
           n.transport = "raw";
           n.security = "none";
           n.flow = "";
@@ -811,16 +819,21 @@ export function InboundsPage() {
                       {protocolOptions
                         .filter(
                           ([v]) =>
-                            form.core === "xray" ||
-                            [
-                              "vless",
-                              "vmess",
-                              "trojan",
-                              "shadowsocks",
-                              "hysteria",
-                              "http",
-                              "socks",
-                            ].includes(v),
+                            (form.core === "xray" &&
+                              !["tuic", "naive", "snell"].includes(v)) ||
+                            (form.core === "singbox" &&
+                              [
+                                "vless",
+                                "vmess",
+                                "trojan",
+                                "shadowsocks",
+                                "hysteria",
+                                "tuic",
+                                "naive",
+                                "snell",
+                                "http",
+                                "socks",
+                              ].includes(v)),
                         )
                         .map(([v, l]) => (
                           <option key={v} value={v}>
@@ -870,9 +883,13 @@ export function InboundsPage() {
                                 key={v}
                                 value={v}
                                 disabled={
-                                  ["shadowsocks", "socks"].includes(
-                                    form.protocol,
-                                  ) && v !== "raw"
+                                  [
+                                    "shadowsocks",
+                                    "socks",
+                                    "tuic",
+                                    "naive",
+                                    "snell",
+                                  ].includes(form.protocol) && v !== "raw"
                                 }
                               >
                                 {t(l)}
@@ -939,9 +956,13 @@ export function InboundsPage() {
                             label={l}
                             active={form.security === v}
                             disabled={
-                              (form.protocol === "hysteria" && v !== "tls") ||
+                              (["hysteria", "tuic", "naive"].includes(
+                                form.protocol,
+                              ) &&
+                                v !== "tls") ||
                               ((form.protocol === "shadowsocks" ||
-                                form.protocol === "socks") &&
+                                form.protocol === "socks" ||
+                                form.protocol === "snell") &&
                                 v !== "none") ||
                               (v === "reality" &&
                                 (form.protocol !== "vless" ||

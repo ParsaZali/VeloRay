@@ -79,6 +79,11 @@ func (s *Server) deliveryCheck(ctx context.Context, id int64) (Data, error) {
 			} else {
 				formats["singbox"] = Data{"available": true}
 			}
+			_, err = xrayClientConfig(member, i, n)
+			formats["xray"] = Data{"available": err == nil}
+			if err != nil {
+				asData(formats["xray"])["reason"] = err.Error()
+			}
 			results = append(results, Data{"inbound": num(inbound, "id"), "name": str(host, "name"), "protocol": str(i, "protocol"), "eligible": len(reasons) == 0, "reasons": reasons, "formats": formats})
 		}
 	}

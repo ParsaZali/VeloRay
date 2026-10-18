@@ -116,3 +116,29 @@ CREATE TABLE IF NOT EXISTS vr_webhook_deliveries (
 );
 CREATE INDEX IF NOT EXISTS vr_webhook_ready ON vr_webhook_deliveries(next_at, id)
  WHERE delivered_at IS NULL AND attempts < 8;
+
+-- Native accounts have no anchor node. Legacy imported anchors remain intact.
+ALTER TABLE vr_accounts ALTER COLUMN node_id DROP NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS vr_account_token ON vr_accounts ((data->>'subscription_token'));
+CREATE TABLE IF NOT EXISTS vr_services (id bigserial PRIMARY KEY, data jsonb NOT NULL CHECK(jsonb_typeof(data)='object'));
+INSERT INTO vr_schema(version) VALUES(6) ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS vr_profiles (id bigserial PRIMARY KEY, data jsonb NOT NULL CHECK(jsonb_typeof(data)='object'));
+CREATE TABLE IF NOT EXISTS vr_snippets (id bigserial PRIMARY KEY, data jsonb NOT NULL CHECK(jsonb_typeof(data)='object'));
+CREATE TABLE IF NOT EXISTS vr_config_revisions (
+ kind text NOT NULL CHECK(kind IN ('profiles','snippets')), entity_id bigint NOT NULL,
+ revision bigint NOT NULL CHECK(revision>0), data jsonb NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(kind,entity_id,revision)
+);
+
+CREATE TABLE IF NOT EXISTS vr_subscription_requests (
+ id bigserial PRIMARY KEY, principal_key text NOT NULL CHECK(length(principal_key)<=80),
+ at timestamptz NOT NULL DEFAULT now(), format text NOT NULL, client_app text NOT NULL, status integer NOT NULL CHECK(status BETWEEN 100 AND 599)
+);
+CREATE INDEX IF NOT EXISTS vr_subscription_request_principal ON vr_subscription_requests(principal_key,id DESC);
+CREATE INDEX IF NOT EXISTS vr_subscription_request_retention ON vr_subscription_requests(at);
+
+CREATE INDEX IF NOT EXISTS vr_customer_services ON vr_accounts USING gin ((data->'service_ids'));
+CREATE INDEX IF NOT EXISTS vr_service_inbounds ON vr_services USING gin ((data->'inbound_ids'));
+CREATE INDEX IF NOT EXISTS vr_customer_owner ON vr_accounts (((data->>'owner_id')::bigint));
+CREATE INDEX IF NOT EXISTS vr_node_profile ON vr_nodes ((COALESCE((data->>'profile_id')::bigint,0)));

@@ -116,7 +116,7 @@ func effectiveTrafficMultiplier(c Data) float64 {
 	return value
 }
 
-var accountFields = []string{"hwid_limit", "device_limit", "start_after_first_use", "duration_days", "first_used_at", "_device_seen", "_device_denied", "owner_id", "enabled", "expires_at", "traffic_limit_bytes", "used_traffic_bytes", "lifetime_traffic_bytes", "raw_used_traffic_bytes", "raw_lifetime_traffic_bytes", "raw_upload_traffic_bytes", "raw_download_traffic_bytes", "traffic_multiplier", "_charge_remainder", "last_traffic_at", "disabled_reason", "renewal_interval_days", "next_renewal_at"}
+var accountFields = []string{"renewal_period", "renewal_every", "renewal_timezone", "_renewal_day", "hwid_limit", "device_limit", "start_after_first_use", "duration_days", "first_used_at", "_device_seen", "_device_denied", "owner_id", "enabled", "expires_at", "traffic_limit_bytes", "used_traffic_bytes", "lifetime_traffic_bytes", "raw_used_traffic_bytes", "raw_lifetime_traffic_bytes", "raw_upload_traffic_bytes", "raw_download_traffic_bytes", "traffic_multiplier", "_charge_remainder", "last_traffic_at", "disabled_reason", "renewal_interval_days", "next_renewal_at"}
 
 func accountKey(c Data) string {
 	if id := num(c, "_account"); id > 0 {

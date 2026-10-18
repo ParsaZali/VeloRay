@@ -21,9 +21,24 @@ project maintainers on licensing whenever reusing third-party code.
 - [x] Read-only subscription compatibility/eligibility report (not a connectivity probe).
 - [x] Authenticated aggregate Prometheus metrics for administrator-owned read keys.
 
-This slice does not deliver squads, general many-to-many account creation,
-external feed aggregation, native new protocols, hot apply, new deployment targets
-or the entire backlog below. See `subscription-customization.md` for exact behavior.
+## Delivered management and protocol slice (current source)
+
+- [x] Native multi-node customer accounts with shared quota, devices, expiry and stable subscription tokens.
+- [x] Service access groups and reusable plan defaults, with reseller budgets preserved.
+- [x] Shared encrypted node profiles, reusable snippets, 50 revisions and compensated deployment.
+- [x] TUIC v5 and Snell v6 server management, exports and real-engine CI round trips.
+- [x] Naive TLS server management and URI/JSON export; compatible Naive client round trip remains unverified.
+- [x] Live addition of users on unchanged Xray VLESS/VMess/Trojan listeners, exact acknowledgment and rollback.
+- [x] Xray client JSON subscriptions and a configurable JSON template.
+- [x] Calendar-aware quota renewal and bounded, token-free subscription request history.
+- [x] Shared subscription-token rotation, including revocation of every legacy alias.
+- [x] Automatic quota/expiry/renewal/first-use/device/node events in the signed outbox.
+
+This remains an incomplete backlog, not a claim of parity with every panel.
+External policy groups/feed aggregation, other new protocols, structural hot apply,
+additional deployment targets, identity federation and the unchecked items below
+remain unfinished. See `customer-management.md` and
+`native-protocols-and-live-apply.md` for exact scope and verification limits.
 
 ## Stage 0 — safety and baseline
 - [ ] Establish reproducible green CI on main (Go tests/race, web build,
@@ -46,7 +61,7 @@ or the entire backlog below. See `subscription-customization.md` for exact behav
 - [x] Restrict private/reserved IP targets and prevent redirect/proxy bypass.
 - [x] UI controls in Settings → Webhooks.
 - [x] Automated tests for validation, HMAC and transaction consistency.
-- [ ] Broaden events to automatic client expiration, quota exhaustion,
+- [x] Broaden events to automatic client expiration, quota exhaustion,
       first connection, node transitions and device changes.
 - [ ] Support separate destination endpoints and per-event channel preferences.
 - [ ] Add outbound delivery end-to-end tests with an isolated mock transport.
@@ -54,32 +69,33 @@ or the entire backlog below. See `subscription-customization.md` for exact behav
       before marking this capability production-ready.
 
 ### Customer and package modeling
-- [ ] Native many-to-many clients ↔ inbounds / nodes with one durable account,
+- [x] Native many-to-many clients ↔ inbounds / nodes with one durable account,
       shared traffic quota, expiry and mutually consistent subscription URLs.
-- [ ] Reusable customer service plans and user templates.
-- [ ] Internal service access groups and external subscription policy groups.
+- [x] Reusable customer service plans and user templates (policy defaults).
+- [x] Internal service access groups.
+- [ ] External subscription policy groups.
 - [ ] Group-scoped operations for quotas, expiries, filtering and access.
-- [ ] Reusable config profiles shared across nodes with snippets/version history.
-- [ ] Preserve existing reseller authorization and accounting semantics.
+- [x] Reusable config profiles shared across nodes with snippets/version history.
+- [x] Preserve existing reseller authorization and accounting semantics (integration coverage).
 
 ## Stage 2 — delivery and connection quality
-- [ ] Flexible hosts, public addresses, SNI, path and visibility independent of
+- [x] Flexible hosts, public addresses, SNI, path and visibility independent of
       the actual inbound listener.
 - [ ] Pluggable client-specific subscription templates: sing-box, Xray JSON,
       Clash/Mihomo, Stash and future formats.
 - [ ] Contextual response rules based on authorized user/group/client app.
-- [ ] Custom HTML subscription page templates and safe variables.
+- [x] Custom HTML subscription page templates and safe variables.
 - [ ] External subscription aggregation and external connection links.
 - [ ] Independent subscription domain/service deployment.
-- [ ] Subscription request history with bounded retention, no URL-token logging.
-- [ ] HWID enrollment, device revocation and cap enforcement for supporting apps.
-- [ ] Calendar-aware renewals: hourly, daily, weekly, monthly date and rolling.
+- [x] Subscription request history with bounded retention, no URL-token logging.
+- [x] HWID enrollment, device revocation and cap enforcement for supporting apps.
+- [x] Calendar-aware renewals: hourly, daily, weekly, monthly date and rolling.
 - [ ] Bulk editing and independent outbound accounting.
-- [ ] Robust handling of broken/revoked tokens and device reassignment.
+- [x] Robust handling of revoked shared-token aliases and device reassignment.
 
 ## Stage 3 — Xray, sing-box and network functionality
-- [ ] Hot apply of supported client/inbound changes with no unnecessary
-      disconnects; full restart only for structural changes.
+- [x] Hot addition of users on unchanged Xray VLESS/VMess/Trojan listeners.
+- [ ] Hot removal/update, sing-box changes and structural inbound hot apply.
 - [ ] Native, tested protocol management for TUIC v5, AmneziaWG, MTProto,
       ShadowTLS, Naive, Snell and optional SSH proxy.
 - [ ] Validate feasibility per engine and distinguish upstream engine capability
@@ -99,7 +115,7 @@ or the entire backlog below. See `subscription-customization.md` for exact behav
       undertaking; PostgreSQL remains the authoritative backend until complete.
 - [ ] Cloud-init unattended install, TLS/Cloudflare automation and supported
       self-updates with verified checksums.
-- [ ] Prometheus-compatible metrics and meaningful exporter access controls.
+- [x] Prometheus-compatible metrics and meaningful exporter access controls.
 - [ ] Per-node billing budgets, reset dates and hosting provider metadata.
 - [ ] Online status, web-accessible diagnostic logs, deeper search,
       operational health dashboards and export formats.

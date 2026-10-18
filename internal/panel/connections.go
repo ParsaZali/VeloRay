@@ -107,6 +107,11 @@ func (s *Server) registerSubscriptionDevice(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		return err
 	}
+	if !exists {
+		if err = audit(ctx, tx, 0, "device.registered", accountKey(c), Data{}); err != nil {
+			return err
+		}
+	}
 	return tx.Commit(ctx)
 }
 func (s *Server) clientConnections(ctx context.Context, id int64, kind string) (Data, error) {

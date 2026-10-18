@@ -155,7 +155,7 @@ func inboundSettings(i, node Data, clients []Data) (Data, error) {
 	}
 	return nil, fmt.Errorf("unsupported protocol %s", p)
 }
-func buildConfig(ctx context.Context, q Query, node Data) (Data, error) {
+func buildConfig(ctx context.Context, q Query, node Data, fieldKey ...string) (Data, error) {
 	inbounds, e := list(ctx, q, "inbounds", "WHERE node_id=$1", num(node, "id"))
 	if e != nil {
 		return nil, e
@@ -196,11 +196,16 @@ func buildConfig(ctx context.Context, q Query, node Data) (Data, error) {
 		items = append(items, v)
 	}
 	cfg := Data{"log": Data{"loglevel": "warning"}, "inbounds": items, "outbounds": []any{Data{"protocol": "freedom", "tag": "direct"}, Data{"protocol": "blackhole", "tag": "blocked"}}, "routing": Data{"domainStrategy": "AsIs", "rules": []any{}}}
+	sharedPatch, err := profileConfigPatch(ctx, q, node, "xray", fieldKey...)
+	if err != nil {
+		return nil, err
+	}
+	cfg = deepMerge(cfg, sharedPatch)
 	cfg = deepMerge(cfg, obj(node, "config_patch"))
 	if e = applyNetworkEntities(ctx, q, node, cfg, "xray"); e != nil {
 		return nil, e
 	}
-	cfg["api"] = Data{"tag": "api", "services": []any{"StatsService"}}
+	cfg["api"] = Data{"tag": "api", "services": []any{"StatsService", "HandlerService"}}
 	cfg["stats"] = Data{}
 	policy := obj(cfg, "policy")
 	levels := obj(policy, "levels")
@@ -241,7 +246,7 @@ func buildConfig(ctx context.Context, q Query, node Data) (Data, error) {
 	rules = append(deviceRules, rules...)
 	routing["rules"] = rules
 	cfg["routing"] = routing
-	sing, e := buildSingBoxConfig(ctx, q, node)
+	sing, e := buildSingBoxConfig(ctx, q, node, fieldKey...)
 	if e != nil {
 		return nil, e
 	}
@@ -300,6 +305,11 @@ func shareLink(c, i, node Data) string {
 		return "vmess://" + base64.StdEncoding.EncodeToString(b)
 	case "shadowsocks":
 		return "ss://" + base64.RawURLEncoding.EncodeToString([]byte(fallback(str(obj(i, "protocol_settings"), "method"), "aes-256-gcm")+":"+credential)) + "@" + addr + "#" + fragment
+	case "tuic":
+		q := url.Values{"sni": {fallback(str(i, "tls_server_name"), host)}, "congestion_control": {fallback(str(obj(i, "protocol_settings"), "congestion_control"), "bbr")}, "udp_relay_mode": {"native"}}
+		return "tuic://" + url.UserPassword(credential, str(obj(c, "protocol_settings"), "password")).String() + "@" + addr + "?" + q.Encode() + "#" + fragment
+	case "naive":
+		return "naive+https://" + url.UserPassword(fmt.Sprintf("veloray:%d:%s", num(c, "id"), str(c, "name")), credential).String() + "@" + addr + "#" + fragment
 	case "hysteria":
 		return "hysteria2://" + url.PathEscape(credential) + "@" + addr + "/?sni=" + url.QueryEscape(fallback(str(i, "tls_server_name"), host)) + "#" + fragment
 	}

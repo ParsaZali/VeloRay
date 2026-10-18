@@ -341,3 +341,16 @@ Inter and Vazirmatn fonts are served locally. No font CDN is required.
 ## License
 
 VeloRay is distributed under the repository's [LICENSE](LICENSE). Bundled cores, fonts and dependencies retain their own licenses and attribution.
+
+### Shared customer management and protocol extensions
+
+VeloRay 1.0 now includes multi-node Customers, Services and plans, shared encrypted
+Config profiles with reusable snippets and revision restore, calendar quota renewal,
+and token-free subscription history. Native sing-box forms support TUIC v5, Naive
+TLS inbound and Snell v6; Xray JSON subscription export and live user additions
+on unchanged Xray listeners are available.
+
+See [customer management](docs/customer-management.md),
+[protocol and live-apply limits](docs/native-protocols-and-live-apply.md), and the
+[remaining feature backlog](docs/competitor-parity-roadmap.md). These additions do
+not claim completion of every competing panel feature.

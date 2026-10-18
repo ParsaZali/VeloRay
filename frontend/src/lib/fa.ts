@@ -1,4 +1,50 @@
 const entries = `
+Recent subscription requests|درخواست‌های اخیر اشتراک
+Rotate subscription|تعویض لینک اشتراک
+All existing subscription URLs will stop working. Share the new URL with this customer.|همه لینک‌های اشتراک قبلی از کار می‌افتند. لینک جدید را به این مشتری بدهید.
+
+Customers|مشتریان
+Services and plans|سرویس‌ها و پلن‌ها
+Config profiles|پروفایل‌های تنظیمات
+Add customer|افزودن مشتری
+Add service|افزودن سرویس
+Add profile|افزودن پروفایل
+Add snippet|افزودن اسنیپت
+Service|سرویس
+Customer|مشتری
+Profile|پروفایل
+Snippet|اسنیپت
+Profiles|پروفایل‌ها
+Snippets|اسنیپت‌ها
+Revision|نسخه
+Assign nodes|انتخاب نودها
+No records yet|هنوز موردی ثبت نشده است
+No inbounds available|اینباندی در دسترس نیست
+Quota and access|سهمیه و دسترسی
+Traffic quota (GiB)|سهمیه ترافیک (گیبی‌بایت)
+Concurrent IP limit|محدودیت آی‌پی هم‌زمان
+Renewal interval (days)|فاصله تمدید (روز)
+Duration after first use (days)|مدت پس از اولین استفاده (روز)
+Start duration after first use|شروع مدت از اولین استفاده
+Apply plan defaults|اعمال مقادیر پلن
+Expiry (UTC)|انقضا (UTC)
+Calendar renewal|تمدید تقویمی
+Use day interval|استفاده از فاصله روزانه
+Hourly|ساعتی
+Daily|روزانه
+Weekly|هفتگی
+Monthly|ماهانه
+Every|هر
+Timezone|منطقه زمانی
+Xray policy JSON|سیاست Xray به صورت JSON
+sing-box policy JSON|سیاست sing-box به صورت JSON
+Policy JSON|سیاست به صورت JSON
+Services grant access to their inbounds. Plan defaults apply when selected for a customer.|سرویس دسترسی به ایـنباندهای انتخاب‌شده را می‌دهد. مقادیر پلن هنگام انتخاب برای مشتری اعمال می‌شوند.
+One account shares quota, expiry and subscription across inbounds and nodes.|یک حساب، سهمیه و انقضا و اشتراک مشترک روی چند ایـنباند و نود دارد.
+Share network policy across nodes. Changes deploy together. The last 50 revisions can be restored.|سیاست شبکه را میان نودها مشترک کنید. تغییرات با هم اعمال می‌شوند و ۵۰ نسخه آخر قابل بازگردانی هستند.
+Allowed sections: DNS, routing, outbounds and logging; Xray also supports policy. Managed listeners and telemetry remain controlled by the panel.|بخش‌های مجاز: DNS، مسیریابی، خروجی‌ها و لاگ؛ در Xray بخش policy هم مجاز است. ورودی‌ها و آمار تحت مدیریت پنل باقی می‌مانند.
+HWID: 0 inherits the global limit; -1 disables it. Zero quota or IP limit means unlimited.|در HWID، صفر یعنی محدودیت سراسری و منفی یک یعنی غیرفعال. سهمیه یا محدودیت آی‌پی صفر یعنی نامحدود.
+
 Protocol detection|تشخیص پروتکل
 
 Outbound tags|تگ‌های خروجی

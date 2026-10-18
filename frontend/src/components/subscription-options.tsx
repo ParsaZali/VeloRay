@@ -11,7 +11,8 @@ type Key =
   | "subscription_hwid_required"
   | "subscription_hwid_limit"
   | "subscription_clash_template"
-  | "subscription_singbox_template";
+  | "subscription_singbox_template"
+  | "subscription_xray_template";
 export function SubscriptionOptions({
   cfg,
   set,
@@ -144,6 +145,21 @@ export function SubscriptionOptions({
           )}
         </p>
         <div className="grid gap-4">
+          <label className="label">
+            Xray JSON
+            <Textarea
+              className="input min-h-32 font-mono"
+              dir="ltr"
+              disabled={disabled}
+              value={cfg.subscription_xray_template}
+              onChange={(e) =>
+                set("subscription_xray_template", e.target.value)
+              }
+              placeholder={
+                '{"inbounds":[{"listen":"127.0.0.1","port":10808,"protocol":"socks","settings":{"udp":true}}]}'
+              }
+            />
+          </label>
           <label className="label">
             Clash / Mihomo
             <Textarea
