@@ -32,6 +32,7 @@ project maintainers on licensing whenever reusing third-party code.
 - [x] Xray client JSON subscriptions and a configurable JSON template.
 - [x] Calendar-aware quota renewal and bounded, token-free subscription request history.
 - [x] Shared subscription-token rotation, including revocation of every legacy alias.
+- [x] Installable PWA with public-only static caching and explicit update acceptance.
 - [x] Automatic quota/expiry/renewal/first-use/device/node events in the signed outbox.
 
 This remains an incomplete backlog, not a claim of parity with every panel.
@@ -127,7 +128,7 @@ remain unfinished. See `customer-management.md` and
 ## Stage 5 — internationalization and UX
 - [ ] Robust Persian Jalali calendar and timezone-aware date presentation.
 - [ ] Expand language catalogs with translator-reviewed strings.
-- [ ] Service worker and safe PWA installation after cache/update testing.
+- [x] Service worker and safe PWA installation with bounded static caches, real server-loss and update-acceptance browser tests.
 - [ ] Live dashboards with bounded WebSocket/SSE updates where appropriate.
 - [ ] Config builders, realtime network diagnostics and deep table filtering.
 - [ ] Accessibility, keyboard navigation, screen-reader and mobile regression

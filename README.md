@@ -354,3 +354,6 @@ See [customer management](docs/customer-management.md),
 [protocol and live-apply limits](docs/native-protocols-and-live-apply.md), and the
 [remaining feature backlog](docs/competitor-parity-roadmap.md). These additions do
 not claim completion of every competing panel feature.
+
+The panel also supports [PWA installation](docs/pwa.md) with static-only caching
+and a reconnect page; authenticated data and subscription URLs are never cached.

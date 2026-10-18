@@ -1,3 +1,4 @@
+import { PWAControls } from "@/components/pwa-controls";
 import { tx } from "@/lib/i18n";
 import { t, useLocale } from "@/lib/i18n";
 import { LogOut, Menu, Moon, Sun } from "lucide-react";
@@ -48,6 +49,7 @@ export function Header({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
+        <PWAControls />
         <Button
           variant="ghost"
           size="sm"

@@ -1,4 +1,7 @@
 const entries = `
+Install app|نصب برنامه
+Update app|به‌روزرسانی برنامه
+
 Recent subscription requests|درخواست‌های اخیر اشتراک
 Rotate subscription|تعویض لینک اشتراک
 All existing subscription URLs will stop working. Share the new URL with this customer.|همه لینک‌های اشتراک قبلی از کار می‌افتند. لینک جدید را به این مشتری بدهید.

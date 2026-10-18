@@ -76,3 +76,7 @@ local network test is claimed for a test omitted under that flag.
 AmneziaWG, MTProto, ShadowTLS chaining, SSH, additional client ecosystems, full
 hot remove/update and structural hot apply remain tracked individually in the
 competitor roadmap. They are not implemented by merely adding a protocol label.
+
+CI gives `CAP_NET_ADMIN` only to its extracted temporary Xray binary so the existing
+TUN configuration check can open a TUN device. This is runner-only test setup; it
+does not modify bundled binaries or grant privileges to the panel process.
