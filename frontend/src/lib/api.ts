@@ -191,6 +191,7 @@ export type InboundItem = {
   supports_clients: boolean;
 };
 export type ClientItem = {
+  hwid_limit?: number;
   device_limit: number;
   device_count: number;
   start_after_first_use: boolean;
@@ -233,7 +234,18 @@ export type ClientItem = {
   subscription_url: string;
   subscription_portal_url: string;
 };
+export type SubscriptionHost = {
+  name: string;
+  inbound: number;
+  address: string;
+  port: number;
+  sni: string;
+  path: string;
+  host_header: string;
+  enabled: boolean;
+};
 export type AppSettings = {
+  subscription_hosts: SubscriptionHost[];
   site_name: string;
   support_url: string;
   announcement: string;
@@ -249,7 +261,12 @@ export type AppSettings = {
   subscription_show_qr: boolean;
   subscription_show_connection_uri: boolean;
   subscription_footer: string;
-  subscription_template: "default" | "compact";
+  subscription_template: "default" | "compact" | "dashboard" | "custom";
+  subscription_template_path: string;
+  subscription_hwid_required: boolean;
+  subscription_hwid_limit: number;
+  subscription_clash_template: string;
+  subscription_singbox_template: string;
   subscription_update_interval_hours: number;
   subscription_default_format: "auto" | "base64" | "raw" | "clash" | "singbox";
   subscription_show_analytics: boolean;
@@ -418,6 +435,7 @@ export type ClientDeviceList = {
   items: {
     id: number;
     hwid: string;
+    revoked?: boolean;
     device_model?: string;
     device_os?: string;
     os_version?: string;

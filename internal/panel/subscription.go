@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -75,6 +76,10 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := strings.TrimPrefix(r.URL.Path, "/sub/")
+	assetPath := ""
+	if before, after, found := strings.Cut(token, "/assets/"); found {
+		token, assetPath = before, after
+	}
 	if len(token) < 16 || len(token) > 96 || strings.Contains(token, "/") {
 		http.NotFound(w, r)
 		return
@@ -121,11 +126,29 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if active(member, time.Now()) && flag(inbound, "enabled") && flag(node, "enabled") {
-			connections = append(connections, connection{member, inbound, node})
+			mapped := false
+			for _, value := range array(cfg, "subscription_hosts") {
+				host := asData(value)
+				if num(host, "inbound") != num(inbound, "id") {
+					continue
+				}
+				mapped = true
+				if flag(host, "enabled") {
+					exportInbound, exportNode := deliveryHost(inbound, node, host)
+					connections = append(connections, connection{member, exportInbound, exportNode})
+				}
+			}
+			if !mapped {
+				connections = append(connections, connection{member, inbound, node})
+			}
 		}
 	}
 	if len(connections) == 0 {
 		writeJSON(w, 403, Data{"detail": "This subscription is inactive, expired or out of traffic"})
+		return
+	}
+	if assetPath != "" {
+		s.portalAsset(w, r, cfg, assetPath)
 		return
 	}
 	i, n := connections[0].inbound, connections[0].node
@@ -147,7 +170,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 	if str(cfg, "announcement") != "" {
 		w.Header().Set("Announce", "base64:"+base64.StdEncoding.EncodeToString([]byte(str(cfg, "announcement"))))
 	}
-	w.Header().Set("Vary", "Accept, User-Agent")
+	w.Header().Set("Vary", "Accept, User-Agent, X-HWID")
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	format := r.URL.Query().Get("format")
@@ -160,7 +183,9 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 			format = "singbox"
 		} else {
 			format = str(cfg, "subscription_default_format")
-			if format == "" || format == "auto" { format = "base64" }
+			if format == "" || format == "auto" {
+				format = "base64"
+			}
 		}
 	}
 	link := shareLink(c, i, n)
@@ -206,14 +231,23 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		all := []any{Data{"type": "selector", "tag": "VeloRay", "outbounds": names}, Data{"type": "direct", "tag": "direct"}}
 		all = append(all, outbounds...)
 		raw, _ := json.MarshalIndent(Data{"outbounds": all, "route": Data{"final": "VeloRay"}}, "", "  ")
-		body = string(raw) + "\n"
+		if output, err := applyFeedTemplate(str(cfg, "subscription_singbox_template"), string(raw), "singbox"); err != nil {
+			writeJSON(w, 500, Data{"detail": "Subscription template is invalid"})
+			return
+		} else {
+			body = output
+		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	case "stats":
 		s.subscriptionStats(w, r, c)
 		return
 	case "json":
-		if err := s.recordSubscriptionDevice(r, c); err != nil {
+		if err := s.admitSubscriptionDevice(w, r, c, cfg); err != nil {
 			s.respond(w, r, nil, 0, err)
+			return
+		}
+		if r.Method == "HEAD" {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			return
 		}
 		writeJSON(w, 200, Data{"name": str(c, "name"), "protocol": str(i, "protocol"), "link": link, "profile": profile, "used_traffic_bytes": num(c, "used_traffic_bytes"), "traffic_limit_bytes": num(c, "traffic_limit_bytes"), "expires_at": c["expires_at"], "raw_used_traffic_bytes": num(c, "raw_used_traffic_bytes"), "traffic_multiplier": c["traffic_multiplier"], "connections": details})
@@ -235,7 +269,12 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		}
 		data := Data{"proxies": proxies, "proxy-groups": []any{Data{"name": "VeloRay", "type": "select", "proxies": names}}, "rules": []any{"MATCH,VeloRay"}}
 		b, _ := json.MarshalIndent(data, "", "  ")
-		body = string(b) + "\n"
+		if output, err := applyFeedTemplate(str(cfg, "subscription_clash_template"), string(b), "clash"); err != nil {
+			writeJSON(w, 500, Data{"detail": "Subscription template is invalid"})
+			return
+		} else {
+			body = output
+		}
 		w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
 	case "wireguard", "wg":
 		if profile == "" {
@@ -251,12 +290,12 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, Data{"detail": "Unknown subscription format"})
 		return
 	}
-	if err := s.recordSubscriptionDevice(r, c); err != nil {
+	if err := s.admitSubscriptionDevice(w, r, c, cfg); err != nil {
 		s.respond(w, r, nil, 0, err)
 		return
 	}
 	if r.URL.Query().Get("download") == "1" {
-		filenames := map[string]string{"base64":"veloray-subscription.txt","b64":"veloray-subscription.txt","raw":"veloray-links.txt","text":"veloray-links.txt","clash":"veloray-clash.yaml","yaml":"veloray-clash.yaml","singbox":"veloray-singbox.json","sing-box":"veloray-singbox.json"}
+		filenames := map[string]string{"base64": "veloray-subscription.txt", "b64": "veloray-subscription.txt", "raw": "veloray-links.txt", "text": "veloray-links.txt", "clash": "veloray-clash.yaml", "yaml": "veloray-clash.yaml", "singbox": "veloray-singbox.json", "sing-box": "veloray-singbox.json"}
 		if filename := filenames[format]; filename != "" {
 			w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 		}
@@ -343,13 +382,49 @@ func (s *Server) portal(w http.ResponseWriter, r *http.Request, c, i, n, cfg Dat
 		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	modern := str(cfg, "subscription_template") != "compact"
-	if modern { modernPortalData(d, c, cfg, details) }
-	if r.Method != "HEAD" {
-		tmpl := portalTemplate
-		if modern { tmpl = modernPortalTemplate }
-		if e := tmpl.Execute(w, d); e != nil {
-			s.Logger.Error("subscription render failed", "error", e)
+	for key, value := range portalSampleData() {
+		if _, ok := d[key]; !ok {
+			d[key] = value
 		}
+	}
+	modernPortalData(d, c, cfg, details)
+	d["AssetsURL"] = url + "/assets/"
+	d["ThemeLabel"], d["DarkLabel"], d["LightLabel"], d["SystemLabel"] = "Appearance", "Dark", "Light", "System"
+	d["DetailsLabel"], d["RemainingLabel"] = "Connection details", "Remaining"
+	if str(cfg, "default_locale") == "fa" {
+		d["ThemeLabel"], d["DarkLabel"], d["LightLabel"], d["SystemLabel"] = "ظاهر", "تیره", "روشن", "دستگاه"
+		d["DetailsLabel"], d["RemainingLabel"] = "جزئیات اتصال", "باقی‌مانده"
+		if limit == 0 {
+			d["Remaining"] = "نامحدود"
+		}
+	}
+	tmpl := simplePortalTemplate
+	switch str(cfg, "subscription_template") {
+	case "compact":
+		tmpl = portalTemplate
+	case "dashboard":
+		tmpl = modernPortalTemplate
+	case "custom":
+		custom, err := s.loadPortalTemplate(str(cfg, "subscription_template_path"))
+		if err == nil {
+			tmpl = custom
+		} else {
+			s.portalFallback(w, err)
+		}
+	}
+	var rendered bytes.Buffer
+	if err := tmpl.Execute(&limitedTemplateWriter{Writer: &rendered, Remaining: 2 << 20}, d); err != nil {
+		s.portalFallback(w, err)
+		rendered.Reset()
+		if err = simplePortalTemplate.Execute(&rendered, d); err != nil {
+			http.Error(w, "Subscription page unavailable", 500)
+			return
+		}
+	}
+	if str(cfg, "subscription_template") == "custom" {
+		portalScriptPolicy(w, rendered.String())
+	}
+	if r.Method != "HEAD" {
+		_, _ = w.Write(rendered.Bytes())
 	}
 }

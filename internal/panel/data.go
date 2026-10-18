@@ -125,7 +125,7 @@ func defaults(kind string) Data {
 	case "inbounds":
 		return Data{"name": "", "node": 0, "listen": "0.0.0.0", "port": 0, "core": "xray", "protocol": "vless", "transport": "raw", "security": "none", "flow": "", "path": "/", "host_header": "", "service_name": "", "tls_server_name": "", "tls_cert_file": "", "tls_key_file": "", "reality_dest": "", "reality_server_name": "", "reality_private_key": "", "reality_public_key": "", "reality_short_id": "", "protocol_settings": Data{}, "stream_settings": Data{}, "enabled": true}
 	case "clients":
-		return Data{"device_limit": 0, "start_after_first_use": false, "duration_days": 30, "first_used_at": nil, "owner_id": 0, "inbound": 0, "name": "", "credential": "", "protocol_settings": Data{}, "subscription_token": "", "enabled": true, "expires_at": nil, "traffic_limit_bytes": 0, "used_traffic_bytes": 0, "lifetime_traffic_bytes": 0, "raw_used_traffic_bytes": 0, "raw_lifetime_traffic_bytes": 0, "raw_upload_traffic_bytes": 0, "raw_download_traffic_bytes": 0, "traffic_multiplier": 1.0, "last_traffic_at": nil, "disabled_reason": "", "renewal_interval_days": 0, "next_renewal_at": nil, "note": ""}
+		return Data{"hwid_limit": 0, "device_limit": 0, "start_after_first_use": false, "duration_days": 30, "first_used_at": nil, "owner_id": 0, "inbound": 0, "name": "", "credential": "", "protocol_settings": Data{}, "subscription_token": "", "enabled": true, "expires_at": nil, "traffic_limit_bytes": 0, "used_traffic_bytes": 0, "lifetime_traffic_bytes": 0, "raw_used_traffic_bytes": 0, "raw_lifetime_traffic_bytes": 0, "raw_upload_traffic_bytes": 0, "raw_download_traffic_bytes": 0, "traffic_multiplier": 1.0, "last_traffic_at": nil, "disabled_reason": "", "renewal_interval_days": 0, "next_renewal_at": nil, "note": ""}
 	case "outbounds":
 		return Data{"name": "", "node": 0, "core": "xray", "tag": "", "protocol": "freedom", "config": Data{}, "enabled": true}
 	case "routing_rules":
@@ -140,6 +140,8 @@ func defaults(kind string) Data {
 func defaultSettings() Data {
 	return Data{
 		"site_name": "VeloRay", "support_url": "", "announcement": "", "announcement_url": "", "default_locale": "en", "default_client_days": 30, "default_traffic_gb": 0, "default_renewal_days": 0, "traffic_history_days": 30, "dashboard_refresh_seconds": 5, "subscription_enabled": true, "subscription_show_apps": true, "subscription_show_qr": true, "subscription_show_connection_uri": true, "subscription_footer": "", "subscription_template": "default", "subscription_update_interval_hours": 12, "subscription_default_format": "auto", "subscription_show_analytics": true, "subscription_show_downloads": true, "subscription_theme": "system", "maintenance_mode": false, "require_2fa_for_admins": false, "api_keys_enabled": true, "api_key_default_days": 90, "audit_retention_days": 90, "accent": "emerald", "telegram_enabled": false, "telegram_locale": "en", "telegram_allow_changes": false, "telegram_client_alerts": true, "telegram_quota_warning_percent": 80, "telegram_expiry_warning_days": 3, "_telegram_token": "", "telegram_owner_ids": []any{}, "telegram_alert_cpu_percent": 90, "telegram_alert_memory_percent": 90, "telegram_alert_disk_percent": 90, "telegram_alert_cooldown_minutes": 30, "_telegram_last_alerts": Data{}, "_telegram_last_update_id": 0,
+		"subscription_hosts": []any{}, "subscription_template_path": "", "subscription_hwid_required": false, "subscription_hwid_limit": 0,
+		"subscription_clash_template": "", "subscription_singbox_template": "",
 		"webhook_enabled": false, "webhook_url": "", "_webhook_secret": "",
 	}
 }

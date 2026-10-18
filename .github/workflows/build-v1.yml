@@ -2,7 +2,7 @@ name: Assemble VeloRay 1.0
 
 on:
   push:
-    branches: [veloray-v1.0-staging]
+    branches: [veloray-v1.0-staging, feat/subscription-workspace]
 
 permissions:
   contents: write
@@ -40,5 +40,5 @@ jobs:
           git add VERSION SHA256SUMS runtime/linux-amd64.tar.xz runtime/linux-arm64.tar.xz runtime/SHA256SUMS
           if ! git diff --cached --quiet; then
             git commit -m "Bundle verified VeloRay 1.0 runtimes for both architectures"
-            git push origin HEAD:veloray-v1.0-staging
+            git push origin "HEAD:$GITHUB_REF_NAME"
           fi

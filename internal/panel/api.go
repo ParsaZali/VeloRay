@@ -16,7 +16,7 @@ import (
 var editable = map[string]string{
 	"nodes":         "name public_host agent_url agent_token enabled verify_tls config_patch",
 	"inbounds":      "name node core listen port protocol transport security flow path host_header service_name tls_server_name tls_cert_file tls_key_file reality_dest reality_server_name reality_private_key reality_public_key reality_short_id protocol_settings stream_settings enabled",
-	"clients":       "device_limit start_after_first_use duration_days owner_id inbound name credential protocol_settings subscription_token enabled expires_at traffic_limit_bytes renewal_interval_days next_renewal_at traffic_multiplier note",
+	"clients":       "hwid_limit device_limit start_after_first_use duration_days owner_id inbound name credential protocol_settings subscription_token enabled expires_at traffic_limit_bytes renewal_interval_days next_renewal_at traffic_multiplier note",
 	"outbounds":     "name node core tag protocol config enabled",
 	"routing_rules": "name node core priority config enabled",
 	"users":         "username email is_active is_staff is_superuser password role permissions allowed_inbounds own_clients_only max_clients traffic_budget_bytes",
@@ -118,6 +118,9 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 	if strings.HasPrefix(path, "telegram/") {
 		return s.telegramAPI(w, r, path, a)
 	}
+	if path == "subscription-template/validate" {
+		return s.validatePortalAPI(w, r, a)
+	}
 	if strings.HasPrefix(path, "webhooks/") {
 		return s.webhooksAPI(w, r, path, a)
 	}
@@ -194,6 +197,16 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 	}
 	if kind == "api_keys" && len(parts) > 2 && parts[2] == "reset" {
 		return s.resetAPIKey(w, r, id, a)
+	}
+	if kind == "clients" && len(parts) == 3 && parts[2] == "delivery-check" {
+		if r.Method != "GET" {
+			return nil, 0, fail(405, "method not allowed")
+		}
+		out, err := s.deliveryCheck(ctx, id)
+		return out, 200, err
+	}
+	if kind == "clients" && len(parts) == 3 && parts[2] == "device-action" {
+		return s.deviceAction(w, r, id, a)
 	}
 	if kind == "clients" && len(parts) == 3 && oneOf(parts[2], "ips", "devices") {
 		if r.Method != http.MethodGet {
@@ -623,6 +636,13 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request, a Actor) (a
 		return nil, 0, e
 	}
 	d = merge(d, in)
+	if in["subscription_hosts"] != nil {
+		for _, value := range array(d, "subscription_hosts") {
+			if _, err := get(ctx, tx, "inbounds", num(asData(value), "inbound")); err != nil {
+				return nil, 0, fail(400, "subscription host inbound does not exist")
+			}
+		}
+	}
 	if token := str(in, "telegram_bot_token"); token != "" {
 		if len(token) > 256 || strings.ContainsAny(token, "\r\n /?") {
 			return nil, 0, fail(400, "invalid bot token")
@@ -653,6 +673,13 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request, a Actor) (a
 	delete(d, "webhook_clear_secret")
 	if e = validateSettings(d); e != nil {
 		return nil, 0, fail(400, e.Error())
+	}
+	if _, changed := in["subscription_template_path"]; changed || in["subscription_template"] != nil {
+		if str(d, "subscription_template") == "custom" {
+			if _, err := s.loadPortalTemplate(str(d, "subscription_template_path")); err != nil {
+				return nil, 0, fail(400, err.Error())
+			}
+		}
 	}
 	if e = saveSettings(ctx, tx, d); e != nil {
 		return nil, 0, e
@@ -998,7 +1025,7 @@ func (s *Server) batchClients(w http.ResponseWriter, r *http.Request, a Actor) (
 	if err != nil {
 		return nil, 0, err
 	}
-	if err = allowed(input, "owner_id name inbound count expires_at traffic_limit_bytes traffic_multiplier renewal_interval_days note"); err != nil {
+	if err = allowed(input, "owner_id name inbound count expires_at traffic_limit_bytes traffic_multiplier renewal_interval_days note hwid_limit device_limit start_after_first_use duration_days"); err != nil {
 		return nil, 0, fail(400, err.Error())
 	}
 	template := defaults("clients")

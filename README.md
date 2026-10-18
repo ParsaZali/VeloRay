@@ -169,6 +169,8 @@ Rules and outbounds are isolated by node and core. Xray reserves `api`, `direct`
 
 ## Subscriptions
 
+The default browser page is now a simple light/dark page. Settings → Subscription also offers the previous dashboard, the compact page, or a custom HTML file. File paths, local assets, client configuration templates, delivery hosts, HWID admission and the compatibility report are documented in [Subscription customization](docs/subscription-customization.md).
+
 Each subscription URL carries a private token:
 
 ```text

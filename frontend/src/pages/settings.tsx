@@ -1,3 +1,4 @@
+import { SubscriptionOptions } from "@/components/subscription-options";
 import { useSession } from "@/lib/session";
 import { Textarea } from "@/components/ui/controls";
 import { ImportsPage } from "@/pages/imports";
@@ -59,6 +60,7 @@ type UpdateInfo = {
   verification: string;
 };
 const defaults: AppSettings = {
+  subscription_hosts: [],
   site_name: "VeloRay",
   support_url: "",
   announcement: "",
@@ -75,6 +77,11 @@ const defaults: AppSettings = {
   subscription_show_connection_uri: true,
   subscription_footer: "",
   subscription_template: "default",
+  subscription_template_path: "",
+  subscription_hwid_required: false,
+  subscription_hwid_limit: 0,
+  subscription_clash_template: "",
+  subscription_singbox_template: "",
   subscription_update_interval_hours: 12,
   subscription_default_format: "auto",
   subscription_show_analytics: true,
@@ -314,7 +321,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
         method: "PATCH",
         body: JSON.stringify(payload),
       });
-      setCfg(next);
+      setCfg({ ...defaults, ...next });
       setTelegramToken("");
       setClearTelegram(false);
       setWebhookSecret("");
@@ -553,12 +560,25 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                           set("subscription_template", e.target.value)
                         }
                       >
-                        <option value="default">{t("Modern dashboard")}</option>
+                        <option value="default">
+                          {t("Simple subscription page")}
+                        </option>
+                        <option value="dashboard">
+                          {t("Modern dashboard")}
+                        </option>
+                        <option value="custom">{t("Custom HTML file")}</option>
                         <option value="compact">
                           {t("Classic compact portal")}
                         </option>
                       </Select>
                     </Field>
+                    <SubscriptionOptions
+                      cfg={cfg}
+                      set={(key, value) =>
+                        setCfg((previous) => ({ ...previous, [key]: value }))
+                      }
+                      disabled={!canEdit || busy}
+                    />
                     <Field label={t("Portal footer")}>
                       <Input
                         className="input"

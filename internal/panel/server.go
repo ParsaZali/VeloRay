@@ -150,6 +150,10 @@ func (s *Server) Handler() http.Handler {
 			s.respond(w, r, nil, 0, e)
 			return
 		}
+		if path == "metrics" {
+			s.prometheus(w, r, a)
+			return
+		}
 		if strings.HasPrefix(path, "auth/") {
 			out, status, e := s.authAPI(w, r, path, a)
 			s.respond(w, r, out, status, e)

@@ -5,6 +5,7 @@ import { Select, Input } from "@/components/ui/controls";
 import { t } from "@/lib/i18n";
 import { useLocale, tx } from "@/lib/i18n";
 import { can, useSession } from "@/lib/session";
+import { SubscriptionCheck } from "@/components/subscription-check";
 import { Dialog } from "@/components/common/dialog";
 import { FormEvent, useEffect, useMemo, useState, useRef } from "react";
 import {
@@ -90,6 +91,7 @@ type Editor = {
   owner_id?: number;
   note: string;
   devices: string;
+  hwidLimit: string;
   startAfter: boolean;
 };
 const blank = (
@@ -107,6 +109,7 @@ const blank = (
   multiplier: "1",
   note: "",
   devices: "0",
+  hwidLimit: "0",
   startAfter: false,
 });
 
@@ -125,6 +128,7 @@ export function ClientsPage() {
     [editor, setEditor] = useState<Editor | null>(null),
     [busy, setBusy] = useState(false),
     [menu, setMenu] = useState<number | null>(null);
+  const [checkingClient, setCheckingClient] = useState<ClientItem | null>(null);
   const [connections, setConnections] = useState<{
     client: ClientItem;
     kind: "ips" | "devices";
@@ -325,6 +329,7 @@ export function ClientsPage() {
         : "0",
       days: String(c.duration_days || 30),
       devices: String(c.device_limit || 0),
+      hwidLimit: String(c.hwid_limit || 0),
       startAfter: !!c.start_after_first_use,
       expiry: toLocalInput(c.expires_at),
       renewal: String(c.renewal_interval_days || 0),
@@ -362,6 +367,7 @@ export function ClientsPage() {
           : {}),
         note: editor.note,
         device_limit: Number(editor.devices) || 0,
+        hwid_limit: Number(editor.hwidLimit) || 0,
         start_after_first_use: editor.startAfter,
         duration_days: Number(editor.days) || 30,
       };
@@ -808,6 +814,14 @@ export function ClientsPage() {
                             }}
                           />
                           <MenuItem
+                            icon="check"
+                            label={t("Check subscription")}
+                            onClick={() => {
+                              setMenu(null);
+                              setCheckingClient(c);
+                            }}
+                          />
+                          <MenuItem
                             icon="globe"
                             label={t("IP's")}
                             onClick={() => {
@@ -935,6 +949,13 @@ export function ClientsPage() {
                     <Button
                       size="sm"
                       variant="outline"
+                      onClick={() => setCheckingClient(c)}
+                    >
+                      {t("Check subscription")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() => setConnections({ client: c, kind: "ips" })}
                     >
                       <Globe size={14} />
@@ -976,6 +997,12 @@ export function ClientsPage() {
           )}
         </CardContent>
       </Card>
+      {checkingClient && (
+        <SubscriptionCheck
+          client={checkingClient}
+          onClose={() => setCheckingClient(null)}
+        />
+      )}
       {connections && (
         <ClientConnections
           key={`${connections.client.id}-${connections.kind}`}
@@ -1229,6 +1256,22 @@ function ClientModal({
             />
             <span className="field-hint">
               {t("0 = unlimited · concurrent IPs")}
+            </span>
+          </label>
+          <label className="label">
+            {t("HWID device limit")}
+            <Input
+              className="input"
+              type="number"
+              min={-1}
+              max={1000}
+              value={editor.hwidLimit}
+              onChange={(e) => set("hwidLimit", e.target.value)}
+            />
+            <span className="field-hint">
+              {t(
+                "0 = panel default · -1 = disabled · requires a compatible app",
+              )}
             </span>
           </label>
           <label className="label">

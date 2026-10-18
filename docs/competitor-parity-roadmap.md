@@ -10,6 +10,21 @@ X-UI, S-UI and Remnawave **without copying GPL-licensed source code into
 VeloRay's MIT repository**. Independently implement features and consult
 project maintainers on licensing whenever reusing third-party code.
 
+
+## Delivered subscription slice (current source)
+
+- [x] Simple default subscription page with persistent light/dark/system themes.
+- [x] Operator-owned HTML file selection, validation, local assets and buffered fallback.
+- [x] Global Clash/Mihomo and sing-box JSON templates (client-version validation remains operator-owned).
+- [x] Multiple subscription delivery hosts per inbound; exported address/port/SNI/path overrides.
+- [x] Transactional HWID admission cap, per-client override, revoke/allow/forget controls.
+- [x] Read-only subscription compatibility/eligibility report (not a connectivity probe).
+- [x] Authenticated aggregate Prometheus metrics for administrator-owned read keys.
+
+This slice does not deliver squads, general many-to-many account creation,
+external feed aggregation, native new protocols, hot apply, new deployment targets
+or the entire backlog below. See `subscription-customization.md` for exact behavior.
+
 ## Stage 0 — safety and baseline
 - [ ] Establish reproducible green CI on main (Go tests/race, web build,
       browser smoke tests, dependency scan, install smoke tests).

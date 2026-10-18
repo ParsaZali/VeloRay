@@ -230,6 +230,9 @@ func validateInbound(ctx context.Context, q Query, c Config, d Data) error {
 	return nil
 }
 func validateClient(ctx context.Context, q Query, d Data) error {
+	if n := num(d, "hwid_limit"); n < -1 || n > 1000 {
+		return errors.New("HWID limit must be -1–1000")
+	}
 	if num(d, "device_limit") < 0 || num(d, "device_limit") > 10000 {
 		return errors.New("device limit must be 0–10000")
 	}
@@ -350,6 +353,20 @@ func metered(p string) bool {
 	return oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard")
 }
 func validateSettings(d Data) error {
+	if err := validateSubscriptionHosts(array(d, "subscription_hosts")); err != nil {
+		return err
+	}
+	if n := num(d, "subscription_hwid_limit"); n < 0 || n > 1000 {
+		return errors.New("HWID limit must be 0–1000")
+	}
+	if len(str(d, "subscription_template_path")) > 4096 {
+		return errors.New("template path is too long")
+	}
+	for _, key := range []string{"subscription_clash_template", "subscription_singbox_template"} {
+		if err := validateFeedTemplate(str(d, key)); err != nil {
+			return fmt.Errorf("%s: %w", key, err)
+		}
+	}
 	if e := validateWebhookURL(str(d, "webhook_url")); e != nil {
 		return e
 	}
@@ -364,7 +381,7 @@ func validateSettings(d Data) error {
 			return fmt.Errorf("invalid %s", k)
 		}
 	}
-	if !oneOf(str(d, "accent"), "emerald", "blue", "violet", "rose", "amber") || !oneOf(str(d, "default_locale"), "en", "fa") || !oneOf(str(d, "subscription_template"), "default", "compact") {
+	if !oneOf(str(d, "accent"), "emerald", "blue", "violet", "rose", "amber") || !oneOf(str(d, "default_locale"), "en", "fa") || !oneOf(str(d, "subscription_template"), "default", "compact", "dashboard", "custom") {
 		return errors.New("unsupported accent, locale or subscription template")
 	}
 	if !oneOf(str(d, "subscription_default_format"), "auto", "base64", "raw", "clash", "singbox") || !oneOf(str(d, "subscription_theme"), "system", "light", "dark") {

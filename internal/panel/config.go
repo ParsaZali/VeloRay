@@ -17,6 +17,7 @@ type Config struct {
 	SessionAge                                                       time.Duration
 	PanelPort                                                        int
 	TrustedOrigins                                                   map[string]bool
+	TemplateRoot                                                     string
 }
 
 func env(k, fallback string) string {
@@ -51,6 +52,7 @@ func LoadConfig() (Config, error) {
 			return c, errors.New("insecure session cookies are allowed only on a loopback development origin")
 		}
 	}
+	c.TemplateRoot = env("VELORAY_TEMPLATE_ROOT", "/etc/veloray/templates")
 	c.TrustedOrigins[c.PublicURL] = true
 	for _, s := range strings.Split(os.Getenv("VELORAY_CSRF_TRUSTED_ORIGINS"), ",") {
 		if s = strings.TrimSpace(s); s != "" {

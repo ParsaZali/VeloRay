@@ -569,7 +569,10 @@ test("compact subscription portal fits desktop and mobile while preserving conne
   );
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/portal-preview");
-  const copyButton = page.getByRole("button", { name: "Copy link", exact: true });
+  const copyButton = page.getByRole("button", {
+    name: "Copy link",
+    exact: true,
+  });
   await expect(copyButton).toBeVisible();
   await copyButton.click();
   await expect(page.getByRole("status")).toHaveText("Link copied");
@@ -639,7 +642,6 @@ test("theme reveals a circular palette and respects reduced motion", async ({
   await expect(page.locator("html")).not.toHaveAttribute("data-theme-reveal");
 });
 
-
 test("PasarGuard-inspired portal supports chart, four languages, search, QR and mobile", async ({
   page,
 }) => {
@@ -663,18 +665,35 @@ test("PasarGuard-inspired portal supports chart, four languages, search, QR and 
     const originalFetch = window.fetch.bind(window);
     window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
       const path = new URL(
-        typeof input === "string" ? input : input instanceof Request ? input.url : String(input),
+        typeof input === "string"
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input),
         location.href,
       );
-      if (path.pathname.startsWith("/sub/") && path.searchParams.get("format") === "stats") {
+      if (
+        path.pathname.startsWith("/sub/") &&
+        path.searchParams.get("format") === "stats"
+      ) {
         return Promise.resolve(
           new Response(
             JSON.stringify({
               range: "7d",
               history_available: true,
               points: [
-                { at: "2026-10-15T00:00:00Z", bytes: 1048576, upload_bytes: 524288, download_bytes: 524288 },
-                { at: "2026-10-16T00:00:00Z", bytes: 2097152, upload_bytes: 1048576, download_bytes: 1048576 },
+                {
+                  at: "2026-10-15T00:00:00Z",
+                  bytes: 1048576,
+                  upload_bytes: 524288,
+                  download_bytes: 524288,
+                },
+                {
+                  at: "2026-10-16T00:00:00Z",
+                  bytes: 2097152,
+                  upload_bytes: 1048576,
+                  download_bytes: 1048576,
+                },
               ],
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
@@ -692,23 +711,41 @@ test("PasarGuard-inspired portal supports chart, four languages, search, QR and 
   await expect(page.locator("#traffic-chart")).toBeVisible();
   await expect(page.locator("#chart-total")).toContainText("MB");
   await page.locator('[data-metric="upload_bytes"]').click();
-  await expect(page.locator('[data-metric="upload_bytes"]')).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("#traffic-chart")).toHaveAttribute("aria-label", /Upload/);
+  await expect(page.locator('[data-metric="upload_bytes"]')).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.locator("#traffic-chart")).toHaveAttribute(
+    "aria-label",
+    /Upload/,
+  );
   await page.locator('[data-metric="download_bytes"]').click();
-  await expect(page.locator("#traffic-chart")).toHaveAttribute("aria-label", /Download/);
+  await expect(page.locator("#traffic-chart")).toHaveAttribute(
+    "aria-label",
+    /Download/,
+  );
   await page.locator('[data-metric="bytes"]').click();
-  await expect(page.locator("#download-traffic")).toHaveAttribute("href", /export=csv.*range=7d/);
+  await expect(page.locator("#download-traffic")).toHaveAttribute(
+    "href",
+    /export=csv.*range=7d/,
+  );
   const copy = page.getByRole("button", { name: "Copy link" });
   await copy.click();
   await expect(page.locator("#copy-feedback")).toHaveText("Link copied");
-  await expect(page.getByRole("button", { name: "QR code" }).first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "QR code" }).first(),
+  ).toBeVisible();
   await page.getByRole("button", { name: "QR code" }).first().click();
   await expect(page.locator("#qr-dialog")).toBeVisible();
   await page.locator("#close-qr").click();
-  await page.getByPlaceholder("Search name, protocol or server").fill("missing");
+  await page
+    .getByPlaceholder("Search name, protocol or server")
+    .fill("missing");
   await expect(page.locator(".profile-item:visible")).toHaveCount(0);
   await expect(page.locator("#profiles-empty")).toBeVisible();
-  await page.getByPlaceholder("Search name, protocol or server").fill("primary");
+  await page
+    .getByPlaceholder("Search name, protocol or server")
+    .fill("primary");
   await expect(page.locator(".profile-item:visible")).toHaveCount(1);
   await page.locator("#portal-language").selectOption("fa");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
@@ -721,13 +758,128 @@ test("PasarGuard-inspired portal supports chart, four languages, search, QR and 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 700 });
-    await expect.poll(() =>
-      page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-    ).toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      )
+      .toBe(true);
   }
   await page.screenshot({
     path: "test-results/modern-subscription-mobile.png",
     fullPage: true,
   });
+  expect(errors).toEqual([]);
+});
+
+test("simple subscription page has persistent themes, copying, QR and no horizontal overflow", async ({
+  page,
+}) => {
+  const file = process.env.VELORAY_TEST_SIMPLE_PORTAL_HTML;
+  test.skip(!file, "simple portal render fixture is required");
+  const html = readFileSync(file!, "utf8");
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.route("**/simple-preview", (route) =>
+    route.fulfill({ contentType: "text/html", body: html }),
+  );
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/simple-preview");
+  await expect(page.getByRole("heading", { name: "Arman" })).toBeVisible();
+  await expect(page.locator("#traffic-chart")).toHaveCount(0);
+  await page.getByLabel("Appearance").selectOption("dark");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.reload();
+  await expect(page.getByLabel("Appearance")).toHaveValue("dark");
+  await page.getByLabel("Appearance").selectOption("light");
+  await page
+    .getByRole("button", { name: "Copy link", exact: true })
+    .first()
+    .click();
+  await expect(page.getByRole("status")).toHaveText("Link copied");
+  await page.getByRole("button", { name: "QR", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  for (const width of [1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: `test-results/simple-subscription-${width}-light.png`,
+      fullPage: true,
+    });
+  }
+  await page.getByLabel("Appearance").selectOption("dark");
+  await page.screenshot({
+    path: "test-results/simple-subscription-mobile-dark.png",
+    fullPage: true,
+  });
+  expect(errors).toEqual([]);
+});
+
+test("subscription settings validate custom file, edit hosts and retain device policy", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await panel(page, "/settings", {
+    "subscription-template/validate": { json: { valid: true, bytes: 500 } },
+    inbounds: { json: [{ id: 1, name: "Main", node_name: "Local" }] },
+  });
+  await page.getByRole("button", { name: "Subscription", exact: true }).click();
+  const template = page.getByRole("combobox", {
+    name: "Template",
+    exact: true,
+  });
+  await template.click();
+  await page
+    .getByRole("option", { name: "Custom HTML file", exact: true })
+    .click();
+  await page
+    .getByLabel("HTML template file")
+    .fill("/etc/veloray/templates/custom/index.html");
+  await page.getByRole("button", { name: "Validate template" }).click();
+  await expect(
+    page.getByText("Template is valid. Save settings to activate it."),
+  ).toBeVisible();
+  await page.getByText("Subscription hosts (0)", { exact: true }).click();
+  await page.getByRole("button", { name: "Add host" }).click();
+  const fieldset = page.locator("fieldset").filter({
+    has: page.getByRole("textbox", { name: "Public address", exact: true }),
+  });
+  await fieldset
+    .getByRole("textbox", { name: "Name", exact: true })
+    .fill("CDN");
+  await fieldset
+    .getByRole("textbox", { name: "Public address", exact: true })
+    .fill("edge.example");
+  await fieldset
+    .getByRole("combobox", { name: "Inbound", exact: true })
+    .click();
+  await page.getByRole("option", { name: "Main · Local" }).click();
+  await page.getByText("Subscription device policy", { exact: true }).click();
+  await page.getByLabel("Default HWID device limit").fill("2");
+  const saved = page.waitForRequest(
+    (request) =>
+      request.url().endsWith("/api/settings") && request.method() === "PATCH",
+  );
+  await page.getByRole("button", { name: "Save settings" }).click();
+  const payload = (await saved).postDataJSON();
+  expect(payload.subscription_template).toBe("custom");
+  expect(payload.subscription_hwid_limit).toBe(2);
+  expect(payload.subscription_hosts[0]).toMatchObject({
+    name: "CDN",
+    address: "edge.example",
+    inbound: 1,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
   expect(errors).toEqual([]);
 });

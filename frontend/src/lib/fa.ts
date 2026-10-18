@@ -901,3 +901,61 @@ Object.assign(fa, {
   "Show export buttons for supported client configuration formats.":
     "نمایش دکمه‌های دریافت کانفیگ برای فرمت‌های پشتیبانی‌شده.",
 });
+
+Object.assign(fa, {
+  "Simple subscription page": "صفحهٔ سادهٔ اشتراک",
+  "Custom HTML file": "فایل HTML سفارشی",
+  "HTML template file": "فایل قالب HTML",
+  "Validate template": "بررسی قالب",
+  "Template is valid. Save settings to activate it.":
+    "قالب معتبر است. برای فعال‌سازی، تنظیمات را ذخیره کنید.",
+  "Template validation failed": "بررسی قالب ناموفق بود",
+  "Use an HTML file inside /etc/veloray/templates. Changes reload automatically; an invalid file falls back to the simple page.":
+    "فایل HTML را در مسیر /etc/veloray/templates قرار دهید. تغییرات خودکار خوانده می‌شوند؛ اگر فایل نامعتبر باشد، صفحهٔ ساده نمایش داده می‌شود.",
+  "Subscription device policy": "سیاست دستگاه‌های اشتراک",
+  "Default HWID device limit": "سقف پیش‌فرض دستگاه بر اساس HWID",
+  "0 = unlimited. A positive limit requires HWID support.":
+    "صفر یعنی نامحدود. تعیین سقف نیازمند برنامهٔ سازگار با HWID است.",
+  "Require HWID even without a device cap":
+    "الزام ارسال HWID حتی بدون سقف دستگاه",
+  "Apps without HWID cannot download configurations when enabled. Existing copied configurations are not revoked.":
+    "با فعال‌بودن این گزینه، برنامه‌های فاقد HWID نمی‌توانند کانفیگ دریافت کنند. کانفیگ‌های قبلاً کپی‌شده باطل نمی‌شوند.",
+  "Client configuration templates": "قالب کانفیگ کلاینت‌ها",
+  "Optional JSON objects. Leave blank for built-in output. Generated proxies and outbounds are inserted automatically. Use $VELO_PROXIES inside a Clash group's proxies array.":
+    "قالب JSON اختیاری است. برای خروجی داخلی خالی بگذارید. پروکسی‌ها و خروجی‌ها خودکار درج می‌شوند. برای نام پروکسی‌ها در آرایهٔ proxies گروه Clash از $VELO_PROXIES استفاده کنید.",
+  "Subscription hosts": "آدرس‌های انتشار اشتراک",
+  "Publish an inbound through several addresses without changing its listener. A zero port uses the inbound port. If all hosts for an inbound are disabled, it is hidden from subscriptions.":
+    "یک ورودی را بدون تغییر تنظیمات واقعی سرور از چند آدرس منتشر کنید. پورت صفر از پورت ورودی استفاده می‌کند. اگر همهٔ آدرس‌های یک ورودی غیرفعال باشند، آن ورودی در اشتراک نمایش داده نمی‌شود.",
+  "Could not load inbounds": "دریافت ورودی‌ها ناموفق بود",
+  "New host": "آدرس جدید",
+  "Select inbound": "انتخاب ورودی",
+  "Public address": "آدرس عمومی",
+  "Public port": "پورت عمومی",
+  "Host header": "هدر Host",
+  "Remove host": "حذف آدرس",
+  "Add host": "افزودن آدرس",
+  "HWID device limit": "سقف دستگاه بر اساس HWID",
+  "0 = panel default · -1 = disabled · requires a compatible app":
+    "صفر = پیش‌فرض پنل · منفی یک = غیرفعال · نیازمند برنامهٔ سازگار",
+  "Could not update device": "به‌روزرسانی دستگاه ناموفق بود",
+  Revoked: "مسدودشده",
+  "Allow device": "اجازه به دستگاه",
+  "Revoke device": "مسدودکردن دستگاه",
+  "Forget device": "حذف سابقهٔ دستگاه",
+  "Check subscription": "بررسی اشتراک",
+  "Could not check subscription": "بررسی اشتراک ناموفق بود",
+  "Checks account policy and export compatibility. This does not test connectivity from a user's network.":
+    "وضعیت حساب و سازگاری فرمت خروجی بررسی می‌شود. اتصال از شبکهٔ کاربر آزمایش نمی‌شود.",
+  "HWID required": "الزام HWID",
+  Limit: "سقف",
+  "Custom template unavailable; the simple page will be used.":
+    "قالب سفارشی در دسترس نیست؛ صفحهٔ ساده نمایش داده می‌شود.",
+  Unavailable: "در دسترس نیست",
+  Available: "در دسترس",
+  account_inactive: "حساب غیرفعال است یا اعتبار و سهمیهٔ آن تمام شده است.",
+  inbound_disabled: "ورودی غیرفعال است.",
+  node_disabled: "نود غیرفعال است.",
+  host_hidden: "این آدرس در اشتراک پنهان شده است.",
+  subscriptions_disabled: "اشتراک‌ها غیرفعال هستند.",
+  maintenance: "پنل در حالت نگهداری است.",
+});

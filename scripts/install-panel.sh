@@ -30,6 +30,15 @@ id veloray >/dev/null 2>&1||useradd --system --home /var/lib/veloray --shell /us
 install -d -o veloray -g veloray -m 0750 /var/lib/veloray
 install -d -m 0750 /etc/veloray /etc/veloray-node
 chown root:veloray /etc/veloray
+install -d -o root -g veloray -m 0750 /etc/veloray/templates
+if [[ -d examples/subscription ]];then
+ install -d -o root -g veloray -m 0750 /etc/veloray/templates/example /etc/veloray/templates/example/assets
+ for item in examples/subscription/index.html examples/subscription/assets/*;do
+  [[ -f "$item" ]]||continue
+  target="/etc/veloray/templates/example/${item#examples/subscription/}"
+  [[ -e "$target" ]]||install -o root -g veloray -m 0640 "$item" "$target"
+ done
+fi
 install -d -m 0700 /var/lib/veloray-agent
 install -d -m 0755 /opt/veloray/releases /usr/local/etc/xray /etc/nginx/sites-available /etc/nginx/sites-enabled
 version="$(bin/linux-$arch/veloray version)"
