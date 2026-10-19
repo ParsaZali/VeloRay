@@ -370,6 +370,14 @@ func metered(p string) bool {
 	return oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "tuic", "naive", "snell")
 }
 func validateSettings(d Data) error {
+	if e := validateSMTP(d); e != nil {
+		return e
+	}
+	for k, max := range map[string]int64{"alert_quota_percent": 99, "alert_expiry_days": 365, "alert_inactive_days": 365} {
+		if num(d, k) < 0 || num(d, k) > max {
+			return fmt.Errorf("invalid %s", k)
+		}
+	}
 	if err := validateSubscriptionHosts(array(d, "subscription_hosts")); err != nil {
 		return err
 	}

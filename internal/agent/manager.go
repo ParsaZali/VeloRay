@@ -274,6 +274,7 @@ type ledger struct {
 	Operations map[string]operation    `json:"operations"`
 }
 type Manager struct {
+	probeMu                                    sync.Mutex
 	Binary, ConfigPath, ServiceName, StatePath string
 	Core                                       string
 	Runtime                                    Runtime

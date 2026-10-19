@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 import { VeloRayWordmark } from "@/components/brand/veloray-mark";
 import { FaIcon } from "@/components/ui/fa-icon";
 export type RouteKey =
+  | "operations"
   | "dashboard"
   | "customers"
   | "services"
@@ -45,6 +46,7 @@ const groups = [
     label: "Infrastructure",
     items: [
       { key: "nodes", label: "Nodes", icon: "server" },
+      { key: "operations", label: "Operations", icon: "gauge-high" },
       { key: "profiles", label: "Config profiles", icon: "file-code" },
       {
         key: "subscription-policies",
@@ -125,6 +127,7 @@ export function Sidebar({
                       "imports",
                       "profiles",
                       "subscription-policies",
+                      "operations",
                     ].includes(item.key) ||
                       isSuperuser) &&
                     (!access[item.key] || can(session, access[item.key])),

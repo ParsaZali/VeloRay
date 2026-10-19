@@ -20,6 +20,9 @@ import (
 var panelProcessStartedAt = time.Now()
 
 type Server struct {
+	EmailSend    func(context.Context, string, []string, []byte) error
+	alertMu      sync.Mutex
+	alertCursor  string
 	OIDCHTTP     *http.Client
 	streamMu     sync.Mutex
 	streamCount  int

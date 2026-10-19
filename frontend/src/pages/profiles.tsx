@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/dates";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, type NodeItem } from "@/lib/api";
 import { useLocale, t } from "@/lib/i18n";
@@ -459,7 +460,10 @@ export function ProfilesPage() {
               >
                 <span>
                   {t("Revision")} {row.revision} ·{" "}
-                  {new Date(row.created_at).toLocaleString()}
+                  {formatDate(row.created_at, {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </span>
                 <Button
                   size="sm"

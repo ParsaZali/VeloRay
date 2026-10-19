@@ -1,3 +1,4 @@
+import { SMTPSettings } from "@/components/smtp-settings";
 import { DatePreferences } from "@/components/date-preferences";
 import { NotificationEndpoints } from "@/components/notification-endpoints";
 import { SubscriptionOptions } from "@/components/subscription-options";
@@ -103,6 +104,16 @@ const defaults: AppSettings = {
   telegram_quota_warning_percent: 80,
   telegram_expiry_warning_days: 3,
   telegram_configured: false,
+  smtp_enabled: false,
+  smtp_host: "",
+  smtp_port: 465,
+  smtp_tls_mode: "tls",
+  smtp_username: "",
+  smtp_from: "",
+  smtp_configured: false,
+  alert_quota_percent: 0,
+  alert_expiry_days: 0,
+  alert_inactive_days: 0,
   webhook_enabled: false,
   webhook_url: "",
   webhook_configured: false,
@@ -134,6 +145,8 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
     [busy, setBusy] = useState(false),
     [telegramToken, setTelegramToken] = useState(""),
     [clearTelegram, setClearTelegram] = useState(false),
+    [smtpPassword, setSmtpPassword] = useState(""),
+    [clearSMTP, setClearSMTP] = useState(false),
     [webhookSecret, setWebhookSecret] = useState(""),
     [clearWebhook, setClearWebhook] = useState(false),
     [webhookStats, setWebhookStats] = useState<{
@@ -314,6 +327,9 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
       const payload: any = { ...cfg };
       delete payload.telegram_configured;
       delete payload.webhook_configured;
+      delete payload.smtp_configured;
+      if (smtpPassword) payload.smtp_password = smtpPassword;
+      if (clearSMTP) payload.smtp_clear_password = true;
       if (webhookSecret.trim())
         payload.webhook_signing_secret = webhookSecret.trim();
       if (clearWebhook) payload.webhook_clear_secret = true;
@@ -328,6 +344,8 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
       setTelegramToken("");
       setClearTelegram(false);
       setWebhookSecret("");
+      setSmtpPassword("");
+      setClearSMTP(false);
       setClearWebhook(false);
       setMsg(t("Settings saved."));
     } catch (e: any) {
@@ -1121,7 +1139,19 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                         {t("Retry failed")}
                       </Button>
                     </div>
-                    {session?.is_superuser && <NotificationEndpoints />}
+                    {session?.is_superuser && (
+                      <>
+                        <SMTPSettings
+                          value={cfg}
+                          onChange={set}
+                          password={smtpPassword}
+                          onPassword={setSmtpPassword}
+                          clear={clearSMTP}
+                          onClear={setClearSMTP}
+                        />
+                        <NotificationEndpoints />
+                      </>
+                    )}
                     <Actions busy={busy} />
                   </CardContent>
                 </Card>

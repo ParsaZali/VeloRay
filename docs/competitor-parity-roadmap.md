@@ -50,10 +50,21 @@ The owner has explicitly requested publication to main so the server updater can
 receive these changes. Publication still requires verified runtime bundles and
 green CI. An unchecked item must not be presented as completed.
 
+## Delivered operations slice
+
+See [operations, email and calendar inputs](operations-and-alerts.md) for API,
+permissions, retention, scheduling and rollout limits.
+
+- [x] Isolated outbound HTTP probes, request latency, manual checks and periodic failure/recovery alerts.
+- [x] Administrator operations dashboard with monitor search/history/CSV and structured deployment diagnostics.
+- [x] Encrypted hosting metadata, monthly raw-traffic budgets, reset timezone/day and archived periods.
+- [x] TLS/STARTTLS SMTP destinations and deduplicated quota/expiry/inactivity events.
+- [x] Jalali date input picker with leap-boundary and keyboard regression coverage.
+
 ## Stage 0 — safety and baseline
-- [ ] Establish reproducible green CI on main (Go tests/race, web build,
+- [x] Establish reproducible green CI on main (Go tests/race, web build,
       browser smoke tests, dependency scan, install smoke tests).
-- [ ] Lock down a repeatable isolated test server with synthetic clients.
+- [x] Repeatable isolated PostgreSQL/core/browser fixtures with synthetic clients.
 - [ ] Capture feature-by-feature baselines with screenshots, API schema and
       verified behavior, not README-only claims.
 - [ ] Assess schema migrations, backwards compatibility, performance, risk,
@@ -114,7 +125,7 @@ green CI. An unchecked item must not be presented as completed.
 - [ ] Fallbacks, outbound balancing, geo asset browsing, transparent proxy,
       transparent capture, WARP / provider integrations, external-provider
       subscriptions, link-aware DNS and domain fronting controls.
-- [ ] Outbound health probes, latency and periodic tunnel watchdog.
+- [x] Outbound HTTP health probes, latency and periodic watchdog alerts (no automatic production restarts).
 - [ ] Maintain safe privileged-agent boundaries for every protocol addition.
 
 ## Stage 4 — deployment, monitoring and external integrations
@@ -127,17 +138,18 @@ green CI. An unchecked item must not be presented as completed.
 - [ ] Cloud-init unattended install, TLS/Cloudflare automation and supported
       self-updates with verified checksums.
 - [x] Prometheus-compatible metrics and meaningful exporter access controls.
-- [ ] Per-node billing budgets, reset dates and hosting provider metadata.
+- [x] Per-node billing budgets, reset dates and encrypted hosting provider metadata.
 - [ ] Online status, web-accessible diagnostic logs, deeper search,
       operational health dashboards and export formats.
 - [x] Optional Discord and signed webhook destinations with audit-event routing.
-- [ ] SMTP/email notifications, inactive-client and configurable quota-threshold alerts.
+- [x] SMTP/email notifications, inactive-client and configurable quota-threshold alerts.
 - [x] Optional OIDC code/PKCE login with exact pre-bound subjects and local 2FA.
 - [ ] Direct GitHub/Telegram OAuth and LDAP adapters.
 
 ## Stage 5 — internationalization and UX
 - [x] Persian Jalali/timezone display preferences for expiry and collection dates.
-- [ ] Jalali date input picker and timezone presentation throughout every page.
+- [x] Jalali date input picker, including leap-month boundaries and keyboard control.
+- [ ] Timezone presentation throughout every page (expanded, not yet universal).
 - [ ] Expand language catalogs with translator-reviewed strings.
 - [x] Service worker and safe PWA installation with bounded static caches, real server-loss and update-acceptance browser tests.
 - [x] Live owner-scoped dashboard with bounded, reauthorized SSE and polling fallback.

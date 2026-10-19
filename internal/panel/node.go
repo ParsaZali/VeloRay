@@ -263,6 +263,9 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 			return e
 		}
 	}
+	if e = s.recordNodeBilling(ctx, q, node, totalDelta, time.Now().UTC()); e != nil {
+		return e
+	}
 	if totalDelta > 0 {
 		at := time.Now().UTC().Truncate(5 * time.Minute)
 		_, e = q.Exec(ctx, `INSERT INTO vr_traffic_windows(at,node_id,bytes,upload_bytes,download_bytes) VALUES($1,$2,$3,$4,$5) ON CONFLICT(at,node_id) DO UPDATE SET bytes=vr_traffic_windows.bytes+excluded.bytes,upload_bytes=vr_traffic_windows.upload_bytes+excluded.upload_bytes,download_bytes=vr_traffic_windows.download_bytes+excluded.download_bytes`, at, id, totalDelta, uploadDelta, downloadDelta)
