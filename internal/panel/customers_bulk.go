@@ -91,6 +91,7 @@ func (s *Server) bulkCustomers(w http.ResponseWriter, r *http.Request, a Actor) 
 	}
 	nodes = nodeIDs(nodes...)
 	out, e := s.managementChange(ctx, nodes, a, "customers.bulk-"+action, fmt.Sprintf("%d accounts", len(ids)), func(tx pgx.Tx) (any, error) {
+		updated := []Data{}
 		for _, id := range ids {
 			d, e := get(ctx, tx, "customers", id)
 			if e != nil {
@@ -136,11 +137,14 @@ func (s *Server) bulkCustomers(w http.ResponseWriter, r *http.Request, a Actor) 
 			} else if e = applyClientAction(d, action); e != nil {
 				return nil, e
 			}
-			// Save the candidate before validating every connection so owner budgets
-			// count the updated principal once, even when it spans multiple nodes.
+			// Stage the complete batch before checking owner budgets. A reduction
+			// must be judged against the final allocation, not a partly updated set.
 			if e = save(ctx, tx, "customers", d); e != nil {
 				return nil, e
 			}
+			updated = append(updated, d)
+		}
+		for _, d := range updated {
 			if e = s.syncCustomer(ctx, tx, a, d, nodes); e != nil {
 				return nil, e
 			}

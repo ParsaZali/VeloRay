@@ -135,4 +135,19 @@ func TestIntegrationBulkCustomersRejectsCrossOwnerAndBudgetOverflow(t *testing.T
 			t.Fatal("managed fields accepted", patch)
 		}
 	}
+	// A lowered owner budget can be repaired by one valid bulk reduction even
+	// when every intermediate one-customer allocation would exceed that budget.
+	owner["traffic_budget_bytes"] = 600
+	if e := save(ctx, s.Store.Pool, "users", owner); e != nil {
+		t.Fatal(e)
+	}
+	if _, _, e := managementRequest(t, s, ctx, seller, "POST", "customers/bulk", Data{"ids": ids, "action": "patch", "patch": Data{"traffic_limit_bytes": 250}}); e != nil {
+		t.Fatal("valid final allocation rejected", e)
+	}
+	for _, id := range ids {
+		d, _ := get(ctx, s.Store.Pool, "customers", num(Data{"id": id}, "id"))
+		if num(d, "traffic_limit_bytes") != 250 {
+			t.Fatal("bulk reduction not applied", d)
+		}
+	}
 }
