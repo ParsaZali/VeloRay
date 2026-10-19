@@ -542,6 +542,9 @@ test("custom chart range supports keyboard and pointer controls", async ({
   await panel(page, "/dashboard");
   const start = page.getByRole("slider", { name: "Chart start", exact: true }),
     end = page.getByRole("slider", { name: "Chart end", exact: true });
+  // Traffic loads asynchronously; focusing a disabled handle is a no-op.
+  await expect(start).toBeEnabled();
+  await expect(end).toBeEnabled();
   await start.focus();
   await page.keyboard.press("ArrowRight");
   await expect(start).toHaveAttribute("aria-valuenow", "1");
