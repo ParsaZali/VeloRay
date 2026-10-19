@@ -1,0 +1,7 @@
+@import url('/subscription-template-assets/fontawesome/css/all.min.css');
+@import url('/subscription-template-assets/phosphor/src/bold/style.css');
+@import url('/subscription-template-assets/phosphor/src/fill/style.css');
+@font-face{font-family:Vazirmatn;font-style:normal;font-weight:100 900;font-display:swap;src:url('/fonts/Vazirmatn-Variable.woff2') format('woff2')}
+@font-face{font-family:Roboto;font-style:normal;font-weight:100 900;font-display:swap;src:url('/fonts/InterVariable.woff2') format('woff2')}
+
+.config-details{min-width:0}.modal-title{overflow-wrap:anywhere}.custom-modal .modal-content{box-sizing:border-box;max-width:min(340px,calc(100vw - 32px))}

@@ -159,3 +159,9 @@ subscription fetching, Cloudflare provisioning, Discord integration, expanded
 OS support and full container deployment remain separate engineering work.
 See `docs/competitor-parity-roadmap.md`; unchecked entries are not delivered
 features. A PR/CI run does not install these changes on the production server.
+
+## 3x-ui style templates
+
+Lower-camel legacy variables, scoped info polling, local QR helpers and the three
+provided examples are supported by the [compatibility adapter](legacy-subscription-templates.md).
+Existing uppercase variables and native pages retain their existing behavior.

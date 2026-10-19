@@ -314,7 +314,7 @@ func TestHWIDPortalRedactsCredentialsForEveryTemplate(t *testing.T) {
 	c["credential"] = "private-credential-marker"
 	cfg["subscription_hwid_limit"] = 1
 	path := filepath.Join(s.Config.TemplateRoot, "probe.html")
-	document := `<html>{{.Link}} {{.Profile}} {{.Proxy}}{{range .Connections}}{{.Link}}{{end}}</html>`
+	document := `<html>{{.Link}} {{.Profile}} {{.Proxy}}{{range .Connections}}{{.Link}}{{end}}{{range .links}}{{.}}{{end}}</html>`
 	if err := os.WriteFile(path, []byte(document), 0600); err != nil {
 		t.Fatal(err)
 	}

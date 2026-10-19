@@ -110,7 +110,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := rows[0]
-	if assetPath == "" && r.Method == "GET" && r.URL.Query().Get("format") != "stats" {
+	if assetPath == "" && r.Method == "GET" && !oneOf(r.URL.Query().Get("format"), "stats", "info", "qr") {
 		history := &subscriptionHistoryWriter{ResponseWriter: w}
 		w = history
 		defer s.recordSubscriptionRequest(r, c, history)
@@ -124,6 +124,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	connections := []subscriptionConnection{}
+	onlineKnown, onlineConnected := true, false
 	for _, member := range members {
 		inbound, err := get(ctx, s.Store.Pool, "inbounds", num(member, "inbound"))
 		if err != nil {
@@ -136,6 +137,12 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if active(member, time.Now()) && flag(inbound, "enabled") && flag(node, "enabled") {
+			observed, telemetryErr := timestamp(node, "_telemetry_at")
+			if telemetryErr != nil || time.Since(observed) < 0 || time.Since(observed) >= 20*time.Second || !flag(node, "_online_available") || !oneOf(str(inbound, "protocol"), "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell") {
+				onlineKnown = false
+			} else if flag(obj(node, "_online_clients"), fmt.Sprint(num(member, "id"))) {
+				onlineConnected = true
+			}
 			mapped := false
 			for _, value := range array(cfg, "subscription_hosts") {
 				host := asData(value)
@@ -171,6 +178,12 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 	i, n := connections[0].inbound, connections[0].node
 	c = clone(connections[0].client)
 	c["subscription_token"] = token
+	c["_subscription_online"] = nil
+	if onlineConnected {
+		c["_subscription_online"] = true
+	} else if onlineKnown {
+		c["_subscription_online"] = false
+	}
 	exp := int64(0)
 	if t, e := timestamp(c, "expires_at"); e == nil {
 		exp = t.Unix()
@@ -279,6 +292,16 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		b, _ := json.MarshalIndent(profiles, "", "  ")
 		body = string(b) + "\n"
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	case "info":
+		if r.Method == "HEAD" {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			return
+		}
+		writeJSON(w, 200, legacySubscriptionInfo(c, cfg))
+		return
+	case "qr":
+		s.subscriptionQR(w, r, c, cfg, links)
+		return
 	case "stats":
 		s.subscriptionStats(w, r, c)
 		return
@@ -466,6 +489,9 @@ func (s *Server) portal(w http.ResponseWriter, r *http.Request, c, i, n, cfg Dat
 	}
 	modernPortalData(d, c, cfg, details)
 	d["AssetsURL"] = url + "/assets/"
+	for key, value := range legacyPortalData(c, cfg, url, details) {
+		d[key] = value
+	}
 	d["ThemeLabel"], d["DarkLabel"], d["LightLabel"], d["SystemLabel"] = "Appearance", "Dark", "Light", "System"
 	d["DetailsLabel"], d["RemainingLabel"] = "Connection details", "Remaining"
 	if str(cfg, "default_locale") == "fa" {

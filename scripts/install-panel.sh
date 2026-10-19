@@ -39,6 +39,15 @@ if [[ -d examples/subscription ]];then
   [[ -e "$target" ]]||install -o root -g veloray -m 0640 "$item" "$target"
  done
 fi
+# Seed owner-supplied compatibility examples without overwriting local edits.
+if [[ -d examples/subscription/legacy ]];then
+ install -d -o root -g veloray -m 0750 /etc/veloray/templates/legacy
+ for item in examples/subscription/legacy/*.html;do
+  [[ -f "$item" ]]||continue
+  target="/etc/veloray/templates/legacy/${item##*/}"
+  [[ -e "$target" ]]||install -o root -g veloray -m 0640 "$item" "$target"
+ done
+fi
 install -d -m 0700 /var/lib/veloray-agent
 install -d -m 0755 /opt/veloray/releases /usr/local/etc/xray /etc/nginx/sites-available /etc/nginx/sites-enabled
 version="$(bin/linux-$arch/veloray version)"

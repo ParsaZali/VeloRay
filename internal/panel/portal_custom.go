@@ -82,7 +82,7 @@ func (s *Server) loadPortalTemplate(path string) (*template.Template, error) {
 	if !strings.Contains(strings.ToLower(string(data)), "<html") {
 		return nil, errors.New("template must contain an HTML document")
 	}
-	tmpl, err := template.New("custom").Option("missingkey=error").Parse(string(data))
+	tmpl, err := template.New("custom").Option("missingkey=error").Parse(prepareLegacyPortal(string(data)))
 	if err != nil {
 		return nil, errors.New("template syntax is invalid; use Go HTML template syntax")
 	}
@@ -152,6 +152,9 @@ func portalSampleData() map[string]any {
 	d["QR"] = template.URL("")
 	d["Connections"] = []Data{}
 	d["Protocols"] = []string{}
+	for key, value := range legacyPortalData(Data{}, defaultSettings(), d["URL"].(string), nil) {
+		d[key] = value
+	}
 	return d
 }
 func (s *Server) portalAsset(w http.ResponseWriter, r *http.Request, cfg Data, path string) {

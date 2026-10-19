@@ -305,6 +305,7 @@ grep -Fq 'links or special files' "$TEST_ROOT/result";pass archive-link-rejectio
 HOST_ROOT="$TEST_ROOT/host";export HOST_ROOT
 host_project="$TEST_ROOT/host-project";mkdir -p "$host_project/scripts" "$host_project/bin/linux-amd64" "$host_project/frontend/dist" "$TEST_ROOT/host-tools"
 cp -a "$project/deploy" "$host_project/"
+cp -a "$project/examples" "$host_project/"
 cp "$project/go.mod" "$host_project/";cp "$project/install.sh" "$host_project/"
 cp "$project/frontend/"package{,-lock}.json "$host_project/frontend/"
 touch "$host_project/frontend/dist/index.html"
@@ -414,6 +415,12 @@ pass web-assets-readable-after-private-umask
 test -f "$HOST_ROOT/admin";test -f "$HOST_ROOT/database";test -f "$HOST_ROOT/role"
 original_env="$(sha256sum "$HOST_ROOT/etc/veloray/veloray.env")"
 pass host-fresh-install
+for name in modernX.html sub-dashboard.html sub-fish.html;do
+ cmp "$project/examples/subscription/legacy/$name" "$HOST_ROOT/etc/veloray/templates/legacy/$name"
+ [[ "$(stat -c '%a' "$HOST_ROOT/etc/veloray/templates/legacy/$name")" == 640 ]]
+done
+pass legacy-templates-installed-privately
+printf 'operator-owned template' >"$HOST_ROOT/etc/veloray/templates/legacy/modernX.html"
 test -f "$HOST_ROOT/etc/systemd/system/veloray-subscriptions.service"
 if grep -Eq '^(enable|restart) .*veloray-subscriptions.service' "$HOST_ROOT/service-calls";then echo 'Fresh install activated optional subscription service' >&2;exit 1;fi
 pass independent-subscriptions-installed-disabled
@@ -423,6 +430,8 @@ host_install
 grep -Fxq backup "$HOST_ROOT/app-calls"
 if grep -Fxq bootstrap "$HOST_ROOT/app-calls";then echo 'Upgrade reset the administrator' >&2;exit 1;fi
 pass host-repeat-keeps-secrets
+[[ "$(cat "$HOST_ROOT/etc/veloray/templates/legacy/modernX.html")" == 'operator-owned template' ]]
+pass legacy-template-edits-preserved-on-upgrade
 : >"$HOST_ROOT/service-calls"
 export TEST_SUBSCRIPTIONS_ACTIVE=1
 host_install

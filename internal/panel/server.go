@@ -119,6 +119,9 @@ func (s *Server) Handler() http.Handler {
 			s.subscription(w, r)
 			return
 		}
+		if s.serveSubscriptionAsset(w, r) {
+			return
+		}
 		if s.Config.SubscriptionOnly && r.URL.Path != "/api/health" {
 			http.NotFound(w, r)
 			return
