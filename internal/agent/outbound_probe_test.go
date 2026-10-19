@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -83,6 +84,102 @@ func TestOutboundProbeUsesSelectedPinnedCoreAndCleansTemporaryFiles(t *testing.T
 				if strings.HasPrefix(file.Name(), ".probe-") {
 					t.Fatal("probe files leaked")
 				}
+			}
+		})
+	}
+}
+
+func TestIsolatedProbeRejectsUnauthenticatedLocalProxyUse(t *testing.T) {
+	for _, core := range []string{"xray", "singbox"} {
+		t.Run(core, func(t *testing.T) {
+			binary := os.Getenv("VELORAY_TEST_XRAY_BINARY")
+			if core == "singbox" {
+				binary = os.Getenv("VELORAY_TEST_SINGBOX_BINARY")
+			}
+			if binary == "" {
+				t.Skip("pinned runtime not provided")
+			}
+			started, release := make(chan struct{}, 1), make(chan struct{})
+			target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				select {
+				case started <- struct{}{}:
+				default:
+				}
+				<-release
+				w.WriteHeader(204)
+			}))
+			defer target.Close()
+			defer close(release)
+			directory := t.TempDir()
+			config := filepath.Join(directory, "config.json")
+			outbound := map[string]any{"tag": "direct", "protocol": "freedom"}
+			if core == "singbox" {
+				outbound = map[string]any{"tag": "direct", "type": "direct"}
+			}
+			raw, _ := json.Marshal(map[string]any{"outbounds": []any{outbound}})
+			if e := os.WriteFile(config, raw, 0600); e != nil {
+				t.Fatal(e)
+			}
+			m := &Manager{Core: core, Binary: binary, ConfigPath: config}
+			u, _ := url.Parse(target.URL)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			done := make(chan error, 1)
+			go func() {
+				result, e := m.probeOutboundAt(ctx, "direct", u, u.Hostname())
+				if e == nil && result["ok"] != true {
+					e = fmt.Errorf("authenticated probe failed")
+				}
+				done <- e
+			}()
+			select {
+			case <-started:
+			case e := <-done:
+				if core == "singbox" && os.Getenv("VELORAY_TEST_NO_NETLINK") == "1" && e != nil {
+					t.Skip("sandbox denies sing-box netlink; real round trip runs in CI")
+				}
+				t.Fatal("probe did not reach target", e)
+			case <-ctx.Done():
+				t.Fatal("probe did not start")
+			}
+			files, e := filepath.Glob(filepath.Join(directory, ".probe-*", "config.json"))
+			if e != nil || len(files) != 1 {
+				t.Fatal(files, e)
+			}
+			body, e := os.ReadFile(files[0])
+			if e != nil {
+				t.Fatal(e)
+			}
+			var transient struct {
+				Inbounds []struct {
+					Port       int `json:"port"`
+					ListenPort int `json:"listen_port"`
+				} `json:"inbounds"`
+			}
+			if e = json.Unmarshal(body, &transient); e != nil || len(transient.Inbounds) != 1 {
+				t.Fatal(e)
+			}
+			port := transient.Inbounds[0].Port
+			if core == "singbox" {
+				port = transient.Inbounds[0].ListenPort
+			}
+			proxy, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", port))
+			transport := &http.Transport{Proxy: http.ProxyURL(proxy)}
+			defer transport.CloseIdleConnections()
+			client := &http.Client{Transport: transport, Timeout: time.Second}
+			response, e := client.Get(target.URL)
+			if e != nil {
+				t.Fatal("unauthenticated request was not rejected", e)
+			}
+			response.Body.Close()
+			if response.StatusCode != 407 {
+				t.Fatal("temporary proxy allowed local unauthenticated use", response.StatusCode)
+			}
+			// Release the authenticated check only after verifying the independent
+			// local request cannot borrow its outbound credentials.
+			release <- struct{}{}
+			if e = <-done; e != nil {
+				t.Fatal(e)
 			}
 		})
 	}

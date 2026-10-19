@@ -1172,6 +1172,6 @@ Object.assign(fa, {
     "مصرف ثبت‌شدهٔ VPN بدون ضریب مشتری محاسبه می‌شود. این عدد برآورد پنل است و جای صورتحساب ارائه‌دهنده را نمی‌گیرد. عبور از سقف فقط هشدار می‌دهد و نود را قطع نمی‌کند.",
   "Shows runtime status and recent operation IDs, states and hashes. Credentials and full configurations are excluded.":
     "وضعیت هسته و شناسه، وضعیت و هش عملیات اخیر را نشان می‌دهد. اطلاعات ورود و پیکربندی کامل در این گزارش نیست.",
-  "Date pickers follow the selected calendar and keep Gregorian API values. Date and time inputs use the browser timezone. Display preferences are saved for this browser.":
-    "انتخابگر تاریخ از تقویم انتخاب‌شده استفاده می‌کند؛ مقدار ارسالی به API میلادی است. ورود تاریخ و ساعت بر پایهٔ منطقهٔ زمانی مرورگر انجام می‌شود. تنظیمات نمایش برای همین مرورگر ذخیره می‌شوند.",
+  "Date pickers follow the selected calendar and keep Gregorian API values. Each field keeps its existing timezone behavior. Display preferences are saved for this browser.":
+    "انتخابگر تاریخ از تقویم انتخاب‌شده استفاده می‌کند؛ مقدار ارسالی به API میلادی است. رفتار منطقهٔ زمانی هر فیلد حفظ می‌شود. تنظیمات نمایش برای همین مرورگر ذخیره می‌شوند.",
 });

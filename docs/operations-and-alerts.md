@@ -28,6 +28,7 @@ Targets are resolved on the agent, restricted to public IPs, and pinned before
 proxy CONNECT; original TLS hostname verification and HTTP Host are retained.
 Redirects, URL credentials, private/local addresses and plaintext targets are
 rejected. Kernel WireGuard/TUN outbounds are excluded from isolated probing.
+The temporary loopback proxy requires a fresh random credential for each probe.
 The helper copies outbound dependencies and DNS, not the production inbound,
 control API, routing rules or persistent cache. Unavailable dependencies produce
 failure. No automatic restart/failover is performed.
@@ -108,7 +109,8 @@ Optional alert thresholds (zero disables each):
 | `alert_expiry_days` | 0–365 | `client.expiry_warning` before expiry |
 | `alert_inactive_days` | 0–365 | `client.inactive` for active accounts without recent traffic |
 
-Maintenance scans 250 principals every 30 seconds using a rotating cursor. Large
+Maintenance scans up to 250 principals per pass using a rotating cursor, with a
+30-second scheduling tick (other housekeeping work can delay a pass). Large
 installations therefore have longer full-scan intervals. Shared accounts generate
 one event across their connections/nodes; legacy standalone clients remain
 supported. Transactional condition fingerprints suppress repeats while a condition

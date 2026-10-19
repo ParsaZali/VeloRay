@@ -52,7 +52,7 @@ export function DatePreferences() {
       </div>
       <p className="text-[11px] text-[var(--muted)]">
         {t(
-          "Date pickers follow the selected calendar and keep Gregorian API values. Date and time inputs use the browser timezone. Display preferences are saved for this browser.",
+          "Date pickers follow the selected calendar and keep Gregorian API values. Each field keeps its existing timezone behavior. Display preferences are saved for this browser.",
         )}
       </p>
       {saved && (

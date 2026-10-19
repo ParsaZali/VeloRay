@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -169,11 +171,16 @@ func (m *Manager) probeOutboundAt(ctx context.Context, tag string, target *url.U
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 	_ = listener.Close()
+	credential := make([]byte, 32)
+	if _, e = rand.Read(credential); e != nil {
+		return nil, errors.New("probe authentication unavailable")
+	}
+	password := hex.EncodeToString(credential)
 	config := map[string]any{}
 	if m.Core == "singbox" {
-		config = map[string]any{"log": map[string]any{"disabled": true}, "inbounds": []any{map[string]any{"type": "http", "tag": "vr-probe", "listen": "127.0.0.1", "listen_port": port}}, "outbounds": outbounds, "route": map[string]any{"final": tag}}
+		config = map[string]any{"log": map[string]any{"disabled": true}, "inbounds": []any{map[string]any{"type": "http", "tag": "vr-probe", "listen": "127.0.0.1", "listen_port": port, "users": []any{map[string]any{"username": "vr-probe", "password": password}}}}, "outbounds": outbounds, "route": map[string]any{"final": tag}}
 	} else {
-		config = map[string]any{"log": map[string]any{"loglevel": "none"}, "inbounds": []any{map[string]any{"protocol": "http", "tag": "vr-probe", "listen": "127.0.0.1", "port": port}}, "outbounds": outbounds, "routing": map[string]any{"rules": []any{map[string]any{"type": "field", "inboundTag": []string{"vr-probe"}, "outboundTag": tag}}}}
+		config = map[string]any{"log": map[string]any{"loglevel": "none"}, "inbounds": []any{map[string]any{"protocol": "http", "tag": "vr-probe", "listen": "127.0.0.1", "port": port, "settings": map[string]any{"accounts": []any{map[string]any{"user": "vr-probe", "pass": password}}}}}, "outbounds": outbounds, "routing": map[string]any{"rules": []any{map[string]any{"type": "field", "inboundTag": []string{"vr-probe"}, "outboundTag": tag}}}}
 	}
 	if dns != nil {
 		config["dns"] = dns
@@ -225,6 +232,7 @@ func (m *Manager) probeOutboundAt(ctx context.Context, tag string, target *url.U
 		return nil, errors.New("probe core did not become ready")
 	}
 	proxy, _ := url.Parse("http://" + address)
+	proxy.User = url.UserPassword("vr-probe", password)
 	transport := &http.Transport{Proxy: http.ProxyURL(proxy), TLSClientConfig: &tls.Config{ServerName: hostname, MinVersion: tls.VersionTLS12}, DisableKeepAlives: true}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}

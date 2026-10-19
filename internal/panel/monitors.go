@@ -139,6 +139,7 @@ func (s *Server) monitorsAPI(w http.ResponseWriter, r *http.Request, path string
 			return nil, remove(ctx, tx, "monitors", id)
 		}
 		prior := clone(d)
+		priorTarget := target
 		d = merge(d, input)
 		if v, ok := input["url"]; ok {
 			target, _ = v.(string)
@@ -166,7 +167,7 @@ func (s *Server) monitorsAPI(w http.ResponseWriter, r *http.Request, path string
 		d["_target"] = sealed
 		u, _ := url.Parse(target)
 		d["target_host"] = u.Hostname()
-		if str(prior, "_target") == "" || num(prior, "node") != num(d, "node") || str(prior, "core") != str(d, "core") || str(prior, "tag") != str(d, "tag") || input["url"] != nil {
+		if str(prior, "_target") == "" || num(prior, "node") != num(d, "node") || str(prior, "core") != str(d, "core") || str(prior, "tag") != str(d, "tag") || priorTarget != target {
 			d["failures"], d["down"], d["last_result"] = 0, false, nil
 		}
 		if e = save(ctx, tx, "monitors", d); e != nil {

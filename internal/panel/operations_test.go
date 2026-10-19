@@ -205,6 +205,12 @@ func TestIntegrationMonitorFailuresRecoveryHistoryAndPrivacy(t *testing.T) {
 			t.Fatal(out, e)
 		}
 	}
+	// The editor submits the unchanged URL when only metadata changes. Preserve
+	// the down state, otherwise routine edits would hide an outage and re-alert.
+	out, _, e = managementRequest(t, s, ctx, admin, "PATCH", path, Data{"name": "Renamed path", "url": "https://probe.example/secret-target-token"})
+	if e != nil || !flag(out.(Data), "down") || num(out.(Data), "failures") != 3 {
+		t.Fatal("metadata edit cleared monitor state", out, e)
+	}
 	ok = true
 	_, _, e = managementRequest(t, s, ctx, admin, "POST", path+"/probe", Data{})
 	if e != nil {
