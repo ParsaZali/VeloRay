@@ -69,6 +69,8 @@ without changing customer usage. Previous periods and lifetime usage remain;
 the UI returns the newest 24 periods and maintenance removes periods older than
 two years. Offline nodes also rotate on maintenance. Changing settings preserves
 current counters and the current cycle end; the new boundary is used on rollover.
+When a changed boundary would overlap an archived period, the next period starts
+at the preserved previous end and can be shorter than a calendar month.
 A `node.budget_warning` event is emitted on a threshold crossing. A budget is
 informational and does not stop traffic. Monthly cost is not prorated.
 

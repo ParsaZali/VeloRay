@@ -92,6 +92,12 @@ func (s *Server) recordNodeBilling(ctx context.Context, q Query, node Data, delt
 		if _, e = q.Exec(ctx, "INSERT INTO vr_node_billing_periods(node_id,cycle_start,cycle_end,used_bytes) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING", id, oldStart, oldEnd, used); e != nil {
 			return e
 		}
+		// A changed reset day/timezone may move the canonical month start
+		// behind the preserved previous boundary. Start a partial period there
+		// instead of presenting overlapping billing ranges.
+		if oldEnd.After(start) {
+			start = oldEnd
+		}
 		oldStart, oldEnd, used, warned = start, end, 0, false
 	}
 	if delta < 0 || delta > int64(^uint64(0)>>1)-used || delta > int64(^uint64(0)>>1)-lifetime {
