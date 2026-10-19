@@ -15,6 +15,11 @@ sudo systemctl enable --now veloray-subscriptions.service
 sudo systemctl status veloray-subscriptions.service
 ```
 
+The server controller includes enabled/active subscription instances in
+start/stop/restart, status and doctor. `veloray logs subscriptions` shows its
+journal. Restore pauses an active instance during data replacement; uninstall
+stops it and disables the automatic updater timer.
+
 Its default listener is `127.0.0.1:8611`. Keep that port free. The managed updater
 stops/restarts an already active instance around migrations and checks its local
 health. Its optional unit is preserved during application rollback. The service

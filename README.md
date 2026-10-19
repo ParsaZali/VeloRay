@@ -119,7 +119,7 @@ Changes affecting a node are validated by the relevant core before application. 
 | Core | Inbound protocols | Transports |
 |---|---|---|
 | Xray | VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, HTTP, SOCKS, tunnel, TUN | TCP/raw, WebSocket, gRPC, XHTTP, HTTPUpgrade, mKCP, Hysteria2/QUIC where supported |
-| Secondary core | VLESS, VMess, Trojan, Shadowsocks, Hysteria2, HTTP, SOCKS | TCP/raw, WebSocket, gRPC, HTTPUpgrade, Hysteria2/QUIC where supported |
+| Secondary core | VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC v5, Snell v6, Naive TLS, HTTP, SOCKS | TCP/raw, WebSocket, gRPC, HTTPUpgrade, Hysteria2/QUIC where supported |
 
 Security modes include TLS and REALITY for supported combinations. The editor and backend reject incompatible combinations. Certificate and private-key paths must exist and be readable on the selected node. TUN and WireGuard need the appropriate host networking permissions.
 
