@@ -62,6 +62,16 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 		_ = json.NewEncoder(w).Encode(v)
 	}
 }
+
+// Subscription URLs are bearer credentials. Keep the route useful for diagnostics
+// without copying its private token (or asset suffix) into application logs.
+func requestLogPath(r *http.Request) string {
+	if strings.HasPrefix(r.URL.Path, "/sub/") {
+		return "/sub/[redacted]"
+	}
+	return r.URL.Path
+}
+
 func (s *Server) respond(w http.ResponseWriter, r *http.Request, out any, status int, e error) {
 	if e != nil {
 		var ae *apiError
@@ -77,7 +87,7 @@ func (s *Server) respond(w http.ResponseWriter, r *http.Request, out any, status
 		} else {
 			status = 500
 			out = Data{"detail": "The request could not be completed"}
-			s.Logger.Error("request failed", "method", r.Method, "path", r.URL.Path, "error", e)
+			s.Logger.Error("request failed", "method", r.Method, "path", requestLogPath(r), "error", e)
 		}
 	}
 	if status == 0 {
@@ -98,7 +108,7 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 		defer func() {
 			if v := recover(); v != nil {
-				s.Logger.Error("panic recovered", "path", r.URL.Path, "panic", v)
+				s.Logger.Error("panic recovered", "path", requestLogPath(r), "panic", v)
 				writeJSON(w, 500, Data{"detail": "Internal server error"})
 			}
 		}()
