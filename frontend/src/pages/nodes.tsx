@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/dates";
 import { Input } from "@/components/ui/controls";
 import { t } from "@/lib/i18n";
 import { useLocale, tx } from "@/lib/i18n";
@@ -354,7 +355,10 @@ export function NodesPage() {
                     </td>
                     <td>
                       {n.last_seen_at
-                        ? new Date(n.last_seen_at).toLocaleString()
+                        ? formatDate(n.last_seen_at, {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
                         : t("Never")}
                     </td>
                     <td>

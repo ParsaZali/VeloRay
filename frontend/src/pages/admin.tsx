@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/dates";
 import { Select, Input } from "@/components/ui/controls";
 import { t } from "@/lib/i18n";
 import { useLocale, tx } from "@/lib/i18n";
@@ -418,7 +419,10 @@ export function AdminPage() {
                       </td>
                       <td>
                         {u.last_login
-                          ? new Date(u.last_login).toLocaleString()
+                          ? formatDate(u.last_login, {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
                           : t("Never")}
                       </td>
                       <td>
@@ -500,13 +504,14 @@ export function AdminPage() {
                         </Badge>
                       </td>
                       <td>
-                        {k.expires_at
-                          ? new Date(k.expires_at).toLocaleDateString()
-                          : t("Never")}
+                        {k.expires_at ? formatDate(k.expires_at) : t("Never")}
                       </td>
                       <td>
                         {k.last_used_at
-                          ? new Date(k.last_used_at).toLocaleString()
+                          ? formatDate(k.last_used_at, {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
                           : t("Never")}
                       </td>
                       <td>

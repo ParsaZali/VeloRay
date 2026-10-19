@@ -20,8 +20,8 @@ func validateEndpoint(d Data) error {
 	if e := require(d, "name", 96); e != nil {
 		return e
 	}
-	if !oneOf(str(d, "channel"), "webhook", "discord") {
-		return fail(400, "choose webhook or discord")
+	if !oneOf(str(d, "channel"), "webhook", "discord", "email") {
+		return fail(400, "choose webhook, discord or email")
 	}
 	if len(array(d, "events")) > 64 {
 		return fail(400, "at most 64 event filters")
@@ -151,7 +151,11 @@ func (s *Server) webhookEndpointsAPI(w http.ResponseWriter, r *http.Request, pat
 		if target == "" {
 			return nil, fail(400, "endpoint URL is required")
 		}
-		if e := validateWebhookURL(target); e != nil {
+		if str(d, "channel") == "email" {
+			if _, e := emailRecipients(target); e != nil {
+				return nil, fail(400, e.Error())
+			}
+		} else if e := validateWebhookURL(target); e != nil {
 			return nil, fail(400, e.Error())
 		}
 		if id == 0 {

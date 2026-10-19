@@ -241,7 +241,7 @@ func (s *Server) roleAuthorize(a Actor, method, path string) error {
 		resource = "traffic"
 	case "system-info":
 		resource = "nodes"
-	case "profiles", "snippets", "audit", "admin", "imports", "telegram", "webhooks", "updates", "subscription-template", "subscription-policies":
+	case "operations", "monitors", "profiles", "snippets", "audit", "admin", "imports", "telegram", "webhooks", "updates", "subscription-template", "subscription-policies":
 		if !flag(a.User, "is_superuser") || a.Scope != "admin" {
 			return fail(403, "administrator access required")
 		}

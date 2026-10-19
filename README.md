@@ -26,8 +26,9 @@ Xray as the primary core. sing-box as the secondary core. One interface for both
 | Accounts | Administrator, reseller, viewer and custom roles, inbound assignments, client and traffic budgets |
 | Security | Password policy, encrypted sensitive fields, scoped API keys, CSRF, administrator 2FA, optional pre-bound OIDC login and audit history |
 | Migration | Bounded SQLite and relational JSON adapters, private preview, selection, port overrides and disabled imports |
-| Automation | Telegram controls, signed event outbox, independent webhook/Discord destinations, scheduled backups and REST API |
-| Interface | Dark and light themes, English and Persian, responsive layouts, local fonts, custom dropdowns, date picker and checkboxes |
+| Automation | Telegram controls, signed event outbox, independent webhook/Discord/email destinations, configurable account alerts, scheduled backups and REST API |
+| Operations | Isolated outbound health probes, failure/recovery alerts, private provider budgets, monthly raw-traffic cycles, structured diagnostics and CSV |
+| Interface | Dark and light themes, English and Persian, responsive layouts, local fonts, custom dropdowns, Gregorian/Jalali date picker and checkboxes |
 
 Client action menus stay above scrollable tables. SNI and configuration dialogs use bounded, responsive layouts. Theme changes reveal the new palette from the theme button, with reduced-motion and browser fallbacks.
 
@@ -39,7 +40,8 @@ New management and subscription capabilities are described in the
 [external policy guide](docs/subscription-policies.md),
 [independent service guide](docs/independent-subscriptions.md),
 [OIDC/live dashboard guide](docs/oidc-and-live-dashboard.md) and
-[notification guide](docs/webhooks.md). The [parity backlog](docs/competitor-parity-roadmap.md)
+[notification guide](docs/webhooks.md) and
+[operations/email guide](docs/operations-and-alerts.md). The [parity backlog](docs/competitor-parity-roadmap.md)
 records remaining architectural work; this release does not claim every feature
 of every competing panel.
 

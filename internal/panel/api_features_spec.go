@@ -12,7 +12,7 @@ func featureAPISpec(paths Data) Data {
 	text := Data{"type": "string"}
 	ids := Data{"type": "array", "maxItems": 200, "uniqueItems": true, "items": Data{"type": "integer", "minimum": 1}}
 	policy := object(Data{"name": Data{"type": "string", "maxLength": 96}, "enabled": Data{"type": "boolean"}, "customer_ids": ids, "service_ids": ids, "body": object(Data{"url": Data{"type": "string", "description": "Public HTTPS feed; empty disables remote import"}, "links": Data{"type": "array", "maxItems": 200, "items": text}, "apps": Data{"type": "array", "items": text, "description": "Optional client presentation selectors, never authorization"}, "default_format": Data{"enum": []any{"auto", "raw", "base64", "clash", "singbox", "xray"}}, "templates": object(Data{"clash": text, "singbox": text, "xray": text})})})
-	endpoint := object(Data{"name": text, "enabled": Data{"type": "boolean"}, "channel": Data{"enum": []any{"webhook", "discord"}}, "url": Data{"type": "string", "format": "uri", "description": "Encrypted; administrator detail only"}, "signing_secret": Data{"type": "string", "writeOnly": true, "description": "32–1024 bytes for generic webhooks. Blank update preserves current key."}, "events": Data{"type": "array", "maxItems": 64, "items": text, "description": "Exact audit action, prefix such as client.*, or *"}})
+	endpoint := object(Data{"name": text, "enabled": Data{"type": "boolean"}, "channel": Data{"enum": []any{"webhook", "discord", "email"}}, "url": Data{"type": "string", "description": "Public HTTPS URL, or 1–10 comma-separated recipients for email. Encrypted; administrator detail only"}, "signing_secret": Data{"type": "string", "writeOnly": true, "description": "32–1024 bytes for generic webhooks. Blank update preserves current key."}, "events": Data{"type": "array", "maxItems": 64, "items": text, "description": "Exact audit action, prefix such as client.*, or *"}})
 	body := func(schema Data) Data {
 		return Data{"required": true, "content": Data{"application/json": Data{"schema": schema}}}
 	}
@@ -37,5 +37,7 @@ func featureAPISpec(paths Data) Data {
 	paths["/api/auth/oidc/start"] = Data{"post": Data{"summary": "Public, CSRF-protected OIDC authorization-code start with PKCE, nonce and browser-bound state", "security": []any{}, "responses": ok("authorization_url")}}
 	paths["/api/auth/oidc/callback"] = Data{"get": Data{"summary": "Provider callback; consumes state and verifies ID token before exact issuer/subject lookup", "security": []any{}, "parameters": []any{Data{"name": "state", "in": "query", "required": true, "schema": text}, Data{"name": "code", "in": "query", "required": true, "schema": text}}, "responses": Data{"303": Data{"description": "Redirect to local login, second-factor challenge or panel"}}}}
 	paths["/api/auth/oidc/complete"] = Data{"post": Data{"summary": "CSRF-protected, browser challenge-bound local second-factor completion", "security": []any{}, "requestBody": body(object(Data{"totp_code": text})), "responses": ok("Local session after TOTP/recovery code validation")}}
-	return Data{"SubscriptionPolicyInput": policy, "WebhookDestinationInput": endpoint}
+	schemas := Data{"SubscriptionPolicyInput": policy, "WebhookDestinationInput": endpoint}
+	operationsAPISpec(paths, schemas)
+	return schemas
 }

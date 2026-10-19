@@ -1,3 +1,4 @@
+import { OperationsPage } from "@/pages/operations";
 import { SubscriptionPoliciesPage } from "@/pages/subscription-policies";
 import { CustomersPage, ServicesPage } from "@/pages/customers";
 import { ProfilesPage } from "@/pages/profiles";
@@ -28,6 +29,7 @@ import {
 import { VeloRayMark } from "@/components/brand/veloray-mark";
 
 const meta: Record<RouteKey, [string, string]> = {
+  operations: ["Operations", ""],
   "subscription-policies": ["Subscription policies", ""],
   customers: ["Customers", ""],
   services: ["Services and plans", ""],
@@ -46,6 +48,7 @@ const meta: Record<RouteKey, [string, string]> = {
   accounts: ["Accounts", "Panel operators, roles and account security"],
 };
 const routes: Record<string, RouteKey> = {
+  "/operations": "operations",
   "/": "dashboard",
   "/dashboard": "dashboard",
   "/clients": "clients",
@@ -69,6 +72,7 @@ const routes: Record<string, RouteKey> = {
   "/accounts": "accounts",
 };
 const paths: Record<RouteKey, string> = {
+  operations: "/operations",
   dashboard: "/dashboard",
   clients: "/clients",
   "subscription-policies": "/subscription-policies",
@@ -139,7 +143,8 @@ export default function App() {
   useEffect(() => {
     if (!user || user.two_factor_setup_required) return;
     if (
-      (route === "accounts" ||
+      (route === "operations" ||
+        route === "accounts" ||
         route === "imports" ||
         route === "profiles" ||
         route === "subscription-policies") &&
@@ -177,6 +182,8 @@ export default function App() {
         <div role="status">{t("Access is not assigned to this account.")}</div>
       );
     switch (route) {
+      case "operations":
+        return user?.is_superuser ? <OperationsPage /> : <SettingsPage />;
       case "subscription-policies":
         return user?.is_superuser ? (
           <SubscriptionPoliciesPage />

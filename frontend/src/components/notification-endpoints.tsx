@@ -187,12 +187,17 @@ export function NotificationEndpoints() {
               >
                 <option value="webhook">{t("Signed webhook")}</option>
                 <option value="discord">Discord</option>
+                <option value="email">{t("Email")}</option>
               </Select>
             </label>
             <label className="label">
-              {t("HTTPS destination URL")}
+              {t(
+                editor.channel === "email"
+                  ? "Recipient emails"
+                  : "HTTPS destination URL",
+              )}
               <Input
-                type="url"
+                type={editor.channel === "email" ? "text" : "url"}
                 required
                 value={editor.url || ""}
                 onChange={(e) => setEditor({ ...editor, url: e.target.value })}

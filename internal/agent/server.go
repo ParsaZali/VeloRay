@@ -78,6 +78,29 @@ func (s Server) Handler() http.Handler {
 			write(w, 200, out)
 		}
 	}
+	mux.HandleFunc("/diagnostics", wrap(func(c context.Context, _ map[string]json.RawMessage) (any, error) {
+		result := map[string]any{"xray": s.Manager.Diagnostics(c)}
+		if s.SingBox != nil {
+			result["singbox"] = s.SingBox.Diagnostics(c)
+		}
+		return result, nil
+	}, "GET"))
+	mux.HandleFunc("/outbounds/probe", wrap(func(c context.Context, v map[string]json.RawMessage) (any, error) {
+		var core, tag, target string
+		_ = json.Unmarshal(v["core"], &core)
+		_ = json.Unmarshal(v["tag"], &tag)
+		_ = json.Unmarshal(v["url"], &target)
+		manager := s.Manager
+		if core == "singbox" {
+			manager = s.SingBox
+		} else if core != "xray" {
+			return nil, errors.New("invalid core")
+		}
+		if manager == nil {
+			return nil, errors.New("core is unavailable")
+		}
+		return manager.ProbeOutbound(c, tag, target)
+	}, "POST"))
 	mux.HandleFunc("/health", wrap(func(c context.Context, _ map[string]json.RawMessage) (any, error) {
 		st := s.Manager.Status(c)
 		status := "ok"

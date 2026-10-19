@@ -200,13 +200,13 @@ func (s *Server) deliverWebhookQueue(ctx context.Context) error {
 	rows, err := s.Store.Pool.Query(ctx, `WITH ready AS (
 		SELECT id FROM vr_webhook_deliveries
 		WHERE delivered_at IS NULL AND attempts < $1 AND next_at <= now()
- AND ((endpoint_id IS NULL AND $2) OR endpoint_id IN (SELECT id FROM vr_webhook_endpoints WHERE data->>'enabled'='true'))
+ AND ((endpoint_id IS NULL AND $2) OR endpoint_id IN (SELECT id FROM vr_webhook_endpoints WHERE data->>'enabled'='true' AND ($3 OR data->>'channel'<>'email')))
 		ORDER BY id LIMIT 8 FOR UPDATE SKIP LOCKED
 	)
 	UPDATE vr_webhook_deliveries AS d
 	SET attempts=d.attempts+1, next_at=now()+interval '2 minutes'
 	FROM ready WHERE d.id=ready.id
-	RETURNING d.id, d.payload, d.attempts,COALESCE(d.endpoint_id,0)`, webhookMaxAttempts, legacy)
+	RETURNING d.id, d.payload, d.attempts,COALESCE(d.endpoint_id,0)`, webhookMaxAttempts, legacy, flag(d, "smtp_enabled"))
 	if err != nil {
 		return err
 	}
@@ -265,25 +265,30 @@ func (s *Server) deliverWebhookQueue(ctx context.Context) error {
 			}
 			channel = str(endpoint, "channel")
 		}
-		if e := validateWebhookURL(deliveryTarget); e != nil {
-			return e
-		}
-		item.payload = endpointPayload(channel, item.payload)
-		timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, deliveryTarget, bytes.NewReader(item.payload))
-		if err == nil {
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("User-Agent", "VeloRay-Webhooks/1.0")
-			req.Header.Set("X-VeloRay-Timestamp", timestamp)
-			req.Header.Set("X-VeloRay-Delivery", strconv.FormatInt(item.id, 10))
-			req.Header.Set("X-VeloRay-Signature", webhookSignature(deliverySecret, timestamp, item.payload))
-			var response *http.Response
-			response, err = client.Do(req)
+		if channel == "email" {
+			err = s.deliverEmail(ctx, deliveryTarget, item.payload, strconv.FormatInt(item.id, 10))
+		} else {
+			if e := validateWebhookURL(deliveryTarget); e != nil {
+				return e
+			}
+			item.payload = endpointPayload(channel, item.payload)
+			timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+			req, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, deliveryTarget, bytes.NewReader(item.payload))
+			err = requestErr
 			if err == nil {
-				_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
-				_ = response.Body.Close()
-				if response.StatusCode < 200 || response.StatusCode >= 300 {
-					err = fmt.Errorf("remote status %d", response.StatusCode)
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("User-Agent", "VeloRay-Webhooks/1.0")
+				req.Header.Set("X-VeloRay-Timestamp", timestamp)
+				req.Header.Set("X-VeloRay-Delivery", strconv.FormatInt(item.id, 10))
+				req.Header.Set("X-VeloRay-Signature", webhookSignature(deliverySecret, timestamp, item.payload))
+				var response *http.Response
+				response, err = client.Do(req)
+				if err == nil {
+					_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+					_ = response.Body.Close()
+					if response.StatusCode < 200 || response.StatusCode >= 300 {
+						err = fmt.Errorf("remote status %d", response.StatusCode)
+					}
 				}
 			}
 		}

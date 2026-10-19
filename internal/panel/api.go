@@ -112,6 +112,12 @@ func (s *Server) view(ctx context.Context, q Query, kind string, d Data) (Data, 
 }
 func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Actor) (any, int, error) {
 	ctx := r.Context()
+	if path == "monitors" || strings.HasPrefix(path, "monitors/") {
+		return s.monitorsAPI(w, r, path, a)
+	}
+	if strings.HasPrefix(path, "operations/") {
+		return s.nodeOperationsAPI(w, r, path, a)
+	}
 	if path == "subscription-policies" || strings.HasPrefix(path, "subscription-policies/") {
 		return s.subscriptionPoliciesAPI(w, r, path, a)
 	}
@@ -685,6 +691,7 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request, a Actor) (a
 		out["telegram_configured"] = str(d, "_telegram_token") != ""
 		if flag(a.User, "is_superuser") {
 			out["webhook_configured"] = str(d, "_webhook_secret") != ""
+			out["smtp_configured"] = str(d, "_smtp_password") != ""
 		}
 		return out, 200, e
 	}
@@ -695,7 +702,7 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request, a Actor) (a
 	if e != nil {
 		return nil, 0, e
 	}
-	keys := []string{"telegram_bot_token", "telegram_clear_bot_token", "webhook_signing_secret", "webhook_clear_secret"}
+	keys := []string{"smtp_password", "smtp_clear_password", "telegram_bot_token", "telegram_clear_bot_token", "webhook_signing_secret", "webhook_clear_secret"}
 	for k := range defaultSettings() {
 		if !strings.HasPrefix(k, "_") {
 			keys = append(keys, k)
@@ -755,6 +762,20 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request, a Actor) (a
 	}
 	delete(d, "webhook_signing_secret")
 	delete(d, "webhook_clear_secret")
+	if password := str(in, "smtp_password"); password != "" {
+		if len(password) > 4096 {
+			return nil, 0, fail(400, "SMTP password is too long")
+		}
+		d["_smtp_password"], e = seal(s.Config.FieldKey, password)
+		if e != nil {
+			return nil, 0, e
+		}
+	}
+	if flag(in, "smtp_clear_password") {
+		d["_smtp_password"] = ""
+	}
+	delete(d, "smtp_password")
+	delete(d, "smtp_clear_password")
 	if e = validateSettings(d); e != nil {
 		return nil, 0, fail(400, e.Error())
 	}
@@ -777,6 +798,7 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request, a Actor) (a
 	out := public(d)
 	out["telegram_configured"] = str(d, "_telegram_token") != ""
 	out["webhook_configured"] = str(d, "_webhook_secret") != ""
+	out["smtp_configured"] = str(d, "_smtp_password") != ""
 	return out, 200, nil
 }
 func (s *Server) action(w http.ResponseWriter, r *http.Request, kind string, id int64, action string, a Actor) (any, int, error) {

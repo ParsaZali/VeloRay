@@ -115,3 +115,10 @@ Additional administrator-only API:
 Inputs: `name`, `enabled`, `channel` (`webhook` or `discord`), `url`, write-only
 `signing_secret`, and `events` array. Email/SMTP is not implemented by this
 integration.
+
+## SMTP and operational event additions
+
+Independent destinations also support encrypted email recipient lists through
+TLS/STARTTLS SMTP. Global SMTP enable/pause is separate from webhook enable. New
+configurable account warnings and monitor/billing events use the same outbox.
+See [operations and alerts](operations-and-alerts.md) for setup and limits.

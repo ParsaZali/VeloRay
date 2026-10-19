@@ -172,3 +172,14 @@ CREATE INDEX IF NOT EXISTS vr_oidc_state_expiry ON vr_oidc_states(expires_at);
 CREATE TABLE IF NOT EXISTS vr_oidc_challenges(token_hash text PRIMARY KEY,user_id bigint NOT NULL REFERENCES vr_users(id) ON DELETE CASCADE,auth_version bigint NOT NULL,expires_at timestamptz NOT NULL);
 CREATE INDEX IF NOT EXISTS vr_oidc_challenge_expiry ON vr_oidc_challenges(expires_at);
 INSERT INTO vr_schema(version) VALUES(8) ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS vr_alert_states(principal text NOT NULL,event text NOT NULL,fingerprint text NOT NULL,updated_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(principal,event));
+
+CREATE TABLE IF NOT EXISTS vr_node_billing(node_id bigint PRIMARY KEY REFERENCES vr_nodes(id) ON DELETE CASCADE,cycle_start timestamptz NOT NULL,cycle_end timestamptz NOT NULL,used_bytes bigint NOT NULL DEFAULT 0 CHECK(used_bytes>=0),lifetime_bytes bigint NOT NULL DEFAULT 0 CHECK(lifetime_bytes>=0),warned boolean NOT NULL DEFAULT false);
+CREATE TABLE IF NOT EXISTS vr_node_billing_periods(node_id bigint NOT NULL REFERENCES vr_nodes(id) ON DELETE CASCADE,cycle_start timestamptz NOT NULL,cycle_end timestamptz NOT NULL,used_bytes bigint NOT NULL CHECK(used_bytes>=0),PRIMARY KEY(node_id,cycle_start));
+
+CREATE TABLE IF NOT EXISTS vr_monitors(id bigserial PRIMARY KEY,data jsonb NOT NULL CHECK(jsonb_typeof(data)='object'),node_id bigint GENERATED ALWAYS AS ((data->>'node')::bigint) STORED NOT NULL REFERENCES vr_nodes(id) ON DELETE CASCADE,next_at timestamptz NOT NULL DEFAULT now(),lease_until timestamptz NOT NULL DEFAULT '-infinity');
+CREATE INDEX IF NOT EXISTS vr_monitors_next ON vr_monitors(next_at);
+CREATE TABLE IF NOT EXISTS vr_monitor_samples(id bigserial PRIMARY KEY,monitor_id bigint NOT NULL REFERENCES vr_monitors(id) ON DELETE CASCADE,at timestamptz NOT NULL DEFAULT now(),result jsonb NOT NULL);
+CREATE INDEX IF NOT EXISTS vr_monitor_history ON vr_monitor_samples(monitor_id,at DESC);
+INSERT INTO vr_schema(version) VALUES(9) ON CONFLICT DO NOTHING;

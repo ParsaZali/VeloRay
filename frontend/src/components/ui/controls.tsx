@@ -1,3 +1,11 @@
+import { datePreferences } from "@/lib/dates";
+import {
+  calendarMonth,
+  civilToday,
+  addCivilDays,
+  inputCalendar,
+} from "@/lib/calendar";
+import { localeName } from "@/lib/i18n";
 import {
   Children,
   isValidElement,
@@ -39,7 +47,7 @@ function useControlLabel(
     const clone = source.cloneNode(true) as HTMLElement;
     clone
       .querySelectorAll(
-        "button,input,select,textarea,.field-hint,.label > span",
+        "button,input,select,textarea,.date-control,.field-hint,.label > span",
       )
       .forEach((el) => el.remove());
     setLabel(clone.textContent?.trim());
@@ -271,12 +279,17 @@ function DateInput({
     label = useControlLabel(trigger, rest["aria-label"]);
   const date = String(value ?? ""),
     [open, setOpen] = useState(false),
-    [month, setMonth] = useState(() => (date ? new Date(date) : new Date())),
+    [month, setMonth] = useState(() => date.slice(0, 10) || civilToday()),
+    [focusDay, setFocusDay] = useState(date.slice(0, 10) || civilToday()),
     root = useRef<HTMLDivElement>(null);
-  const year = month.getFullYear(),
-    m = month.getMonth(),
-    days = new Date(year, m + 1, 0).getDate(),
-    start = new Date(year, m, 1).getDay();
+  const calendar = inputCalendar(datePreferences().calendar, localeName());
+  const grid = calendarMonth(month, calendar, localeName());
+  useEffect(() => {
+    if (open)
+      root.current
+        ?.querySelector<HTMLButtonElement>(`[data-date="${focusDay}"]`)
+        ?.focus();
+  }, [open, focusDay, month]);
   const change = (s: string) =>
     onChange?.({
       target: { value: s, name },
@@ -294,12 +307,28 @@ function DateInput({
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [open]);
-  const day = (d: number) => {
-    const s = `${year}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const day = (s: string) => {
     change(
       type === "datetime-local" ? s + "T" + (date.split("T")[1] || "00:00") : s,
     );
     if (type === "date") setOpen(false);
+  };
+  const parsed = new Date(type === "date" ? date + "T12:00:00" : date);
+  const display =
+    date && Number.isFinite(parsed.getTime())
+      ? new Intl.DateTimeFormat(localeName(), {
+          calendar,
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          ...(type === "datetime-local"
+            ? { hour: "2-digit", minute: "2-digit" }
+            : {}),
+        }).format(parsed)
+      : t("Select date");
+  const move = (next: string) => {
+    setMonth(next);
+    setFocusDay(next);
   };
   return (
     <div className="date-control" ref={root}>
@@ -315,78 +344,114 @@ function DateInput({
         ref={trigger}
         aria-label={label}
         className={`date-trigger ${className}`}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (!open) {
+            const selected = date.slice(0, 10) || civilToday();
+            setMonth(selected);
+            setFocusDay(selected);
+          }
+          setOpen((v) => !v);
+        }}
         onKeyDown={(e) => {
           if (e.key === "Escape") setOpen(false);
         }}
       >
-        <span>
-          {date
-            ? new Date(date).toLocaleString(
-                [],
-                type === "date"
-                  ? { dateStyle: "medium" }
-                  : { dateStyle: "medium", timeStyle: "short" },
-              )
-            : t("Select date")}
-        </span>
+        <span>{display}</span>
         <CalendarDays size={15} />
       </button>
       {name && <input type="hidden" name={name} value={date} />}{" "}
       {open && (
-        <div className="calendar-panel">
+        <div
+          className="calendar-panel"
+          role="dialog"
+          aria-label={t("Choose date")}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation();
+              setOpen(false);
+              trigger.current?.focus();
+            }
+          }}
+        >
           <div className="calendar-heading">
             <button
               type="button"
-              aria-label="Previous month"
-              onClick={() => setMonth(new Date(year, m - 1, 1))}
+              aria-label={t("Previous month")}
+              onClick={() => move(grid.previous)}
             >
               <ChevronLeft size={16} />
             </button>
-            <span>
-              {month.toLocaleDateString([], { month: "long", year: "numeric" })}
-            </span>
+            <span>{grid.title}</span>
             <button
               type="button"
-              aria-label="Next month"
-              onClick={() => setMonth(new Date(year, m + 1, 1))}
+              aria-label={t("Next month")}
+              onClick={() => move(grid.next)}
             >
               <ChevronRight size={16} />
             </button>
           </div>
-          <div className="calendar-grid">
-            {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
-              <span key={d}>{d}</span>
+          <div
+            className="calendar-grid"
+            aria-label={grid.title}
+            onKeyDown={(e) => {
+              const shifts: Record<string, number> = {
+                ArrowLeft: document.documentElement.dir === "rtl" ? 1 : -1,
+                ArrowRight: document.documentElement.dir === "rtl" ? -1 : 1,
+                ArrowUp: -7,
+                ArrowDown: 7,
+              };
+              if (e.key in shifts) {
+                e.preventDefault();
+                move(addCivilDays(focusDay, shifts[e.key]));
+              } else if (e.key === "PageUp" || e.key === "PageDown") {
+                e.preventDefault();
+                move(e.key === "PageUp" ? grid.previous : grid.next);
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopPropagation();
+                setOpen(false);
+                trigger.current?.focus();
+              }
+            }}
+          >
+            {grid.weekdays.map((d, i) => (
+              <span key={i}>{d}</span>
             ))}
-            {Array.from({ length: start }, (_, i) => (
+            {Array.from({ length: grid.offset }, (_, i) => (
               <span key={`empty${i}`} />
             ))}
-            {Array.from({ length: days }, (_, i) => (
+            {grid.dates.map((value, i) => (
               <button
                 type="button"
-                key={i}
-                className={
-                  date.startsWith(
-                    `${year}-${String(m + 1).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`,
-                  )
-                    ? "selected"
-                    : ""
-                }
-                onClick={() => day(i + 1)}
+                key={value}
+                data-date={value}
+                aria-label={grid.fullLabels[i]}
+                aria-pressed={date.startsWith(value)}
+                tabIndex={focusDay === value ? 0 : -1}
+                className={date.startsWith(value) ? "selected" : ""}
+                onFocus={() => setFocusDay(value)}
+                onClick={() => day(value)}
               >
-                {i + 1}
+                {grid.labels[i]}
               </button>
             ))}
           </div>
           {type === "datetime-local" && (
-            <div className="calendar-time">
+            <div
+              className="calendar-time"
+              aria-label={
+                t("Browser timezone") +
+                ": " +
+                Intl.DateTimeFormat().resolvedOptions().timeZone
+              }
+            >
               <Select
                 aria-label="Hour"
                 value={date.split("T")[1]?.slice(0, 2) ?? "00"}
                 onChange={(e) =>
                   change(
-                    (date.split("T")[0] ||
-                      `${year}-${String(m + 1).padStart(2, "0")}-01`) +
+                    (date.split("T")[0] || grid.first) +
                       "T" +
                       e.target.value +
                       ":" +
@@ -406,8 +471,7 @@ function DateInput({
                 value={date.split("T")[1]?.slice(3, 5) ?? "00"}
                 onChange={(e) =>
                   change(
-                    (date.split("T")[0] ||
-                      `${year}-${String(m + 1).padStart(2, "0")}-01`) +
+                    (date.split("T")[0] || grid.first) +
                       "T" +
                       (date.split("T")[1]?.slice(0, 2) || "00") +
                       ":" +

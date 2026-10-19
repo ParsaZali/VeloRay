@@ -245,6 +245,16 @@ export type SubscriptionHost = {
   enabled: boolean;
 };
 export type AppSettings = {
+  smtp_enabled: boolean;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_tls_mode: string;
+  smtp_username: string;
+  smtp_from: string;
+  smtp_configured: boolean;
+  alert_quota_percent: number;
+  alert_expiry_days: number;
+  alert_inactive_days: number;
   subscription_hosts: SubscriptionHost[];
   site_name: string;
   support_url: string;

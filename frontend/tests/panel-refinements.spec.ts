@@ -542,6 +542,9 @@ test("custom chart range supports keyboard and pointer controls", async ({
   await panel(page, "/dashboard");
   const start = page.getByRole("slider", { name: "Chart start", exact: true }),
     end = page.getByRole("slider", { name: "Chart end", exact: true });
+  // Traffic loads asynchronously; focusing a disabled handle is a no-op.
+  await expect(start).toBeEnabled();
+  await expect(end).toBeEnabled();
   await start.focus();
   await page.keyboard.press("ArrowRight");
   await expect(start).toHaveAttribute("aria-valuenow", "1");
@@ -1517,4 +1520,280 @@ test("OIDC login keeps the local second factor and password fallback", async ({
   await expect(
     page.getByRole("button", { name: "Sign in with SSO", exact: true }),
   ).toBeVisible();
+});
+
+test("operations manage monitors, private billing and diagnostics on mobile", async ({
+  page,
+}) => {
+  const entries: any[] = [];
+  let billing: any = {
+    enabled: true,
+    provider: "",
+    region: "",
+    reference: "",
+    currency: "USD",
+    price_minor: 0,
+    budget_bytes: 0,
+    warning_percent: 80,
+    reset_day: 1,
+    timezone: "UTC",
+  };
+  await panel(page, "/operations", { monitors: { json: [] } });
+  await page.route("**/api/monitors**", async (route) => {
+    const request = route.request(),
+      path = new URL(request.url()).pathname,
+      id = Number(path.split("/")[3]);
+    if (path.endsWith("/probe")) {
+      entries[0].last_result = {
+        ok: true,
+        latency_ms: 12,
+        status_code: 204,
+        checked_at: "2026-10-19T12:00:00Z",
+      };
+      await route.fulfill({ json: entries[0].last_result });
+      return;
+    }
+    if (path.endsWith("/history")) {
+      await route.fulfill({
+        json: [
+          {
+            ok: true,
+            latency_ms: 12,
+            status_code: 204,
+            at: "2026-10-19T12:00:00Z",
+          },
+        ],
+      });
+      return;
+    }
+    if (request.method() === "POST") {
+      entries.push({
+        ...request.postDataJSON(),
+        id: 1,
+        target_host: "probe.example",
+      });
+      await route.fulfill({ status: 201, json: entries[0] });
+      return;
+    }
+    if (request.method() === "DELETE") {
+      entries.splice(0);
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    await route.fulfill({
+      json: id
+        ? entries.find((r) => r.id === id)
+        : entries.map(({ url, ...rest }) => rest),
+    });
+  });
+  await page.route("**/api/operations/nodes/1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/diagnostics")) {
+      await route.fulfill({
+        json: {
+          xray: {
+            core: "xray",
+            status: { running: true },
+            operations: [
+              {
+                operation_id: "test-operation",
+                state: "applied",
+                at: "2026-10-19T12:00:00Z",
+                config_hash: "public-hash",
+              },
+            ],
+          },
+        },
+      });
+      return;
+    }
+    if (route.request().method() === "PATCH")
+      billing = route.request().postDataJSON();
+    await route.fulfill({
+      json: {
+        config: billing,
+        usage: {
+          used_bytes: 1024 ** 3,
+          lifetime_bytes: 1024 ** 3,
+          cycle_start: "2026-10-01T00:00:00Z",
+          cycle_end: "2026-11-01T00:00:00Z",
+        },
+        history: [],
+      },
+    });
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Add monitor", exact: true }).click();
+  let dialog = page.getByRole("dialog", {
+    name: "Health monitor",
+    exact: true,
+  });
+  await dialog.getByLabel("Name", { exact: true }).fill("Regional route");
+  await dialog
+    .getByLabel("HTTPS probe URL", { exact: true })
+    .fill("https://probe.example/private-source-path");
+  await dialog
+    .getByRole("button", { name: "Save monitor", exact: true })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  expect(entries[0].node).toBe(1);
+  await expect(
+    page.getByText("https://probe.example/private-source-path", {
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Run probe", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Probe succeeded");
+  await page.getByRole("button", { name: "History", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("12 ms");
+  await page.keyboard.press("Escape");
+  await page.getByRole("tab", { name: "Node billing", exact: true }).click();
+  await page
+    .getByLabel("Hosting provider", { exact: true })
+    .fill("Host company");
+  await page
+    .getByLabel("Account reference", { exact: true })
+    .fill("private-contract");
+  await page.getByLabel("Traffic budget (GiB)", { exact: true }).fill("200");
+  await page.getByRole("button", { name: "Save billing", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "Billing settings saved",
+  );
+  expect(billing.budget_bytes).toBe(200 * 1024 ** 3);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("tab", { name: "Diagnostics", exact: true }).click();
+  await expect(page.getByText("public-hash", { exact: false })).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  // Failed node reads must not leave another node's private billing editable.
+  await page.route("**/api/nodes", (route) =>
+    route.fulfill({ json: [node, { ...node, id: 2, name: "Second" }] }),
+  );
+  await page.route("**/api/operations/nodes/2/**", (route) =>
+    route.fulfill({
+      status: 502,
+      json: { detail: "Node billing unavailable" },
+    }),
+  );
+  await page.reload();
+  await page.getByRole("tab", { name: "Node billing", exact: true }).click();
+  await expect(
+    page.getByLabel("Account reference", { exact: true }),
+  ).toHaveValue("private-contract");
+  await choose(page, "Node", "2", false);
+  await expect(page.getByRole("alert")).toContainText(
+    "Node billing unavailable",
+  );
+  await expect(
+    page.getByRole("button", { name: "Save billing", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByLabel("Account reference", { exact: true }),
+  ).toHaveCount(0);
+});
+
+test("SMTP settings preserve write-only password and email endpoint recipient input", async ({
+  page,
+}) => {
+  let payload: any;
+  await panel(page, "/settings", { "webhooks/endpoints": { json: [] } });
+  await page.route("**/api/settings", async (route) => {
+    if (route.request().method() === "PATCH") {
+      payload = route.request().postDataJSON();
+      await route.fulfill({
+        json: {
+          ...payload,
+          smtp_password: undefined,
+          smtp_configured: true,
+          site_name: "VeloRay",
+          default_locale: "en",
+        },
+      });
+    } else await route.fallback();
+  });
+  await page.getByRole("button", { name: "Webhooks", exact: true }).click();
+  await page.getByLabel("Enable SMTP email", { exact: true }).check();
+  await page
+    .getByLabel("SMTP hostname", { exact: true })
+    .fill("smtp.example.com");
+  await page
+    .getByLabel("Sender email", { exact: true })
+    .fill("notify@example.com");
+  await page.getByLabel("SMTP username", { exact: true }).fill("operator");
+  await page
+    .getByLabel("SMTP password", { exact: true })
+    .fill("private-smtp-secret");
+  await page.getByLabel("Quota warning (%)", { exact: true }).fill("85");
+  await page
+    .getByRole("button", { name: "Save settings", exact: true })
+    .click();
+  await expect(page.getByLabel("SMTP password", { exact: true })).toHaveValue(
+    "",
+  );
+  expect(payload.smtp_password).toBe("private-smtp-secret");
+  expect(payload.alert_quota_percent).toBe(85);
+  expect(payload.smtp_configured).toBeUndefined();
+  await page
+    .getByRole("button", { name: "Add destination", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Notification destination",
+    exact: true,
+  });
+  await dialog.getByRole("combobox", { name: "Channel", exact: true }).click();
+  await page.getByRole("option", { name: "Email", exact: true }).click();
+  await expect(
+    dialog.getByLabel("Recipient emails", { exact: true }),
+  ).toHaveAttribute("type", "text");
+  await expect(
+    dialog.getByLabel("HMAC signing secret", { exact: true }),
+  ).toHaveCount(0);
+});
+
+test("Persian picker maps leap Esfand and Nowruz to Gregorian API values with keyboard navigation", async ({
+  page,
+}) => {
+  await managementPanel(page, "/customers");
+  await page.addInitScript(() =>
+    localStorage.setItem("veloray-calendar", "persian"),
+  );
+  await page.reload();
+  const dates = await page.evaluate(async () => {
+    const c = await import("/src/lib/calendar.ts");
+    return {
+      leap: c.calendarMonth("2025-03-20", "persian", "en-US"),
+      newYear: c.calendarMonth("2025-03-21", "persian", "en-US"),
+    };
+  });
+  expect(dates.leap.dates).toHaveLength(30);
+  expect(dates.leap.dates.at(-1)).toBe("2025-03-20");
+  expect(dates.leap.next).toBe("2025-03-21");
+  expect(dates.newYear.first).toBe("2025-03-21");
+  await page.getByRole("button", { name: "Add customer", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Customer", exact: true });
+  await dialog
+    .getByRole("button", { name: "Expiry (UTC)", exact: true })
+    .click();
+  const calendar = page.getByRole("dialog", {
+    name: "Choose date",
+    exact: true,
+  });
+  await expect(calendar).toBeVisible();
+  const focused = calendar.locator("[data-date]:focus");
+  const before = await focused.getAttribute("data-date");
+  await page.keyboard.press("ArrowRight");
+  const after = await calendar
+    .locator("[data-date]:focus")
+    .getAttribute("data-date");
+  expect(after).not.toBe(before);
+  await page.keyboard.press("Enter");
+  await expect(
+    dialog.getByRole("button", { name: "Expiry (UTC)", exact: true }),
+  ).not.toHaveText("Select date");
+  await page.keyboard.press("Escape");
+  await expect(calendar).toHaveCount(0);
+  await expect(dialog).toBeVisible();
 });

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5"
+	"sync"
 	"time"
 )
 
@@ -318,6 +319,27 @@ func (s *Server) runJob(ctx context.Context, id int64) error {
 	return e
 }
 func (s *Server) Worker(ctx context.Context) {
+	var monitors sync.WaitGroup
+	for worker := 0; worker < 4; worker++ {
+		monitors.Add(1)
+		go func() {
+			defer monitors.Done()
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				if _, _, e := s.runMonitor(ctx, 0, false); e != nil && ctx.Err() == nil {
+					s.Logger.Warn("monitor check failed", "error", "check failed")
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
+	}
+	defer monitors.Wait()
+
 	// Network-dependent housekeeping cannot delay live client telemetry.
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
@@ -325,6 +347,12 @@ func (s *Server) Worker(ctx context.Context) {
 		for {
 			if e := s.maintain(ctx); e != nil && ctx.Err() == nil {
 				s.Logger.Warn("housekeeping failed", "error", e)
+			}
+			if e := s.rollNodeBilling(ctx); e != nil && ctx.Err() == nil {
+				s.Logger.Warn("billing period update failed", "error", e)
+			}
+			if e := s.scanLifecycleAlerts(ctx); e != nil && ctx.Err() == nil {
+				s.Logger.Warn("lifecycle alert scan failed", "error", e)
 			}
 			if e := s.deliverWebhookQueue(ctx); e != nil && ctx.Err() == nil {
 				s.Logger.Warn("webhook queue failed", "error", e)
