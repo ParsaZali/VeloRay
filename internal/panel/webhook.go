@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // Webhook events contain audit metadata only. Credentials, client configuration,
@@ -69,8 +71,8 @@ func publicWebhookIP(ip net.IP) bool {
 func webhookHTTPClient() *http.Client {
 	dialer := &net.Dialer{Timeout: 3 * time.Second, KeepAlive: -1}
 	transport := &http.Transport{
-		Proxy: nil,
-		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
+		Proxy:             nil,
+		TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
 		DisableKeepAlives: true,
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 			host, port, err := net.SplitHostPort(address)
@@ -90,7 +92,7 @@ func webhookHTTPClient() *http.Client {
 		},
 	}
 	return &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout:   5 * time.Second,
 		Transport: transport,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -123,10 +125,10 @@ func webhookBackoff(attempt int) time.Duration {
 // that rolled-back mutations never emit a webhook event.
 func enqueueAuditWebhook(ctx context.Context, q Query, auditRecord Data) error {
 	payload := Data{
-		"id": auditRecord["id"],
-		"event": auditRecord["action"],
-		"target": auditRecord["target"],
-		"actor": auditRecord["actor_name"],
+		"id":          auditRecord["id"],
+		"event":       auditRecord["action"],
+		"target":      auditRecord["target"],
+		"actor":       auditRecord["actor_name"],
 		"occurred_at": auditRecord["created_at"],
 	}
 	body, err := json.Marshal(payload)
@@ -138,10 +140,16 @@ func enqueueAuditWebhook(ctx context.Context, q Query, auditRecord Data) error {
 		WHERE id=1 AND data->>'webhook_enabled'='true'
 		  AND COALESCE(data->>'webhook_url','') <> ''
 		  AND COALESCE(data->>'_webhook_secret','') <> ''`, string(body))
-	return err
+	if err != nil {
+		return err
+	}
+	return enqueueEndpointWebhooks(ctx, q, payload)
 }
 
 func (s *Server) webhooksAPI(w http.ResponseWriter, r *http.Request, path string, actor Actor) (any, int, error) {
+	if path == "webhooks/endpoints" || strings.HasPrefix(path, "webhooks/endpoints/") {
+		return s.webhookEndpointsAPI(w, r, path, actor)
+	}
 	ctx := r.Context()
 	switch {
 	case path == "webhooks/status" && r.Method == http.MethodGet:
@@ -173,37 +181,45 @@ func (s *Server) webhooksAPI(w http.ResponseWriter, r *http.Request, path string
 
 func (s *Server) deliverWebhookQueue(ctx context.Context) error {
 	d, err := settings(ctx, s.Store.Pool)
-	if err != nil || !flag(d, "webhook_enabled") {
-		return err
-	}
-	target := str(d, "webhook_url")
-	if err := validateWebhookURL(target); err != nil {
-		return err
-	}
-	secret, err := unseal(s.Config.FieldKey, str(d, "_webhook_secret"))
 	if err != nil {
 		return err
 	}
-	if secret == "" || target == "" {
-		return nil
+	target, secret := "", ""
+	legacy := flag(d, "webhook_enabled")
+	if legacy {
+		target = str(d, "webhook_url")
+		if err = validateWebhookURL(target); err != nil {
+			return err
+		}
+		secret, err = unseal(s.Config.FieldKey, str(d, "_webhook_secret"))
+		if err != nil {
+			return err
+		}
+		legacy = secret != "" && target != ""
 	}
 	rows, err := s.Store.Pool.Query(ctx, `WITH ready AS (
 		SELECT id FROM vr_webhook_deliveries
 		WHERE delivered_at IS NULL AND attempts < $1 AND next_at <= now()
+ AND ((endpoint_id IS NULL AND $2) OR endpoint_id IN (SELECT id FROM vr_webhook_endpoints WHERE data->>'enabled'='true'))
 		ORDER BY id LIMIT 8 FOR UPDATE SKIP LOCKED
 	)
 	UPDATE vr_webhook_deliveries AS d
 	SET attempts=d.attempts+1, next_at=now()+interval '2 minutes'
 	FROM ready WHERE d.id=ready.id
-	RETURNING d.id, d.payload, d.attempts`, webhookMaxAttempts)
+	RETURNING d.id, d.payload, d.attempts,COALESCE(d.endpoint_id,0)`, webhookMaxAttempts, legacy)
 	if err != nil {
 		return err
 	}
-	type delivery struct { id int64; payload []byte; attempts int }
+	type delivery struct {
+		id       int64
+		payload  []byte
+		attempts int
+		endpoint int64
+	}
 	var ready []delivery
 	for rows.Next() {
 		var item delivery
-		if err = rows.Scan(&item.id, &item.payload, &item.attempts); err != nil {
+		if err = rows.Scan(&item.id, &item.payload, &item.attempts, &item.endpoint); err != nil {
 			break
 		}
 		ready = append(ready, item)
@@ -215,19 +231,52 @@ func (s *Server) deliverWebhookQueue(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	client := webhookHTTPClient()
+	client := s.WebhookHTTP
+	if client == nil {
+		client = webhookHTTPClient()
+	}
 	for _, item := range ready {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		deliveryTarget, deliverySecret, channel := target, secret, "webhook"
+		if item.endpoint > 0 {
+			endpoint, e := get(ctx, s.Store.Pool, "webhook_endpoints", item.endpoint)
+			if errors.Is(e, pgx.ErrNoRows) {
+				continue
+			}
+			if e != nil {
+				return e
+			}
+			if !flag(endpoint, "enabled") {
+				_, e = s.Store.Pool.Exec(ctx, "UPDATE vr_webhook_deliveries SET attempts=GREATEST(attempts-1,0),next_at=now()+interval '1 minute' WHERE id=$1", item.id)
+				if e != nil {
+					return e
+				}
+				continue
+			}
+			deliveryTarget, e = unseal(s.Config.FieldKey, str(endpoint, "_url"))
+			if e != nil {
+				return e
+			}
+			deliverySecret, e = unseal(s.Config.FieldKey, str(endpoint, "_secret"))
+			if e != nil {
+				return e
+			}
+			channel = str(endpoint, "channel")
+		}
+		if e := validateWebhookURL(deliveryTarget); e != nil {
+			return e
+		}
+		item.payload = endpointPayload(channel, item.payload)
 		timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(item.payload))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, deliveryTarget, bytes.NewReader(item.payload))
 		if err == nil {
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("User-Agent", "VeloRay-Webhooks/1.0")
 			req.Header.Set("X-VeloRay-Timestamp", timestamp)
 			req.Header.Set("X-VeloRay-Delivery", strconv.FormatInt(item.id, 10))
-			req.Header.Set("X-VeloRay-Signature", webhookSignature(secret, timestamp, item.payload))
+			req.Header.Set("X-VeloRay-Signature", webhookSignature(deliverySecret, timestamp, item.payload))
 			var response *http.Response
 			response, err = client.Do(req)
 			if err == nil {
@@ -242,8 +291,16 @@ func (s *Server) deliverWebhookQueue(ctx context.Context) error {
 			_, err = s.Store.Pool.Exec(ctx, `UPDATE vr_webhook_deliveries
 				SET delivered_at=now(), last_error='' WHERE id=$1`, item.id)
 		} else {
-			s.Logger.Warn("webhook delivery failed", "delivery_id", item.id, "attempts", item.attempts, "error", err)
-			message := err.Error()
+			s.Logger.Warn("webhook delivery failed", "delivery_id", item.id, "attempts", item.attempts, "error", "request failed")
+			message := "request failed"
+			if responseStatus := func() string {
+				if strings.HasPrefix(err.Error(), "remote status ") {
+					return err.Error()
+				}
+				return ""
+			}(); responseStatus != "" {
+				message = responseStatus
+			}
 			if len(message) > 300 {
 				message = message[:300]
 			}

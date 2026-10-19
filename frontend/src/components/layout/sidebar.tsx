@@ -8,6 +8,7 @@ export type RouteKey =
   | "dashboard"
   | "customers"
   | "services"
+  | "subscription-policies"
   | "profiles"
   | "clients"
   | "outbounds"
@@ -45,6 +46,11 @@ const groups = [
     items: [
       { key: "nodes", label: "Nodes", icon: "server" },
       { key: "profiles", label: "Config profiles", icon: "file-code" },
+      {
+        key: "subscription-policies",
+        label: "Subscription policies",
+        icon: "link",
+      },
       { key: "xray", label: "Xray Core", icon: "microchip" },
     ],
   },
@@ -114,7 +120,12 @@ export function Sidebar({
               {g.items
                 .filter(
                   (item) =>
-                    (!["accounts", "imports", "profiles"].includes(item.key) ||
+                    (![
+                      "accounts",
+                      "imports",
+                      "profiles",
+                      "subscription-policies",
+                    ].includes(item.key) ||
                       isSuperuser) &&
                     (!access[item.key] || can(session, access[item.key])),
                 )

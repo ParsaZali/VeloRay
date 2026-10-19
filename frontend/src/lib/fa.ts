@@ -1056,4 +1056,46 @@ Object.assign(fa, {
   "Probe idle timeout": "مهلت بی‌کاری آزمون",
   "Interrupt existing connections when switching":
     "قطع اتصال‌های موجود هنگام تعویض مسیر",
+
+  "Subscription policies": "سیاست‌های اشتراک",
+  "Subscription policy": "سیاست اشتراک",
+  "Add policy": "افزودن سیاست",
+  "Combine local connections with external links. Policies can override export templates and defaults for assigned customers, services and apps.":
+    "اتصال‌های محلی را با لینک‌های خارجی ترکیب کنید. سیاست‌ها قالب و فرمت پیش‌فرض را برای مشتری‌ها، سرویس‌ها و برنامه‌های انتخاب‌شده تعیین می‌کنند.",
+  "Cached connections": "اتصال ذخیره‌شده",
+  "Refresh source": "تازه‌سازی منبع",
+  "External feed URL": "نشانی ساب خارجی",
+  "External connection links": "لینک‌های اتصال خارجی",
+  "Public HTTPS only. Refresh explicitly after saving; failed refreshes retain the previous cache.":
+    "فقط نشانی عمومی HTTPS. پس از ذخیره منبع را تازه‌سازی کنید؛ در صورت خطا، نسخهٔ قبلی حفظ می‌شود.",
+  "Client applications": "برنامه‌های مصرف‌کننده",
+  "No app selection applies to every app. Application matching controls presentation, not authorization.":
+    "اگر برنامه‌ای انتخاب نکنید، سیاست برای همه اعمال می‌شود. انتخاب برنامه فقط نحوهٔ نمایش و خروجی را تعیین می‌کند.",
+  "Client templates": "قالب‌های خروجی",
+  "External traffic and expiry are enforced by the external provider. Local account eligibility and HWID checks still protect this subscription.":
+    "مصرف و انقضای اتصال خارجی با ارائه‌دهندهٔ آن است. اعتبار حساب محلی و محدودیت دستگاه همچنان بررسی می‌شود.",
+  "Notification destinations": "مقصدهای اعلان",
+  "Notification destination": "مقصد اعلان",
+  "Add destination": "افزودن مقصد",
+  "Route events independently to signed HTTPS endpoints or Discord. Empty filters receive all events; use client.*, node.* or an exact event name.":
+    "رویدادها را جداگانه به وبهوک امضاشده یا دیسکورد بفرستید. فیلتر خالی همهٔ رویدادها را می‌گیرد؛ از client.*، node.* یا نام دقیق رویداد استفاده کنید.",
+  "Signed webhook": "وبهوک امضاشده",
+  Channel: "کانال",
+  "Event filters": "فیلتر رویدادها",
+  "Delivery queued": "ارسال در صف قرار گرفت",
+  "Pending deliveries for this destination will also be removed.":
+    "ارسال‌های در انتظار این مقصد هم حذف می‌شوند.",
+  "Date display": "نمایش تاریخ",
+  Calendar: "تقویم",
+  "Language default": "پیش‌فرض زبان",
+  "Persian (Jalali)": "فارسی (شمسی)",
+  Gregorian: "میلادی",
+  "Display timezone": "منطقهٔ زمانی نمایش",
+  "Date inputs keep their labeled timezone and Gregorian format. Display preferences are saved for this browser.":
+    "ورود تاریخ با قالب میلادی و منطقهٔ زمانی درج‌شده در فیلد انجام می‌شود. ترجیح نمایش در همین مرورگر ذخیره می‌شود.",
+  "Save date preferences": "ذخیرهٔ نمایش تاریخ",
+  "Enter a valid IANA timezone.":
+    "نام معتبر منطقهٔ زمانی وارد کنید؛ مثلاً Asia/Tehran.",
+  "OIDC issuer (optional)": "نشانی صادرکنندهٔ OIDC (اختیاری)",
+  "OIDC subject (optional)": "شناسهٔ حساب OIDC (اختیاری)",
 });

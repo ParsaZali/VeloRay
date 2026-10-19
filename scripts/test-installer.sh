@@ -385,6 +385,7 @@ cat >"$TEST_ROOT/host-tools/systemctl" <<'SYSTEMD'
 #!/usr/bin/env bash
 echo "$*" >>"$HOST_ROOT/service-calls"
 if [[ "$1" == is-active ]];then
+ [[ "$*" != *veloray-subscriptions.service* || "${TEST_SUBSCRIPTIONS_ACTIVE:-}" == 1 ]]||exit 3
  [[ "$*" != *"${TEST_FAILED_UNIT:-__none__}"* ]]||exit 3
  [[ "$*" == *--quiet* ]]||echo active
 fi
@@ -412,12 +413,22 @@ pass web-assets-readable-after-private-umask
 test -f "$HOST_ROOT/admin";test -f "$HOST_ROOT/database";test -f "$HOST_ROOT/role"
 original_env="$(sha256sum "$HOST_ROOT/etc/veloray/veloray.env")"
 pass host-fresh-install
+test -f "$HOST_ROOT/etc/systemd/system/veloray-subscriptions.service"
+if grep -Eq '(enable|restart).*veloray-subscriptions.service' "$HOST_ROOT/service-calls";then echo 'Fresh install activated optional subscription service' >&2;exit 1;fi
+pass independent-subscriptions-installed-disabled
 : >"$HOST_ROOT/app-calls"
 host_install
 [[ "$(sha256sum "$HOST_ROOT/etc/veloray/veloray.env")" == "$original_env" ]]
 grep -Fxq backup "$HOST_ROOT/app-calls"
 if grep -Fxq bootstrap "$HOST_ROOT/app-calls";then echo 'Upgrade reset the administrator' >&2;exit 1;fi
 pass host-repeat-keeps-secrets
+: >"$HOST_ROOT/service-calls"
+export TEST_SUBSCRIPTIONS_ACTIVE=1
+host_install
+grep -Fxq 'stop veloray-subscriptions.service' "$HOST_ROOT/service-calls"
+grep -Fxq 'restart veloray-subscriptions.service' "$HOST_ROOT/service-calls"
+unset TEST_SUBSCRIPTIONS_ACTIVE
+pass independent-subscriptions-preserved-on-update
 reset_host
 export TEST_BOOTSTRAP_FAIL=1
 if host_install;then echo 'Interrupted bootstrap accepted' >&2;exit 1;fi

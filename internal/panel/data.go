@@ -131,7 +131,7 @@ func defaults(kind string) Data {
 	case "routing_rules":
 		return Data{"name": "", "node": 0, "core": "xray", "priority": 100, "config": Data{}, "enabled": true}
 	case "users":
-		return Data{"role": "", "permissions": []any{}, "allowed_inbounds": []any{}, "own_clients_only": false, "max_clients": 0, "traffic_budget_bytes": 0, "username": "", "email": "", "is_active": true, "is_staff": true, "is_superuser": false, "last_login": nil, "date_joined": stamp(time.Now()), "_password": "", "_totp_secret": "", "_totp_enabled": false, "_totp_step": int64(-1), "_recovery": []any{}, "_auth_version": 1}
+		return Data{"oidc_issuer": "", "oidc_subject": "", "role": "", "permissions": []any{}, "allowed_inbounds": []any{}, "own_clients_only": false, "max_clients": 0, "traffic_budget_bytes": 0, "username": "", "email": "", "is_active": true, "is_staff": true, "is_superuser": false, "last_login": nil, "date_joined": stamp(time.Now()), "_password": "", "_totp_secret": "", "_totp_enabled": false, "_totp_step": int64(-1), "_recovery": []any{}, "_auth_version": 1}
 	case "api_keys":
 		return Data{"name": "", "prefix": "", "scope": "read", "enabled": true, "expires_at": nil, "last_used_at": nil, "user": 0}
 	}

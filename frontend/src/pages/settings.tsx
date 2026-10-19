@@ -1,3 +1,5 @@
+import { DatePreferences } from "@/components/date-preferences";
+import { NotificationEndpoints } from "@/components/notification-endpoints";
 import { SubscriptionOptions } from "@/components/subscription-options";
 import { useSession } from "@/lib/session";
 import { Textarea } from "@/components/ui/controls";
@@ -1119,12 +1121,14 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                         {t("Retry failed")}
                       </Button>
                     </div>
+                    {session?.is_superuser && <NotificationEndpoints />}
                     <Actions busy={busy} />
                   </CardContent>
                 </Card>
               )}
               {tab === "system" && (
                 <div className="space-y-4">
+                  <DatePreferences />
                   {session?.is_superuser && (
                     <Card>
                       <CardHeader>

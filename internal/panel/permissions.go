@@ -235,13 +235,13 @@ func (s *Server) roleAuthorize(a Actor, method, path string) error {
 		return nil
 	case "openapi":
 		resource = "api"
-	case "overview":
+	case "overview", "events":
 		resource = "dashboard"
 	case "traffic-history", "outbound-traffic":
 		resource = "traffic"
 	case "system-info":
 		resource = "nodes"
-	case "profiles", "snippets", "audit", "admin", "imports", "telegram", "webhooks", "updates", "subscription-template":
+	case "profiles", "snippets", "audit", "admin", "imports", "telegram", "webhooks", "updates", "subscription-template", "subscription-policies":
 		if !flag(a.User, "is_superuser") || a.Scope != "admin" {
 			return fail(403, "administrator access required")
 		}

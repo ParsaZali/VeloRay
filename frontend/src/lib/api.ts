@@ -1,5 +1,5 @@
 import { t, localeName } from "./i18n";
-const API_BASE = import.meta.env.VITE_API_URL || "/api";
+export const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
 export type PortReport = {
   ports: {
@@ -302,6 +302,8 @@ export type AppSettings = {
   telegram_alert_cooldown_minutes: number;
 };
 export type AdminUser = {
+  oidc_issuer?: string;
+  oidc_subject?: string;
   role: "administrator" | "reseller" | "viewer" | "custom";
   permissions: string[];
   allowed_inbounds: number[];

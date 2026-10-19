@@ -36,10 +36,19 @@ project maintainers on licensing whenever reusing third-party code.
 - [x] Automatic quota/expiry/renewal/first-use/device/node events in the signed outbox.
 
 This remains an incomplete backlog, not a claim of parity with every panel.
-External policy groups/feed aggregation, other new protocols, structural hot apply,
-additional deployment targets, identity federation and the unchecked items below
-remain unfinished. See `customer-management.md` and
+External policies/feed aggregation, optional OIDC, independent subscription
+serving, Discord destinations, scoped SSE and browser date preferences are now
+implemented within their documented limits. Other protocols, structural hot
+apply, deployment targets and the unchecked items below remain unfinished. See `customer-management.md` and
 `native-protocols-and-live-apply.md` for exact scope and verification limits.
+
+## Additional delivered slice
+
+See [external policies](subscription-policies.md), [OIDC/live UI](oidc-and-live-dashboard.md),
+[independent subscriptions](independent-subscriptions.md) and [destinations](webhooks.md).
+The owner has explicitly requested publication to main so the server updater can
+receive these changes. Publication still requires verified runtime bundles and
+green CI. An unchecked item must not be presented as completed.
 
 ## Stage 0 — safety and baseline
 - [ ] Establish reproducible green CI on main (Go tests/race, web build,
@@ -64,8 +73,8 @@ remain unfinished. See `customer-management.md` and
 - [x] Automated tests for validation, HMAC and transaction consistency.
 - [x] Broaden events to automatic client expiration, quota exhaustion,
       first connection, node transitions and device changes.
-- [ ] Support separate destination endpoints and per-event channel preferences.
-- [ ] Add outbound delivery end-to-end tests with an isolated mock transport.
+- [x] Support separate destination endpoints and per-event channel preferences.
+- [x] Add outbound delivery end-to-end tests with an isolated mock transport.
 - [ ] Verify real public HTTPS delivery and downstream idempotent consumption
       before marking this capability production-ready.
 
@@ -74,7 +83,7 @@ remain unfinished. See `customer-management.md` and
       shared traffic quota, expiry and mutually consistent subscription URLs.
 - [x] Reusable customer service plans and user templates (policy defaults).
 - [x] Internal service access groups.
-- [ ] External subscription policy groups.
+- [x] External subscription policy groups with encrypted explicit-refresh caches.
 - [x] Service-filtered selection and atomic bulk quota, expiry, enable/reset/delete and access edits (up to 200 explicit accounts).
 - [x] Reusable config profiles shared across nodes with snippets/version history.
 - [x] Preserve existing reseller authorization and accounting semantics (integration coverage).
@@ -82,12 +91,12 @@ remain unfinished. See `customer-management.md` and
 ## Stage 2 — delivery and connection quality
 - [x] Flexible hosts, public addresses, SNI, path and visibility independent of
       the actual inbound listener.
-- [ ] Pluggable client-specific subscription templates: sing-box, Xray JSON,
+- [x] Pluggable client-specific subscription templates: sing-box, Xray JSON,
       Clash/Mihomo, Stash and future formats.
-- [ ] Contextual response rules based on authorized user/group/client app.
+- [x] Customer/service-assigned presentation rules with client-app hints (never authorization).
 - [x] Custom HTML subscription page templates and safe variables.
-- [ ] External subscription aggregation and external connection links.
-- [ ] Independent subscription domain/service deployment.
+- [x] External portable URI aggregation and connection links; raw/Base64 input.
+- [x] Optional independent subscription-only systemd service and manual domain setup.
 - [x] Subscription request history with bounded retention, no URL-token logging.
 - [x] HWID enrollment, device revocation and cap enforcement for supporting apps.
 - [x] Calendar-aware renewals: hourly, daily, weekly, monthly date and rolling.
@@ -121,16 +130,17 @@ remain unfinished. See `customer-management.md` and
 - [ ] Per-node billing budgets, reset dates and hosting provider metadata.
 - [ ] Online status, web-accessible diagnostic logs, deeper search,
       operational health dashboards and export formats.
-- [ ] Optional email and Discord notifications, event routing, and alerts for
-      inactive clients, logins, device changes and quota thresholds.
-- [ ] Optional identity federation (GitHub OAuth, Telegram OAuth, OIDC and LDAP),
-      subject to a threat model for administrator identities.
+- [x] Optional Discord and signed webhook destinations with audit-event routing.
+- [ ] SMTP/email notifications, inactive-client and configurable quota-threshold alerts.
+- [x] Optional OIDC code/PKCE login with exact pre-bound subjects and local 2FA.
+- [ ] Direct GitHub/Telegram OAuth and LDAP adapters.
 
 ## Stage 5 — internationalization and UX
-- [ ] Robust Persian Jalali calendar and timezone-aware date presentation.
+- [x] Persian Jalali/timezone display preferences for expiry and collection dates.
+- [ ] Jalali date input picker and timezone presentation throughout every page.
 - [ ] Expand language catalogs with translator-reviewed strings.
 - [x] Service worker and safe PWA installation with bounded static caches, real server-loss and update-acceptance browser tests.
-- [ ] Live dashboards with bounded WebSocket/SSE updates where appropriate.
+- [x] Live owner-scoped dashboard with bounded, reauthorized SSE and polling fallback.
 - [ ] Config builders, realtime network diagnostics and deep table filtering.
 - [ ] Accessibility, keyboard navigation, screen-reader and mobile regression
       suite.

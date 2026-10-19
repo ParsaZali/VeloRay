@@ -24,14 +24,24 @@ Xray as the primary core. sing-box as the secondary core. One interface for both
 | Announcements | Subscription announcement and announcement URL; editable in Settings |
 | SNI scanner | Node-side DNS and TLS 1.3 probes, custom domains, suggested domains, latency and certificate checks |
 | Accounts | Administrator, reseller, viewer and custom roles, inbound assignments, client and traffic budgets |
-| Security | Password policy, encrypted sensitive fields, scoped API keys, CSRF protection, administrator 2FA and audit history |
+| Security | Password policy, encrypted sensitive fields, scoped API keys, CSRF, administrator 2FA, optional pre-bound OIDC login and audit history |
 | Migration | Bounded SQLite and relational JSON adapters, private preview, selection, port overrides and disabled imports |
-| Automation | Telegram owner controls, alerts, scheduled backups and REST API |
+| Automation | Telegram controls, signed event outbox, independent webhook/Discord destinations, scheduled backups and REST API |
 | Interface | Dark and light themes, English and Persian, responsive layouts, local fonts, custom dropdowns, date picker and checkboxes |
 
 Client action menus stay above scrollable tables. SNI and configuration dialogs use bounded, responsive layouts. Theme changes reveal the new palette from the theme button, with reduced-motion and browser fallbacks.
 
 The product version is **1.0**. Maintenance updates retain this version until the project owner requests a version change. The frontend package uses the equivalent npm version `1.0.0`.
+
+New management and subscription capabilities are described in the
+[delivery guide](docs/subscription-customization.md),
+[customer guide](docs/customer-management.md),
+[external policy guide](docs/subscription-policies.md),
+[independent service guide](docs/independent-subscriptions.md),
+[OIDC/live dashboard guide](docs/oidc-and-live-dashboard.md) and
+[notification guide](docs/webhooks.md). The [parity backlog](docs/competitor-parity-roadmap.md)
+records remaining architectural work; this release does not claim every feature
+of every competing panel.
 
 ## Installation
 

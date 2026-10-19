@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/dates";
 import { FloatingMenu } from "@/components/common/floating-menu";
 import { ClientConnections } from "@/components/client-connections";
 import { Textarea } from "@/components/ui/controls";
@@ -741,7 +742,7 @@ export function ClientsPage() {
                         </div>
                         <div className="mt-0.5 text-[9px] text-[var(--muted)]">
                           {c.expires_at
-                            ? new Date(c.expires_at).toLocaleDateString()
+                            ? formatDate(c.expires_at)
                             : t("No expiry")}
                         </div>
                       </td>

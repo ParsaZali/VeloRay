@@ -123,8 +123,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	type connection struct{ client, inbound, node Data }
-	connections := []connection{}
+	connections := []subscriptionConnection{}
 	for _, member := range members {
 		inbound, err := get(ctx, s.Store.Pool, "inbounds", num(member, "inbound"))
 		if err != nil {
@@ -146,11 +145,11 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 				mapped = true
 				if flag(host, "enabled") {
 					exportInbound, exportNode := deliveryHost(inbound, node, host)
-					connections = append(connections, connection{member, exportInbound, exportNode})
+					connections = append(connections, subscriptionConnection{member, exportInbound, exportNode})
 				}
 			}
 			if !mapped {
-				connections = append(connections, connection{member, inbound, node})
+				connections = append(connections, subscriptionConnection{member, inbound, node})
 			}
 		}
 	}
@@ -162,6 +161,13 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		s.portalAsset(w, r, cfg, assetPath)
 		return
 	}
+	external, exportCfg, err := s.externalSubscription(ctx, c, cfg, r)
+	if err != nil {
+		s.respond(w, r, nil, 0, err)
+		return
+	}
+	cfg = exportCfg
+	connections = append(connections, external...)
 	i, n := connections[0].inbound, connections[0].node
 	c = clone(connections[0].client)
 	c["subscription_token"] = token
@@ -188,7 +194,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 	if format == "" {
 		if strings.Contains(r.Header.Get("Accept"), "text/html") {
 			format = "portal"
-		} else if ua := strings.ToLower(r.UserAgent()); strings.Contains(ua, "clash") || strings.Contains(ua, "mihomo") {
+		} else if ua := strings.ToLower(r.UserAgent()); strings.Contains(ua, "clash") || strings.Contains(ua, "mihomo") || strings.Contains(ua, "stash") {
 			format = "clash"
 		} else if strings.Contains(ua, "sing-box") || strings.Contains(ua, "singbox") {
 			format = "singbox"
@@ -287,7 +293,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, 200, Data{"name": str(c, "name"), "protocol": str(i, "protocol"), "link": link, "profile": profile, "used_traffic_bytes": num(c, "used_traffic_bytes"), "traffic_limit_bytes": num(c, "traffic_limit_bytes"), "expires_at": c["expires_at"], "raw_used_traffic_bytes": num(c, "raw_used_traffic_bytes"), "traffic_multiplier": c["traffic_multiplier"], "connections": details})
 		return
-	case "clash", "yaml":
+	case "clash", "yaml", "stash", "mihomo":
 		proxies := []any{}
 		names := []any{}
 		for _, item := range connections {

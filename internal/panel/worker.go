@@ -407,6 +407,12 @@ func (s *Server) maintain(ctx context.Context) error {
 	if _, e = s.Store.Pool.Exec(ctx, `DELETE FROM vr_outbound_traffic_windows WHERE at<now()-$1*interval '1 day'`, num(cfg, "traffic_history_days")); e != nil {
 		return e
 	}
+	if _, e = s.Store.Pool.Exec(ctx, "DELETE FROM vr_oidc_states WHERE expires_at<now()"); e != nil {
+		return e
+	}
+	if _, e = s.Store.Pool.Exec(ctx, "DELETE FROM vr_oidc_challenges WHERE expires_at<now()"); e != nil {
+		return e
+	}
 	if flag(cfg, "telegram_enabled") {
 		if e = s.telegram(ctx, cfg); e != nil {
 			s.Logger.Warn("Telegram unavailable", "error", fmt.Sprintf("%T", e))

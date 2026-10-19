@@ -64,5 +64,6 @@ func openAPISpec(base string) Data {
 	paths["/api/subscription-template/validate"] = Data{"post": Data{"summary": "Validate a custom HTML template with sample data; administrator scope required", "responses": Data{"200": Data{"description": "Validation result"}}}}
 	paths["/api/clients/{id}/device-action"] = Data{"post": Data{"summary": "Revoke, allow or forget a registered device", "responses": Data{"200": Data{"description": "Device updated"}}}}
 	paths["/api/admin/api-keys/{id}/reset"] = Data{"post": Data{"parameters": []any{Data{"name": "id", "in": "path", "required": true, "schema": Data{"type": "integer"}}}, "responses": Data{"200": Data{"description": "Replacement key returned once; previous key revoked"}}}}
-	return Data{"openapi": "3.1.0", "info": Data{"title": "VeloRay API", "version": Version}, "servers": []any{Data{"url": base}}, "security": []any{Data{"bearerAuth": []any{}}}, "components": Data{"securitySchemes": Data{"bearerAuth": Data{"type": "http", "scheme": "bearer"}}}, "paths": paths}
+	schemas := featureAPISpec(paths)
+	return Data{"openapi": "3.1.0", "info": Data{"title": "VeloRay API", "version": Version}, "servers": []any{Data{"url": base}}, "security": []any{Data{"bearerAuth": []any{}}}, "components": Data{"schemas": schemas, "securitySchemes": Data{"bearerAuth": Data{"type": "http", "scheme": "bearer"}, "cookieAuth": Data{"type": "apiKey", "in": "cookie", "name": "veloray_session"}}}, "paths": paths}
 }

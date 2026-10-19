@@ -19,7 +19,7 @@ var editable = map[string]string{
 	"clients":       "renewal_period renewal_every renewal_timezone hwid_limit device_limit start_after_first_use duration_days owner_id inbound name credential protocol_settings subscription_token enabled expires_at traffic_limit_bytes renewal_interval_days next_renewal_at traffic_multiplier note",
 	"outbounds":     "name node core tag protocol config enabled",
 	"routing_rules": "name node core priority config enabled",
-	"users":         "username email is_active is_staff is_superuser password role permissions allowed_inbounds own_clients_only max_clients traffic_budget_bytes",
+	"users":         "oidc_issuer oidc_subject username email is_active is_staff is_superuser password role permissions allowed_inbounds own_clients_only max_clients traffic_budget_bytes",
 	"api_keys":      "name scope enabled expires_at user",
 }
 
@@ -112,6 +112,9 @@ func (s *Server) view(ctx context.Context, q Query, kind string, d Data) (Data, 
 }
 func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Actor) (any, int, error) {
 	ctx := r.Context()
+	if path == "subscription-policies" || strings.HasPrefix(path, "subscription-policies/") {
+		return s.subscriptionPoliciesAPI(w, r, path, a)
+	}
 	if path == "profiles" || path == "snippets" || strings.HasPrefix(path, "profiles/") || strings.HasPrefix(path, "snippets/") {
 		return s.profilesAPI(w, r, path, a)
 	}
@@ -416,6 +419,14 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 		}
 		prior := clone(d)
 		d = merge(d, input)
+		if kind == "users" {
+			if str(d, "oidc_issuer") != str(prior, "oidc_issuer") || str(d, "oidc_subject") != str(prior, "oidc_subject") {
+				d["_auth_version"] = num(d, "_auth_version") + 1
+			}
+			if e := validateOIDCBinding(d); e != nil {
+				return nil, fail(400, e.Error())
+			}
+		}
 		if kind == "clients" {
 			reanchorRenewal(d, prior, input)
 			if flag(d, "enabled") {

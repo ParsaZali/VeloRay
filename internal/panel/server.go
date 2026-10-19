@@ -13,17 +13,24 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
 var panelProcessStartedAt = time.Now()
 
 type Server struct {
+	OIDCHTTP     *http.Client
+	streamMu     sync.Mutex
+	streamCount  int
+	streamUsers  map[string]int
 	StartedAt    time.Time
 	Config       Config
 	Store        *Store
 	HTTP         *http.Client
 	TelegramHTTP *http.Client
+	WebhookHTTP  *http.Client
+	ExternalHTTP *http.Client
 	Logger       *slog.Logger
 }
 type apiError struct {
@@ -99,6 +106,10 @@ func (s *Server) Handler() http.Handler {
 			s.subscription(w, r)
 			return
 		}
+		if s.Config.SubscriptionOnly && r.URL.Path != "/api/health" {
+			http.NotFound(w, r)
+			return
+		}
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			s.frontend(w, r)
 			return
@@ -132,8 +143,26 @@ func (s *Server) Handler() http.Handler {
 			writeJSON(w, 200, Data{"csrfToken": token})
 			return
 		}
+		if path == "auth/oidc" && r.Method == "GET" {
+			writeJSON(w, 200, Data{"enabled": s.Config.OIDCIssuer != "" && s.Config.OIDCClientID != ""})
+			return
+		}
+		if path == "auth/oidc/callback" && r.Method == "GET" {
+			s.oidcCallback(w, r)
+			return
+		}
 		if e := s.checkCSRF(r); e != nil {
 			s.respond(w, r, nil, 0, e)
+			return
+		}
+		if path == "auth/oidc/start" && r.Method == "POST" {
+			out, status, e := s.oidcStart(w, r)
+			s.respond(w, r, out, status, e)
+			return
+		}
+		if path == "auth/oidc/complete" && r.Method == "POST" {
+			out, status, e := s.oidcComplete(w, r)
+			s.respond(w, r, out, status, e)
 			return
 		}
 		if path == "auth/login" && r.Method == "POST" {
@@ -157,6 +186,10 @@ func (s *Server) Handler() http.Handler {
 		if strings.HasPrefix(path, "auth/") {
 			out, status, e := s.authAPI(w, r, path, a)
 			s.respond(w, r, out, status, e)
+			return
+		}
+		if path == "events" {
+			s.streamEvents(w, r, a)
 			return
 		}
 		out, status, e := s.api(w, r, path, a)
@@ -199,13 +232,20 @@ func Serve(ctx context.Context, c Config) error {
 		return e
 	}
 	defer store.Pool.Close()
-	if e = store.Migrate(ctx); e != nil {
-		return e
+	if !c.SubscriptionOnly {
+		if e = store.Migrate(ctx); e != nil {
+			return e
+		}
 	}
 	s := &Server{Config: c, Store: store, Logger: slog.Default()}
 	workerCtx, stopWorker := context.WithCancel(ctx)
 	workerDone := make(chan struct{})
-	go func() { defer close(workerDone); s.Worker(workerCtx) }()
+	go func() {
+		defer close(workerDone)
+		if !c.SubscriptionOnly {
+			s.Worker(workerCtx)
+		}
+	}()
 	defer func() { stopWorker(); <-workerDone }()
 	server := &http.Server{Addr: c.Listen, Handler: s.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 180 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
 	go func() {

@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/dates";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { t, useLocale } from "@/lib/i18n";
@@ -103,7 +104,10 @@ export function OutboundTraffic({
                 <p className="text-[11px] text-[var(--muted)]">
                   {t("Last collected")}:{" "}
                   <time dateTime={data.collected_at}>
-                    {new Date(data.collected_at).toLocaleString()}
+                    {formatDate(data.collected_at, {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </time>
                 </p>
               )}
