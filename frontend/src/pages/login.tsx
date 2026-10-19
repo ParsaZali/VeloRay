@@ -1,6 +1,6 @@
 import { Input } from "@/components/ui/controls";
 import { useLocale, type Locale } from "@/lib/i18n";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   Eye,
@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { VeloRayMark } from "@/components/brand/veloray-mark";
-import { login } from "@/lib/api";
+import { api, login } from "@/lib/api";
 import { useTheme } from "@/components/theme/theme-provider";
 
 const copy = {
@@ -58,8 +58,27 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
-  const [need2fa, setNeed2fa] = useState(false);
-  const [error, setError] = useState("");
+  const [oidcChallenge, setOidcChallenge] = useState(
+    () => new URLSearchParams(location.search).get("oidc") === "totp",
+  );
+  const [oidcEnabled, setOidcEnabled] = useState(false);
+  const [need2fa, setNeed2fa] = useState(oidcChallenge);
+  useEffect(() => {
+    const c = new AbortController();
+    void api<{ enabled: boolean }>("/auth/oidc", { signal: c.signal })
+      .then((d) => {
+        if (!c.signal.aborted) setOidcEnabled(d.enabled);
+      })
+      .catch(() => {});
+    return () => c.abort();
+  }, []);
+  const [error, setError] = useState(() =>
+    new URLSearchParams(location.search).get("oidc") === "error"
+      ? document.documentElement.lang === "fa"
+        ? "ورود سازمانی ناموفق بود؛ دوباره تلاش کنید."
+        : "SSO sign-in failed. Restart sign-in."
+      : "",
+  );
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { locale, setLocale } = useLocale();
@@ -89,12 +108,20 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
     setError("");
     setBusy(true);
     try {
-      const result: any = await login(username.trim(), password, code.trim());
+      let result: any;
+      if (oidcChallenge) {
+        await api("/auth/csrf");
+        result = await api("/auth/oidc/complete", {
+          method: "POST",
+          body: JSON.stringify({ totp_code: code.trim() }),
+        });
+      } else result = await login(username.trim(), password, code.trim());
       if (result.two_factor_required) {
         setNeed2fa(true);
         setCode("");
         return;
       }
+      history.replaceState({}, "", "/");
       onSuccess();
     } catch (err: any) {
       setError(err?.message || "Unable to sign in");
@@ -104,6 +131,8 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
   }
 
   function backToPassword() {
+    setOidcChallenge(false);
+    history.replaceState({}, "", "/");
     setNeed2fa(false);
     setCode("");
     setError("");
@@ -251,6 +280,37 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
                   )}
                 </Button>
 
+                {oidcEnabled && !need2fa && (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      setError("");
+                      try {
+                        await api("/auth/csrf");
+                        const d = await api<{ authorization_url: string }>(
+                          "/auth/oidc/start",
+                          { method: "POST", body: "{}" },
+                        );
+                        const url = new URL(d.authorization_url);
+                        if (url.protocol !== "https:")
+                          throw Error("Invalid identity provider URL");
+                        window.location.assign(url.href);
+                      } catch (e) {
+                        setError(
+                          e instanceof Error ? e.message : "SSO unavailable",
+                        );
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    {locale === "fa"
+                      ? "ورود با حساب سازمانی"
+                      : "Sign in with SSO"}
+                  </Button>
+                )}
                 {need2fa && (
                   <button
                     type="button"

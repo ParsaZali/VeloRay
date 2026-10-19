@@ -48,7 +48,7 @@ vr_auto_download() {
 }
 
 vr_auto_restore() {
- local previous="$1" original_env="$2" architecture="$3"
+ local previous="$1" original_env="$2" architecture="$3" subscriptions_active="${4:-false}"
  if [[ ! -d "$previous" || ! -x "$previous/bin/linux-$architecture/veloray" || ! -x "$previous/bin/linux-$architecture/veloray-agent" ]];then
   echo 'Unable to automatically restore: previous release binaries unavailable. Manual recovery required.' >&2
   return 1
@@ -60,11 +60,12 @@ vr_auto_restore() {
  install -m 0644 "$original_env" /etc/veloray/veloray.env
  chown root:veloray /etc/veloray/veloray.env
  chmod 0640 /etc/veloray/veloray.env
- for unit in veloray-web veloray-agent xray sing-box;do
+ for unit in veloray-web veloray-agent veloray-subscriptions xray sing-box;do
   [[ ! -f "$previous/deploy/systemd/$unit.service" ]] || install -m 0644 "$previous/deploy/systemd/$unit.service" "/etc/systemd/system/$unit.service"
  done
  systemctl daemon-reload
  systemctl restart veloray-agent.service veloray-web.service xray.service sing-box.service
+ if [[ "$subscriptions_active" == true ]];then systemctl restart veloray-subscriptions.service;fi
  /usr/local/bin/velorayctl doctor
 }
 
@@ -82,7 +83,7 @@ vr_auto_ci_state() {
 
 vr_auto_update_check() (
  local action="$1" repo="$2" installed="$3"
- local tmp commit previous architecture current backup status attempts delay attempt
+ local tmp commit previous architecture current backup status attempts delay attempt subscriptions_active=false
  if [[ "$action" == run ]];then
   exec 8>/run/lock/veloray-auto-update.lock
   flock -n 8 || { echo 'An automatic update is already running; skipping.';return 0; }
@@ -154,6 +155,7 @@ vr_auto_update_check() (
  cp -p /etc/veloray/veloray.env "$tmp/original.env"
  chmod 0600 "$tmp/original.env"
  if [[ -f "$installed" ]];then cp -p "$installed" "$tmp/original-commit";fi
+ if systemctl is-active --quiet veloray-subscriptions.service;then subscriptions_active=true;fi
  echo "Starting pinned update $commit (backup: $backup)"
  if VELORAY_INSTALL_REPO="$repo" VELORAY_TRACKING_REF=main \
      bash "$tmp/install.sh" install --repo "$repo" --ref "$commit" --lang en \
@@ -171,7 +173,7 @@ vr_auto_update_check() (
   else
    rm -f -- "$installed"
   fi
-  if vr_auto_restore "$previous" "$tmp/original.env" "$architecture";then
+  if vr_auto_restore "$previous" "$tmp/original.env" "$architecture" "$subscriptions_active";then
    echo 'Previous binaries and services were restored. Review the PostgreSQL backup before any database rollback.' >&2
   else
    echo "Recovery needs manual intervention. Recovery backup: $backup" >&2

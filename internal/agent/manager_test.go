@@ -44,7 +44,7 @@ func (f *fakeRuntime) Run(_ context.Context, name string, args ...string) ([]byt
 				b, _ := json.Marshal(map[string]any{"users": f.onlineUsers})
 				return b, nil
 			}
-			b, _ := json.Marshal(map[string]any{"stat": []Counter{{"user>>>veloray:1:alice>>>traffic>>>uplink", f.value}}})
+			b, _ := json.Marshal(map[string]any{"stat": []Counter{{Name: "user>>>veloray:1:alice>>>traffic>>>uplink", Value: f.value}}})
 			return b, nil
 		case "run":
 			if f.reject {
@@ -154,7 +154,7 @@ func TestDurableAccountingAcrossRestartAndAgentReload(t *testing.T) {
 	ctx := context.Background()
 	f.value = 100
 	s, e := m.Stats(ctx)
-	if e != nil || s.Stat[0].Value != 100 {
+	if e != nil || s.Stat[0].Value != 100 || s.Stat[0].Core != "xray" || s.OutboundAccounting != "core-scoped-v1" {
 		t.Fatal(s, e)
 	}
 	s, _ = m.Stats(ctx)

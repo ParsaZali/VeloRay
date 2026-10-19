@@ -26,7 +26,7 @@ func TestModernSubscriptionPortalHasNativeStatisticsAndSafeMarkup(t *testing.T) 
  node:=Data{"public_host":"example.com"}
  cfg:=defaultSettings()
  cfg["default_locale"]="fa"
- cfg["subscription_template"]="default"
+ cfg["subscription_template"]="dashboard"
  uri:="vless://"+str(client,"credential")+"@example.com:443#Main"
  details:=[]Data{{"name":"Primary","protocol":"vless","node":"Local","host":"example.com","link":uri}}
  render:=func(method string)*httptest.ResponseRecorder{

@@ -12,11 +12,14 @@ import (
 )
 
 type Config struct {
+	OIDCIssuer, OIDCClientID, OIDCClientSecret                       string
 	Listen, DatabaseURL, PublicURL, SecretKey, FieldKey, FrontendDir string
 	SecureCookies                                                    bool
+	SubscriptionOnly                                                 bool
 	SessionAge                                                       time.Duration
 	PanelPort                                                        int
 	TrustedOrigins                                                   map[string]bool
+	TemplateRoot                                                     string
 }
 
 func env(k, fallback string) string {
@@ -51,6 +54,12 @@ func LoadConfig() (Config, error) {
 			return c, errors.New("insecure session cookies are allowed only on a loopback development origin")
 		}
 	}
+	c.OIDCIssuer, c.OIDCClientID, c.OIDCClientSecret = env("VELORAY_OIDC_ISSUER", ""), env("VELORAY_OIDC_CLIENT_ID", ""), env("VELORAY_OIDC_CLIENT_SECRET", "")
+	if (c.OIDCIssuer != "" || c.OIDCClientID != "" || c.OIDCClientSecret != "") && (!validOIDCURL(c.OIDCIssuer) || c.OIDCClientID == "" || !c.SecureCookies) {
+		return c, errors.New("OIDC requires HTTPS issuer, client ID and secure cookies")
+	}
+	c.SubscriptionOnly = env("VELORAY_SUBSCRIPTION_ONLY", "false") == "true"
+	c.TemplateRoot = env("VELORAY_TEMPLATE_ROOT", "/etc/veloray/templates")
 	c.TrustedOrigins[c.PublicURL] = true
 	for _, s := range strings.Split(os.Getenv("VELORAY_CSRF_TRUSTED_ORIGINS"), ",") {
 		if s = strings.TrimSpace(s); s != "" {

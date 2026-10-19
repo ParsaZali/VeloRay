@@ -108,6 +108,7 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 	}
 	node["_core_ledgers"] = obj(stats, "core_ledgers")
 	node["_ledger_id"] = ledgerID
+	node["_outbound_accounting"] = str(stats, "outbound_accounting")
 	node["_online_ips"] = obj(stats, "online_ips")
 	node["_online_ips_available"] = flag(stats, "online_ips_available")
 	node["_online_ip_cores"] = obj(stats, "online_ip_cores")
@@ -158,11 +159,22 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 			return e
 		}
 		name, value := str(v, "name"), num(v, "value")
+		parts := strings.Split(name, ">>>")
+		metric := name
+		isOutbound := len(parts) == 4 && parts[0] == "outbound" && parts[2] == "traffic" && oneOf(parts[3], "uplink", "downlink")
+		if isOutbound {
+			// Older agents omit the core, making identical Xray/sing-box tags
+			// ambiguous. Ignore those counters without disturbing client billing.
+			if !oneOf(str(v, "core"), "xray", "singbox") || len(parts[1]) == 0 || len(parts[1]) > 256 {
+				continue
+			}
+			metric = str(v, "core") + ">>>" + name
+		}
 		if value < 0 {
 			return errors.New("negative agent counter")
 		}
 		var previous int64
-		e = q.QueryRow(ctx, `SELECT total FROM vr_stats_cursors WHERE node_id=$1 AND metric=$2`, id, name).Scan(&previous)
+		e = q.QueryRow(ctx, `SELECT total FROM vr_stats_cursors WHERE node_id=$1 AND metric=$2`, id, metric).Scan(&previous)
 		if e != nil && !errors.Is(e, pgx.ErrNoRows) {
 			return e
 		}
@@ -170,14 +182,19 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 			return errors.New("durable counter decreased")
 		}
 		delta := value - previous
-		_, e = q.Exec(ctx, `INSERT INTO vr_stats_cursors(node_id,metric,total) VALUES($1,$2,$3) ON CONFLICT(node_id,metric) DO UPDATE SET total=excluded.total`, id, name, value)
+		_, e = q.Exec(ctx, `INSERT INTO vr_stats_cursors(node_id,metric,total) VALUES($1,$2,$3) ON CONFLICT(node_id,metric) DO UPDATE SET total=excluded.total`, id, metric, value)
 		if e != nil {
 			return e
 		}
 		if delta == 0 {
 			continue
 		}
-		parts := strings.Split(name, ">>>")
+		if isOutbound {
+			if e = recordOutboundDelta(ctx, q, id, str(v, "core"), parts[1], parts[3], delta); e != nil {
+				return e
+			}
+			continue
+		}
 		if len(parts) != 4 || parts[2] != "traffic" || !oneOf(parts[3], "uplink", "downlink") {
 			continue
 		}
@@ -203,7 +220,9 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 		}
 		key := accountKey(client)
 		series := principalDeltas[key]
-		if delta > int64(^uint64(0)>>1)-series[0] { return errors.New("principal traffic overflow") }
+		if delta > int64(^uint64(0)>>1)-series[0] {
+			return errors.New("principal traffic overflow")
+		}
 		series[0] += delta
 		if parts[3] == "uplink" {
 			series[1] += delta
@@ -214,8 +233,14 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 		if chargedClients[key] == nil {
 			chargedClients[key] = client
 		}
+		firstConnection := str(chargedClients[key], "last_traffic_at") == "" && num(chargedClients[key], "raw_lifetime_traffic_bytes") == 0
 		if e = applyDirectionalTrafficDelta(chargedClients[key], parts[3], delta); e != nil {
 			return e
+		}
+		if firstConnection {
+			if e = audit(ctx, q, 0, "client.first_connection", key, Data{}); e != nil {
+				return e
+			}
 		}
 		if delta > int64(^uint64(0)>>1)-totalDelta {
 			return errors.New("node traffic overflow")
@@ -246,9 +271,13 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 		}
 	}
 	for key, delta := range principalDeltas {
-		if delta[0] <= 0 { continue }
+		if delta[0] <= 0 {
+			continue
+		}
 		_, err := q.Exec(ctx, `INSERT INTO vr_client_traffic_windows(at,principal_key,bytes,upload_bytes,download_bytes) VALUES($1,$2,$3,$4,$5) ON CONFLICT(principal_key,at) DO UPDATE SET bytes=vr_client_traffic_windows.bytes+excluded.bytes,upload_bytes=vr_client_traffic_windows.upload_bytes+excluded.upload_bytes,download_bytes=vr_client_traffic_windows.download_bytes+excluded.download_bytes`, time.Now().UTC().Truncate(5*time.Minute), key, delta[0], delta[1], delta[2])
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 	}
 	for owner, delta := range ownerDeltas {
 		if owner <= 0 || delta[0] <= 0 {
@@ -336,7 +365,7 @@ func (s *Server) change(ctx context.Context, ids []int64, actor Actor, action, t
 		if e != nil {
 			return nil, e
 		}
-		cfg, e := buildConfig(ctx, tx, fresh)
+		cfg, e := s.buildConfig(ctx, tx, fresh)
 		if e != nil {
 			return nil, fail(400, e.Error())
 		}

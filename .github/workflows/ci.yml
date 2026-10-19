@@ -29,15 +29,21 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: test "$(cat VERSION)" = 1.0
-      - run: go test -race ./... -count=1
+      - name: Test with pinned protocol runtimes
+        run: |
+          mkdir -p "$RUNNER_TEMP/veloray-cores"
+          tar -xJf runtime/linux-amd64.tar.xz --no-same-owner -C "$RUNNER_TEMP/veloray-cores" xray/xray singbox/sing-box
+          sudo setcap cap_net_admin+ep "$RUNNER_TEMP/veloray-cores/xray/xray"
+          VELORAY_TEST_XRAY_BINARY="$RUNNER_TEMP/veloray-cores/xray/xray" VELORAY_TEST_SINGBOX_BINARY="$RUNNER_TEMP/veloray-cores/singbox/sing-box" go test -race ./... -count=1
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: npm ci && npm run format:check && npm run build && npm audit --audit-level=high
         working-directory: frontend
       - run: |
-          VELORAY_TEST_PORTAL_HTML="$RUNNER_TEMP/veloray-portal.html" VELORAY_TEST_MODERN_PORTAL_HTML="$RUNNER_TEMP/veloray-modern.html" go -C .. test ./internal/panel -run "TestCompactPortal|TestModernSubscriptionPortal" -count=1
+          VELORAY_TEST_PORTAL_HTML="$RUNNER_TEMP/veloray-portal.html" VELORAY_TEST_MODERN_PORTAL_HTML="$RUNNER_TEMP/veloray-modern.html" VELORAY_TEST_SIMPLE_PORTAL_HTML="$RUNNER_TEMP/veloray-simple.html" go -C .. test ./internal/panel -run "TestCompactPortal|TestModernSubscriptionPortal|TestSimplePortalDefault" -count=1
           npx playwright install --with-deps chromium
-          VELORAY_TEST_PORTAL_HTML="$RUNNER_TEMP/veloray-portal.html" VELORAY_TEST_MODERN_PORTAL_HTML="$RUNNER_TEMP/veloray-modern.html" npx playwright test --config playwright.refinements.config.ts
+          VELORAY_TEST_PORTAL_HTML="$RUNNER_TEMP/veloray-portal.html" VELORAY_TEST_MODERN_PORTAL_HTML="$RUNNER_TEMP/veloray-modern.html" VELORAY_TEST_SIMPLE_PORTAL_HTML="$RUNNER_TEMP/veloray-simple.html" npx playwright test --config playwright.refinements.config.ts
+          npx playwright test --config playwright.pwa.config.ts
         working-directory: frontend
       - uses: actions/upload-artifact@v4
         if: failure()

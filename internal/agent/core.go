@@ -79,7 +79,7 @@ func (m *Manager) querySingStats(ctx context.Context) ([]byte, error) {
 	for _, v := range wireFields(b)[1] {
 		f := wireFields(v)
 		value, _ := protowire.ConsumeVarint(first(f, 2))
-		stats = append(stats, Counter{string(first(f, 1)), int64(value)})
+		stats = append(stats, Counter{Name: string(first(f, 1)), Value: int64(value)})
 	}
 	return json.Marshal(map[string]any{"stat": stats})
 }

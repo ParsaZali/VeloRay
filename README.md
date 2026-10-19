@@ -24,14 +24,24 @@ Xray as the primary core. sing-box as the secondary core. One interface for both
 | Announcements | Subscription announcement and announcement URL; editable in Settings |
 | SNI scanner | Node-side DNS and TLS 1.3 probes, custom domains, suggested domains, latency and certificate checks |
 | Accounts | Administrator, reseller, viewer and custom roles, inbound assignments, client and traffic budgets |
-| Security | Password policy, encrypted sensitive fields, scoped API keys, CSRF protection, administrator 2FA and audit history |
+| Security | Password policy, encrypted sensitive fields, scoped API keys, CSRF, administrator 2FA, optional pre-bound OIDC login and audit history |
 | Migration | Bounded SQLite and relational JSON adapters, private preview, selection, port overrides and disabled imports |
-| Automation | Telegram owner controls, alerts, scheduled backups and REST API |
+| Automation | Telegram controls, signed event outbox, independent webhook/Discord destinations, scheduled backups and REST API |
 | Interface | Dark and light themes, English and Persian, responsive layouts, local fonts, custom dropdowns, date picker and checkboxes |
 
 Client action menus stay above scrollable tables. SNI and configuration dialogs use bounded, responsive layouts. Theme changes reveal the new palette from the theme button, with reduced-motion and browser fallbacks.
 
 The product version is **1.0**. Maintenance updates retain this version until the project owner requests a version change. The frontend package uses the equivalent npm version `1.0.0`.
+
+New management and subscription capabilities are described in the
+[delivery guide](docs/subscription-customization.md),
+[customer guide](docs/customer-management.md),
+[external policy guide](docs/subscription-policies.md),
+[independent service guide](docs/independent-subscriptions.md),
+[OIDC/live dashboard guide](docs/oidc-and-live-dashboard.md) and
+[notification guide](docs/webhooks.md). The [parity backlog](docs/competitor-parity-roadmap.md)
+records remaining architectural work; this release does not claim every feature
+of every competing panel.
 
 ## Installation
 
@@ -109,7 +119,7 @@ Changes affecting a node are validated by the relevant core before application. 
 | Core | Inbound protocols | Transports |
 |---|---|---|
 | Xray | VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, HTTP, SOCKS, tunnel, TUN | TCP/raw, WebSocket, gRPC, XHTTP, HTTPUpgrade, mKCP, Hysteria2/QUIC where supported |
-| Secondary core | VLESS, VMess, Trojan, Shadowsocks, Hysteria2, HTTP, SOCKS | TCP/raw, WebSocket, gRPC, HTTPUpgrade, Hysteria2/QUIC where supported |
+| Secondary core | VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC v5, Snell v6, Naive TLS, HTTP, SOCKS | TCP/raw, WebSocket, gRPC, HTTPUpgrade, Hysteria2/QUIC where supported |
 
 Security modes include TLS and REALITY for supported combinations. The editor and backend reject incompatible combinations. Certificate and private-key paths must exist and be readable on the selected node. TUN and WireGuard need the appropriate host networking permissions.
 
@@ -168,6 +178,8 @@ sing-box blocking uses `action: "reject"`; it does not require a `blocked` outbo
 Rules and outbounds are isolated by node and core. Xray reserves `api`, `direct` and `blocked`. Internal device enforcement rules precede user-created rules. Dependencies are validated before deployment.
 
 ## Subscriptions
+
+The default browser page is now a simple light/dark page. Settings → Subscription also offers the previous dashboard, the compact page, or a custom HTML file. File paths, local assets, client configuration templates, delivery hosts, HWID admission and the compatibility report are documented in [Subscription customization](docs/subscription-customization.md).
 
 Each subscription URL carries a private token:
 
@@ -339,3 +351,19 @@ Inter and Vazirmatn fonts are served locally. No font CDN is required.
 ## License
 
 VeloRay is distributed under the repository's [LICENSE](LICENSE). Bundled cores, fonts and dependencies retain their own licenses and attribution.
+
+### Shared customer management and protocol extensions
+
+VeloRay 1.0 now includes multi-node Customers, Services and plans, shared encrypted
+Config profiles with reusable snippets and revision restore, calendar quota renewal,
+and token-free subscription history. Native sing-box forms support TUIC v5, Naive
+TLS inbound and Snell v6; Xray JSON subscription export and live user additions
+on unchanged Xray listeners are available.
+
+See [customer management](docs/customer-management.md),
+[protocol and live-apply limits](docs/native-protocols-and-live-apply.md), and the
+[remaining feature backlog](docs/competitor-parity-roadmap.md). These additions do
+not claim completion of every competing panel feature.
+
+The panel also supports [PWA installation](docs/pwa.md) with static-only caching
+and a reconnect page; authenticated data and subscription URLs are never cached.

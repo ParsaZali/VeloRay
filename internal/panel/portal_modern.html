@@ -118,7 +118,7 @@
       </div>
       <span id="copy-feedback" class="sr-only" role="status" aria-live="polite"></span>
       {{if .ShowDownloads}}<div class="format-links" aria-label="Subscription download formats">
-        {{if .Link}}<a href="{{.URL}}?format=base64&download=1">↓ Base64</a><a href="{{.URL}}?format=raw&download=1">↓ RAW</a><a href="{{.URL}}?format=clash&download=1">↓ Clash</a><a href="{{.URL}}?format=singbox&download=1">↓ sing-box</a>{{end}}
+        {{if .Link}}<a href="{{.URL}}?format=base64&download=1">↓ Base64</a><a href="{{.URL}}?format=raw&download=1">↓ RAW</a>{{end}}{{if .Clash}}<a href="{{.URL}}?format=clash&download=1">↓ Clash</a>{{end}}{{if .SingBox}}<a href="{{.URL}}?format=singbox&download=1">↓ sing-box</a>{{end}}{{if .Xray}}<a href="{{.URL}}?format=xray&download=1">↓ Xray JSON</a>{{end}}
         {{if .Profile}}<a href="{{.URL}}?format=wireguard">↓ WireGuard</a>{{end}}
         <a href="{{.URL}}?format=json" data-i18n="jsonDetails">JSON details</a>
       </div>{{end}}

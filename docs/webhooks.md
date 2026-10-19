@@ -1,8 +1,8 @@
 # Signed Audit Webhooks (experimental)
 
-VeloRay can queue administrative audit events and deliver signed HTTPS POST
-requests to a subscriber. This is a **first-stage automation foundation**;
-traffic, automatic expiry and node-state events will be added separately.
+VeloRay queues administrative and automatic client/device/node audit events in
+PostgreSQL and delivers signed HTTPS POST requests. Each destination has its own
+encrypted URL, signing key, enabled flag and event filters.
 
 ## Configure
 
@@ -63,8 +63,8 @@ a five-second HTTP timeout, and retries with exponential backoff. A delivery
 counts as successful only for a 2xx HTTP response.
 
 Delivery attempts stop after eight failures. Successful delivery records are
-retained for seven days for dashboard counts. Network operations and automated
-client or node transitions do not all generate audit events yet.
+retained for seven days for dashboard counts. Automatic quota, expiry, renewal, first-use, device and node-state events are
+included. This is an audit-event stream, not a complete network trace.
 
 ## API (superuser only)
 
@@ -79,5 +79,39 @@ Check deployment logs for dispatch failures. Never configure the destination
 to a private network service. Rotate signing secrets at both sender and
 recipient together.
 
-**Production readiness:** integration and security review are required before
-deploying this experimental feature on a publicly reachable panel.
+## Independent destinations and Discord
+
+In Settings → Webhooks → Notification destinations, add up to 16 named generic
+webhook or Discord endpoints. Each destination is disabled initially. Generic
+webhooks require a 32–1024 byte signing secret; blank updates preserve the key.
+URLs and keys are encrypted at rest. List responses omit both; authorized detail
+returns the URL for editing but never the key. Select exact event names,
+`client.*`/`node.*` prefixes, or `*`. Up to 64 filters are supported; `client.*`
+does not match the separate CRUD name `clients.create`. Empty filters match all.
+
+The legacy global destination can continue independently. Disabled destinations
+stop new enqueueing and pause existing deliveries. Deleting a destination also
+deletes its queued delivery records. **Queue test event** targets the selected
+destination regardless of filters; it must be enabled. Retry is available per
+destination. The global retry action requeues exhausted deliveries across the
+queue. Queue-status counts aggregate every destination.
+
+Discord receives a bounded `content` string containing audit metadata and an
+empty `allowed_mentions.parse` list. It never receives raw audit detail. Generic
+webhooks receive the JSON payload documented above. Both use the same bounded
+outbox and isolated retry state; signatures cover the exact delivered bytes.
+Transport failure messages are sanitized so webhook URL secrets cannot enter
+logs or queue errors. Real public delivery and downstream idempotence must be
+verified against your chosen service; automated delivery tests use an isolated
+mock transport, including HMAC, retry identity and Discord mention suppression.
+
+Additional administrator-only API:
+
+- `GET/POST /api/webhooks/endpoints`: list metadata/create
+- `GET/PATCH/DELETE /api/webhooks/endpoints/{id}`: detail/update/delete
+- `POST /api/webhooks/endpoints/{id}/test`: targeted test (202)
+- `POST /api/webhooks/endpoints/{id}/retry`: retry exhausted deliveries
+
+Inputs: `name`, `enabled`, `channel` (`webhook` or `discord`), `url`, write-only
+`signing_secret`, and `events` array. Email/SMTP is not implemented by this
+integration.

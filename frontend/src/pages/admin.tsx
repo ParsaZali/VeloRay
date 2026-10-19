@@ -34,6 +34,8 @@ import { PageHeader } from "@/components/common/page-header";
 import { FaIcon } from "@/components/ui/fa-icon";
 
 type Editor = {
+  oidc_issuer: string;
+  oidc_subject: string;
   id?: number;
   username: string;
   email: string;
@@ -55,6 +57,8 @@ type KeyEditor = {
   days: string;
 };
 const blank = (): Editor => ({
+  oidc_issuer: "",
+  oidc_subject: "",
   username: "",
   email: "",
   password: "",
@@ -117,6 +121,8 @@ export function AdminPage() {
       id: u.id,
       username: u.username,
       email: u.email || "",
+      oidc_issuer: u.oidc_issuer || "",
+      oidc_subject: u.oidc_subject || "",
       password: "",
       is_active: u.is_active,
       is_staff: u.is_staff,
@@ -147,6 +153,8 @@ export function AdminPage() {
         max_clients: Number(editor.max_clients),
         traffic_budget_bytes: Math.round(Number(editor.budget) * 1024 ** 3),
       };
+      body.oidc_issuer = editor.oidc_issuer;
+      body.oidc_subject = editor.oidc_subject;
       if (editor.password) body.password = editor.password;
       if (editor.id)
         await api(`/admin/users/${editor.id}/`, {
@@ -578,6 +586,25 @@ export function AdminPage() {
                   value={editor.email}
                   onChange={(e) =>
                     setEditor({ ...editor, email: e.target.value })
+                  }
+                />
+              </Field>
+              <Field label={t("OIDC issuer (optional)")}>
+                <Input
+                  type="url"
+                  value={editor.oidc_issuer}
+                  onChange={(e) =>
+                    setEditor({ ...editor, oidc_issuer: e.target.value })
+                  }
+                  placeholder="https://id.example/realm"
+                />
+              </Field>
+              <Field label={t("OIDC subject (optional)")}>
+                <Input
+                  value={editor.oidc_subject}
+                  maxLength={512}
+                  onChange={(e) =>
+                    setEditor({ ...editor, oidc_subject: e.target.value })
                   }
                 />
               </Field>

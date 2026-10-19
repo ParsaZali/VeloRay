@@ -1,0 +1,20 @@
+[Unit]
+Description=VeloRay independent subscription endpoint
+After=network-online.target postgresql.service
+Wants=network-online.target
+[Service]
+Type=simple
+User=veloray
+Group=veloray
+EnvironmentFile=/etc/veloray/veloray.env
+ExecStart=/usr/bin/env VELORAY_SUBSCRIPTION_ONLY=true VELORAY_LISTEN=127.0.0.1:8611 /usr/local/bin/veloray serve
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/etc/veloray
+[Install]
+WantedBy=multi-user.target

@@ -9,7 +9,7 @@ VeloRay 1.0 · Server management
   veloray                         Interactive menu
   veloray status | doctor | url
   veloray start | stop | restart
-  veloray logs [web|agent|xray|install]
+  veloray logs [web|agent|xray|singbox|subscriptions|install]
   veloray audit [LIMIT]
   veloray reset [USERNAME]
   veloray domain HOST | port PORT | ssl EMAIL
@@ -32,13 +32,19 @@ source /opt/veloray/current/scripts/auto-update.sh
 vr_log_init
 WEB=veloray-web.service
 AGENT=veloray-agent.service
+SUBSCRIPTIONS=veloray-subscriptions.service
+subscription_wanted() {
+ [[ -f /etc/systemd/system/veloray-subscriptions.service ]] && { systemctl is-enabled --quiet "$SUBSCRIPTIONS" 2>/dev/null || systemctl is-active --quiet "$SUBSCRIPTIONS" 2>/dev/null; }
+}
 trap 'vr_error "$LINENO" "$?"' ERR
 VR_STEP="$(vr_text 'Server management' 'مدیریت سرور')"
 summary() {
  printf 'VeloRay 1.0\n\n'
  vr_say "Panel: $VELORAY_PUBLIC_URL" "آدرس پنل: $VELORAY_PUBLIC_URL"
  local unit state label
- for unit in "$WEB" "$AGENT" xray.service sing-box.service;do
+ local units=("$WEB" "$AGENT" xray.service sing-box.service)
+ [[ ! -f /etc/systemd/system/veloray-subscriptions.service ]] || units+=("$SUBSCRIPTIONS")
+ for unit in "${units[@]}";do
   state="$(systemctl is-active "$unit" 2>/dev/null)"||true
   label="${state:-unknown}"
   if [[ "${VELORAY_LANGUAGE:-en}" == fa ]];then case "$state" in active) label=فعال;;inactive) label=خاموش;;failed) label=خطا;;activating) label=درحال‌راه‌اندازی;;esac;fi
@@ -47,7 +53,9 @@ summary() {
 }
 doctor() {
  local unit body failed=0
- for unit in "$WEB" "$AGENT" xray.service sing-box.service postgresql.service nginx.service;do
+ local units=("$WEB" "$AGENT" xray.service sing-box.service postgresql.service nginx.service)
+ if subscription_wanted;then units+=("$SUBSCRIPTIONS");fi
+ for unit in "${units[@]}";do
   if systemctl is-active --quiet "$unit";then printf '  ✓ %s\n' "$unit";else printf '  ✗ %s\n' "$unit";failed=1;fi
  done
  if vr_run nginx -t;then vr_say '  ✓ HTTPS configuration' '  ✓ پیکربندی HTTPS';else vr_say '  ✗ HTTPS configuration' '  ✗ پیکربندی HTTPS';failed=1;fi
@@ -132,19 +140,21 @@ case "$command" in
  inbound-port) [[ $# -eq 2 ]]||{ echo 'Usage: sudo veloray inbound-port ID PORT' >&2;exit 2; };veloray host-inbound-port "$1" "$2";vr_say 'Inbound port deployed. Refresh client subscriptions to receive the new port.' 'پورت اتصال اعمال شد؛ اشتراک کاربران را برای دریافت پورت جدید به‌روزرسانی کنید.';;
  doctor) doctor;;
  start|stop|restart)
+ subscription_units=()
+ if subscription_wanted;then subscription_units+=("$SUBSCRIPTIONS");fi
  vr_step "${command^} services" 'مدیریت سرویس‌های پنل و Xray'
- if [[ "$command" == stop ]];then vr_run systemctl stop "$WEB" "$AGENT" xray.service sing-box.service;else
+ if [[ "$command" == stop ]];then vr_run systemctl stop "$WEB" "$AGENT" xray.service sing-box.service "${subscription_units[@]}";else
   vr_ports_check
   vr_run systemctl reset-failed xray.service
-  vr_run systemctl "$command" xray.service sing-box.service "$AGENT" "$WEB"
+  vr_run systemctl "$command" xray.service sing-box.service "$AGENT" "$WEB" "${subscription_units[@]}"
   vr_wait http://127.0.0.1:8610/api/health
   vr_wait http://127.0.0.1:9191/health "$VELORAY_LOCAL_NODE_TOKEN"
   doctor
  fi
  summary;;
- logs) unit="$WEB";case "${1:-web}" in agent) unit="$AGENT";;singbox) unit=sing-box.service;;xray) unit=xray.service;;web) ;;
+ logs) unit="$WEB";case "${1:-web}" in agent) unit="$AGENT";;subscriptions) unit="$SUBSCRIPTIONS";;singbox) unit=sing-box.service;;xray) unit=xray.service;;web) ;;
  install) latest="$(find /var/log/veloray -maxdepth 1 -name 'install-*.log' -type f | sort | tail -1)";[[ -n "$latest" ]]||{ vr_say 'No installation log found.' 'گزارش نصب موجود نیست.';exit 1; };exec tail -n 100 "$latest";;
- *) vr_say 'Use web, agent, xray or install.' 'گزینهٔ web، agent، xray یا install را انتخاب کنید.';exit 2;;esac;exec journalctl -u "$unit" -n 100 -f;;
+ *) vr_say 'Use web, agent, xray, singbox, subscriptions or install.' 'گزینهٔ web، agent، xray، singbox، subscriptions یا install را انتخاب کنید.';exit 2;;esac;exec journalctl -u "$unit" -n 100 -f;;
  language) [[ "${1:-}" == en || "${1:-}" == fa ]]||exit 2;veloray set-env VELORAY_LANGUAGE "$1";vr_say 'Language saved.' 'زبان ذخیره شد.';;
  backup) dir=/var/lib/veloray/backups;install -d -m 0700 "$dir"; file="${1:-$dir/veloray-$(date -u +%Y%m%dT%H%M%S%NZ).tar.gz}"; veloray backup "$file";echo "$file"; ;;
  restore) [[ $# -eq 1 ]] || { echo 'Usage: velorayctl restore FILE.tar.gz' >&2;exit 2; }
@@ -154,6 +164,8 @@ case "$command" in
  [[ "$confirmation" == RESTORE ]]||{ vr_say 'Cancelled.' 'لغو شد.';exit 0; }
  # Always create a recovery point before replacing data and secrets.
  "$0" backup
+ subscriptions_active=false
+ if systemctl is-active --quiet "$SUBSCRIPTIONS";then subscriptions_active=true;systemctl stop "$SUBSCRIPTIONS";fi
  systemctl stop "$WEB" "$AGENT" xray.service sing-box.service
  trap 'echo "Restore stopped. Inspect the error and recovery backup before restarting services." >&2' ERR
  veloray restore-data "$1"
@@ -173,6 +185,7 @@ case "$command" in
  veloray render-nginx
  systemctl daemon-reload
  systemctl start xray.service sing-box.service "$AGENT" "$WEB"
+ if $subscriptions_active;then systemctl start "$SUBSCRIPTIONS";fi
  "$0" doctor
  ;;
  reset|admin-reset)
@@ -247,9 +260,9 @@ TIMER
   vr_say 'Remove services and program files. Configuration, database and backups are preserved.' 'سرویس‌ها و فایل‌های برنامه حذف می‌شوند؛ تنظیمات، پایگاه داده و پشتیبان‌ها حفظ می‌شوند.'
   read -rp "$(vr_text 'Type REMOVE to continue: ' 'برای ادامه REMOVE را وارد کنید: ')" confirmation
   [[ "$confirmation" == REMOVE ]]||{ vr_say 'Cancelled.' 'لغو شد.';exit 0; }
-  systemctl disable --now veloray-web.service veloray-agent.service veloray-reconcile.timer veloray-backup.timer xray.service sing-box.service 2>/dev/null||true
+  systemctl disable --now veloray-web.service veloray-agent.service veloray-subscriptions.service veloray-reconcile.timer veloray-backup.timer veloray-auto-update.timer xray.service sing-box.service 2>/dev/null||true
   systemctl stop veloray-reconcile.service 2>/dev/null||true
-  rm -f /etc/systemd/system/{veloray-web,veloray-agent,veloray-reconcile,xray,sing-box}.service /etc/systemd/system/veloray-reconcile.timer /etc/systemd/system/veloray-backup.{service,timer}
+  rm -f /etc/systemd/system/{veloray-web,veloray-agent,veloray-subscriptions,veloray-reconcile,xray,sing-box}.service /etc/systemd/system/veloray-reconcile.timer /etc/systemd/system/veloray-backup.{service,timer} /etc/systemd/system/veloray-auto-update.{service,timer}
   rm -f /etc/nginx/sites-enabled/veloray /etc/nginx/sites-available/veloray /etc/letsencrypt/renewal-hooks/deploy/veloray-nginx
   systemctl daemon-reload
   if vr_run nginx -t;then vr_run systemctl reload nginx||true;fi

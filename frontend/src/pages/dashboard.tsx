@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import {
   api,
+  API_BASE,
   distinctAccounts,
   type AppSettings,
   type ClientItem,
@@ -340,6 +341,24 @@ export function Dashboard() {
     [sys, setSys] = useState<SystemInfo | null>(null),
     [msg, setMsg] = useState(""),
     [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!session || typeof EventSource === "undefined") return;
+    const stream = new EventSource(`${API_BASE}/events`, {
+      withCredentials: true,
+    });
+    const update = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.overview && typeof data.overview === "object")
+          setO(data.overview);
+      } catch {
+        /* Polling remains available. */
+      }
+    };
+    stream.addEventListener("overview", update as EventListener);
+    stream.addEventListener("authorization-expired", () => stream.close());
+    return () => stream.close();
+  }, [session?.id]);
   const inFlight = useRef(false),
     request = useRef<AbortController | null>(null);
   const load = useCallback(async () => {
@@ -487,7 +506,7 @@ export function Dashboard() {
               },
             ].map((step) => (
               <a
-                key={step.href}
+                key={step.title}
                 href={step.href}
                 className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-4 transition hover:border-[var(--brand)]"
               >

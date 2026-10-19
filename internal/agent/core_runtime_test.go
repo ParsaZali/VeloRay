@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -19,6 +20,9 @@ func TestRealCoresTrafficAndAuthenticatedIPs(t *testing.T) {
 		t.Run(core, func(t *testing.T) {
 			binaryPath := os.Getenv("VELORAY_TEST_XRAY_BINARY")
 			if core == "singbox" {
+				if os.Getenv("VELORAY_TEST_NO_NETLINK") == "1" {
+					t.Skip("execution environment denies netlink sockets; run on Linux CI")
+				}
 				binaryPath = os.Getenv("VELORAY_TEST_SINGBOX_BINARY")
 			}
 			if binaryPath == "" {
@@ -54,13 +58,19 @@ func TestRealCoresTrafficAndAuthenticatedIPs(t *testing.T) {
 				args = []string{"run", "-c"}
 				config = map[string]any{"log": map[string]any{"level": "warn"}, "inbounds": []any{map[string]any{"type": "vless", "tag": "in-test", "listen": "127.0.0.1", "listen_port": listen, "users": []any{map[string]any{"name": name, "uuid": id}}}}, "outbounds": []any{map[string]any{"type": "direct", "tag": "direct"}}, "experimental": map[string]any{"v2ray_api": map[string]any{"listen": "127.0.0.1:10086", "stats": map[string]any{"enabled": true, "users": []string{name}}}, "clash_api": map[string]any{"external_controller": "127.0.0.1:10087"}}}
 			}
+			cfg := config.(map[string]any)
+			if core == "xray" {
+				cfg["policy"].(map[string]any)["system"] = map[string]any{"statsOutboundUplink": true, "statsOutboundDownlink": true}
+			} else {
+				cfg["experimental"].(map[string]any)["v2ray_api"].(map[string]any)["stats"].(map[string]any)["outbounds"] = []string{"direct"}
+			}
 			raw, _ := json.Marshal(config)
 			path := filepath.Join(t.TempDir(), "config.json")
 			if e = os.WriteFile(path, raw, 0600); e != nil {
 				t.Fatal(e)
 			}
 			cmd := exec.Command(binaryPath, append(args, path)...)
-			var logs bytes.Buffer
+			var logs synchronizedTestBuffer
 			cmd.Stdout = &logs
 			cmd.Stderr = &logs
 			if e = cmd.Start(); e != nil {
@@ -102,6 +112,28 @@ func TestRealCoresTrafficAndAuthenticatedIPs(t *testing.T) {
 				t.Fatal("traffic payload changed")
 			}
 			ctx := context.Background()
+			var traffic []byte
+			if core == "xray" {
+				traffic, e = exec.Command(binaryPath, "api", "statsquery", "--server=127.0.0.1:10085").Output()
+			} else {
+				traffic, e = (&Manager{Core: "singbox"}).querySingStats(ctx)
+			}
+			var outboundCounters struct{ Stat []Counter }
+			if e != nil {
+				t.Fatal(e)
+			}
+			if e = json.Unmarshal(traffic, &outboundCounters); e != nil {
+				t.Fatal(e)
+			}
+			outboundValues := map[string]int64{}
+			for _, counter := range outboundCounters.Stat {
+				outboundValues[counter.Name] = counter.Value
+			}
+			for _, direction := range []string{"uplink", "downlink"} {
+				if outboundValues["outbound>>>direct>>>traffic>>>"+direction] < int64(len(payload)) {
+					t.Fatal("real outbound traffic missing", string(traffic))
+				}
+			}
 			if core == "xray" {
 				ips, e := xrayOnlineIPs(ctx)
 				if e != nil || ips[name]["127.0.0.2"] == 0 {
@@ -146,4 +178,21 @@ func intText(value int) string {
 			return string(b[i:])
 		}
 	}
+}
+
+// Process output and failure diagnostics are accessed concurrently by os/exec.
+type synchronizedTestBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *synchronizedTestBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(p)
+}
+func (b *synchronizedTestBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.String()
 }

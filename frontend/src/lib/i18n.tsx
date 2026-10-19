@@ -1,4 +1,10 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { fa } from "./fa";
 export type Locale = "en" | "fa";
 let activeLocale: Locale =
@@ -19,6 +25,12 @@ const LocaleContext = createContext({
 export const useLocale = () => useContext(LocaleContext);
 export function LocaleProvider({ children }: { children: ReactNode }) {
   const [locale, update] = useState<Locale>(activeLocale);
+  const [, refreshDates] = useState(0);
+  useEffect(() => {
+    const f = () => refreshDates((n) => n + 1);
+    window.addEventListener("veloray-date-settings", f);
+    return () => window.removeEventListener("veloray-date-settings", f);
+  }, []);
   activeLocale = locale;
   document.documentElement.lang = locale;
   document.documentElement.dir = locale === "fa" ? "rtl" : "ltr";

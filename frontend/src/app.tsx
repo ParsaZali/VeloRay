@@ -1,3 +1,6 @@
+import { SubscriptionPoliciesPage } from "@/pages/subscription-policies";
+import { CustomersPage, ServicesPage } from "@/pages/customers";
+import { ProfilesPage } from "@/pages/profiles";
 import { OutboundsPage, RoutingPage } from "@/pages/network";
 import { SessionContext, can } from "@/lib/session";
 import { useLocale, t } from "@/lib/i18n";
@@ -25,6 +28,10 @@ import {
 import { VeloRayMark } from "@/components/brand/veloray-mark";
 
 const meta: Record<RouteKey, [string, string]> = {
+  "subscription-policies": ["Subscription policies", ""],
+  customers: ["Customers", ""],
+  services: ["Services and plans", ""],
+  profiles: ["Config profiles", ""],
   dashboard: ["Dashboard", "Traffic and server status"],
   imports: ["Import data", "Review and migrate panel backups"],
   clients: ["Clients", "Credentials, quotas, expiry and subscription access"],
@@ -42,6 +49,10 @@ const routes: Record<string, RouteKey> = {
   "/": "dashboard",
   "/dashboard": "dashboard",
   "/clients": "clients",
+  "/subscription-policies": "subscription-policies",
+  "/customers": "customers",
+  "/services": "services",
+  "/profiles": "profiles",
   "/imports": "imports",
   "/inbounds": "inbounds",
   "/outbounds": "outbounds",
@@ -60,6 +71,10 @@ const routes: Record<string, RouteKey> = {
 const paths: Record<RouteKey, string> = {
   dashboard: "/dashboard",
   clients: "/clients",
+  "subscription-policies": "/subscription-policies",
+  customers: "/customers",
+  services: "/services",
+  profiles: "/profiles",
   imports: "/imports",
   inbounds: "/inbounds",
   outbounds: "/outbounds",
@@ -123,7 +138,13 @@ export default function App() {
   }, []);
   useEffect(() => {
     if (!user || user.two_factor_setup_required) return;
-    if ((route === "accounts" || route === "imports") && !user.is_superuser) {
+    if (
+      (route === "accounts" ||
+        route === "imports" ||
+        route === "profiles" ||
+        route === "subscription-policies") &&
+      !user.is_superuser
+    ) {
       setRouteState("dashboard");
       history.replaceState({}, "", "/dashboard");
     } else if (
@@ -142,6 +163,8 @@ export default function App() {
     const access: Partial<Record<RouteKey, string>> = {
       dashboard: "dashboard.read",
       clients: "clients.read",
+      customers: "clients.read",
+      services: "clients.read",
       inbounds: "inbounds.read",
       outbounds: "outbounds.read",
       routing: "routing_rules.read",
@@ -154,6 +177,18 @@ export default function App() {
         <div role="status">{t("Access is not assigned to this account.")}</div>
       );
     switch (route) {
+      case "subscription-policies":
+        return user?.is_superuser ? (
+          <SubscriptionPoliciesPage />
+        ) : (
+          <SettingsPage />
+        );
+      case "customers":
+        return <CustomersPage />;
+      case "services":
+        return <ServicesPage />;
+      case "profiles":
+        return user?.is_superuser ? <ProfilesPage /> : <SettingsPage />;
       case "dashboard":
         return <Dashboard />;
       case "outbounds":

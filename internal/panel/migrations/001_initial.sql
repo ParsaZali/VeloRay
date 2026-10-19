@@ -116,3 +116,59 @@ CREATE TABLE IF NOT EXISTS vr_webhook_deliveries (
 );
 CREATE INDEX IF NOT EXISTS vr_webhook_ready ON vr_webhook_deliveries(next_at, id)
  WHERE delivered_at IS NULL AND attempts < 8;
+
+-- Native accounts have no anchor node. Legacy imported anchors remain intact.
+ALTER TABLE vr_accounts ALTER COLUMN node_id DROP NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS vr_account_token ON vr_accounts ((data->>'subscription_token'));
+CREATE TABLE IF NOT EXISTS vr_services (id bigserial PRIMARY KEY, data jsonb NOT NULL CHECK(jsonb_typeof(data)='object'));
+INSERT INTO vr_schema(version) VALUES(6) ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS vr_profiles (id bigserial PRIMARY KEY, data jsonb NOT NULL CHECK(jsonb_typeof(data)='object'));
+CREATE TABLE IF NOT EXISTS vr_snippets (id bigserial PRIMARY KEY, data jsonb NOT NULL CHECK(jsonb_typeof(data)='object'));
+CREATE TABLE IF NOT EXISTS vr_config_revisions (
+ kind text NOT NULL CHECK(kind IN ('profiles','snippets')), entity_id bigint NOT NULL,
+ revision bigint NOT NULL CHECK(revision>0), data jsonb NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(kind,entity_id,revision)
+);
+
+CREATE TABLE IF NOT EXISTS vr_subscription_requests (
+ id bigserial PRIMARY KEY, principal_key text NOT NULL CHECK(length(principal_key)<=80),
+ at timestamptz NOT NULL DEFAULT now(), format text NOT NULL, client_app text NOT NULL, status integer NOT NULL CHECK(status BETWEEN 100 AND 599)
+);
+CREATE INDEX IF NOT EXISTS vr_subscription_request_principal ON vr_subscription_requests(principal_key,id DESC);
+CREATE INDEX IF NOT EXISTS vr_subscription_request_retention ON vr_subscription_requests(at);
+
+CREATE INDEX IF NOT EXISTS vr_customer_services ON vr_accounts USING gin ((data->'service_ids'));
+CREATE INDEX IF NOT EXISTS vr_service_inbounds ON vr_services USING gin ((data->'inbound_ids'));
+CREATE INDEX IF NOT EXISTS vr_customer_owner ON vr_accounts (((data->>'owner_id')::bigint));
+CREATE INDEX IF NOT EXISTS vr_node_profile ON vr_nodes ((COALESCE((data->>'profile_id')::bigint,0)));
+
+-- Engine-scoped outbound counters are operational telemetry, never billable usage.
+CREATE TABLE IF NOT EXISTS vr_outbound_traffic_totals (
+ node_id bigint NOT NULL REFERENCES vr_nodes(id) ON DELETE CASCADE,
+ core text NOT NULL CHECK(core IN ('xray','singbox')), tag text NOT NULL CHECK(length(tag) BETWEEN 1 AND 256),
+ upload_bytes bigint NOT NULL DEFAULT 0 CHECK(upload_bytes>=0),
+ download_bytes bigint NOT NULL DEFAULT 0 CHECK(download_bytes>=0),
+ updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(node_id,core,tag)
+);
+CREATE TABLE IF NOT EXISTS vr_outbound_traffic_windows (
+ at timestamptz NOT NULL, node_id bigint NOT NULL REFERENCES vr_nodes(id) ON DELETE CASCADE,
+ core text NOT NULL CHECK(core IN ('xray','singbox')), tag text NOT NULL CHECK(length(tag) BETWEEN 1 AND 256),
+ upload_bytes bigint NOT NULL DEFAULT 0 CHECK(upload_bytes>=0),
+ download_bytes bigint NOT NULL DEFAULT 0 CHECK(download_bytes>=0), PRIMARY KEY(at,node_id,core,tag)
+);
+CREATE INDEX IF NOT EXISTS vr_outbound_traffic_recent ON vr_outbound_traffic_windows(node_id,core,at);
+INSERT INTO vr_schema(version) VALUES(7) ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS vr_subscription_policies (id bigserial PRIMARY KEY, data jsonb NOT NULL CHECK(jsonb_typeof(data)='object'));
+
+CREATE TABLE IF NOT EXISTS vr_webhook_endpoints(id bigserial PRIMARY KEY,data jsonb NOT NULL CHECK(jsonb_typeof(data)='object'));
+ALTER TABLE vr_webhook_deliveries ADD COLUMN IF NOT EXISTS endpoint_id bigint REFERENCES vr_webhook_endpoints(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS vr_webhook_endpoint_pending ON vr_webhook_deliveries(endpoint_id,next_at) WHERE delivered_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS vr_user_oidc_identity ON vr_users((data->>'oidc_issuer'),(data->>'oidc_subject')) WHERE COALESCE(data->>'oidc_subject','')<>'';
+CREATE TABLE IF NOT EXISTS vr_oidc_states(state_hash text PRIMARY KEY,browser_hash text NOT NULL,body text NOT NULL,expires_at timestamptz NOT NULL);
+CREATE INDEX IF NOT EXISTS vr_oidc_state_expiry ON vr_oidc_states(expires_at);
+CREATE TABLE IF NOT EXISTS vr_oidc_challenges(token_hash text PRIMARY KEY,user_id bigint NOT NULL REFERENCES vr_users(id) ON DELETE CASCADE,auth_version bigint NOT NULL,expires_at timestamptz NOT NULL);
+CREATE INDEX IF NOT EXISTS vr_oidc_challenge_expiry ON vr_oidc_challenges(expires_at);
+INSERT INTO vr_schema(version) VALUES(8) ON CONFLICT DO NOTHING;

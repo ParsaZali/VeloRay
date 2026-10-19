@@ -159,11 +159,17 @@ func validateInbound(ctx context.Context, q Query, c Config, d Data) error {
 	if !oneOf(core, "xray", "singbox") {
 		return errors.New("invalid core")
 	}
-	if core == "singbox" && (!oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "http", "socks") || !oneOf(t, "raw", "ws", "grpc", "httpupgrade", "hysteria")) {
+	if core == "singbox" && (!oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "http", "socks", "tuic", "naive", "snell") || !oneOf(t, "raw", "ws", "grpc", "httpupgrade", "hysteria")) {
 		return errors.New("unsupported sing-box protocol or transport")
 	}
-	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "http", "socks", "tunnel", "tun") || !oneOf(t, "raw", "ws", "grpc", "xhttp", "httpupgrade", "mkcp", "hysteria") || !oneOf(s, "none", "tls", "reality") {
+	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "http", "socks", "tunnel", "tun", "tuic", "naive", "snell") || !oneOf(t, "raw", "ws", "grpc", "xhttp", "httpupgrade", "mkcp", "hysteria") || !oneOf(s, "none", "tls", "reality") {
 		return errors.New("unsupported protocol, transport or security")
+	}
+	if core == "xray" && oneOf(p, "tuic", "naive", "snell") {
+		return errors.New("protocol requires sing-box")
+	}
+	if e := validateNativeProtocol(d); e != nil {
+		return e
 	}
 	port := num(d, "port")
 	if p == "tun" {
@@ -230,6 +236,9 @@ func validateInbound(ctx context.Context, q Query, c Config, d Data) error {
 	return nil
 }
 func validateClient(ctx context.Context, q Query, d Data) error {
+	if n := num(d, "hwid_limit"); n < -1 || n > 1000 {
+		return errors.New("HWID limit must be -1–1000")
+	}
 	if num(d, "device_limit") < 0 || num(d, "device_limit") > 10000 {
 		return errors.New("device limit must be 0–10000")
 	}
@@ -252,8 +261,8 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 		return errors.New("inbound does not exist")
 	}
 	p := str(i, "protocol")
-	if num(d, "device_limit") > 0 && !oneOf(p, "vless", "vmess", "trojan", "hysteria") {
-		return errors.New("device limits require VLESS, VMess, Trojan or Hysteria2")
+	if num(d, "device_limit") > 0 && !oneOf(p, "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell") {
+		return errors.New("device limits require a supported metered protocol")
 	}
 	if !supportsClients(p) {
 		return errors.New("this inbound has no client accounts")
@@ -261,7 +270,11 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 	if num(d, "traffic_limit_bytes") < 0 || num(d, "renewal_interval_days") < 0 || num(d, "renewal_interval_days") > 3650 {
 		return errors.New("invalid quota or renewal interval")
 	}
-	if !metered(p) && (num(d, "traffic_limit_bytes") > 0 || num(d, "renewal_interval_days") > 0) {
+	_, renewEvery, _, renewErr := renewalSpec(d)
+	if renewErr != nil {
+		return renewErr
+	}
+	if !metered(p) && (num(d, "traffic_limit_bytes") > 0 || renewEvery > 0) {
 		return errors.New("per-client traffic quotas are unavailable for this protocol")
 	}
 	for _, k := range []string{"expires_at", "next_renewal_at"} {
@@ -275,13 +288,13 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 	}
 	credential := str(d, "credential")
 	if credential == "" {
-		if oneOf(p, "vless", "vmess") {
+		if oneOf(p, "vless", "vmess", "tuic") {
 			d["credential"] = uuid()
 		} else {
 			d["credential"] = randomToken(24)
 		}
 	}
-	if oneOf(p, "vless", "vmess") && !uuidPattern.MatchString(str(d, "credential")) {
+	if oneOf(p, "vless", "vmess", "tuic") && !uuidPattern.MatchString(str(d, "credential")) {
 		return errors.New("credential must be a UUID")
 	}
 	if len(str(d, "credential")) > 255 || strings.ContainsAny(str(d, "credential"), "\r\n") {
@@ -294,6 +307,15 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 		return errors.New("subscription token must contain 16–96 URL-safe characters")
 	}
 	ps := obj(d, "protocol_settings")
+	if p == "tuic" {
+		if str(ps, "password") == "" {
+			ps["password"] = randomToken(24)
+		}
+		if len(str(ps, "password")) > 255 || strings.ContainsAny(str(ps, "password"), "\r\n") {
+			return errors.New("invalid TUIC password")
+		}
+		d["protocol_settings"] = ps
+	}
 	if p == "http" || p == "socks" {
 		if str(ps, "username") == "" {
 			ps["username"] = "vr-" + randomToken(8)
@@ -332,10 +354,8 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 			}
 		}
 	}
-	if num(d, "renewal_interval_days") == 0 {
-		d["next_renewal_at"] = nil
-	} else if d["next_renewal_at"] == nil {
-		d["next_renewal_at"] = time.Now().UTC().Add(time.Duration(num(d, "renewal_interval_days")) * 24 * time.Hour).Format(time.RFC3339)
+	if e := scheduleRenewal(d, time.Now().UTC()); e != nil {
+		return e
 	}
 	return nil
 }
@@ -347,9 +367,23 @@ func fallback(s, d string) string {
 }
 func supportsClients(p string) bool { return p != "tun" && p != "tunnel" }
 func metered(p string) bool {
-	return oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard")
+	return oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "tuic", "naive", "snell")
 }
 func validateSettings(d Data) error {
+	if err := validateSubscriptionHosts(array(d, "subscription_hosts")); err != nil {
+		return err
+	}
+	if n := num(d, "subscription_hwid_limit"); n < 0 || n > 1000 {
+		return errors.New("HWID limit must be 0–1000")
+	}
+	if len(str(d, "subscription_template_path")) > 4096 {
+		return errors.New("template path is too long")
+	}
+	for _, key := range []string{"subscription_xray_template", "subscription_clash_template", "subscription_singbox_template"} {
+		if err := validateFeedTemplate(str(d, key)); err != nil {
+			return fmt.Errorf("%s: %w", key, err)
+		}
+	}
 	if e := validateWebhookURL(str(d, "webhook_url")); e != nil {
 		return e
 	}
@@ -364,10 +398,10 @@ func validateSettings(d Data) error {
 			return fmt.Errorf("invalid %s", k)
 		}
 	}
-	if !oneOf(str(d, "accent"), "emerald", "blue", "violet", "rose", "amber") || !oneOf(str(d, "default_locale"), "en", "fa") || !oneOf(str(d, "subscription_template"), "default", "compact") {
+	if !oneOf(str(d, "accent"), "emerald", "blue", "violet", "rose", "amber") || !oneOf(str(d, "default_locale"), "en", "fa") || !oneOf(str(d, "subscription_template"), "default", "compact", "dashboard", "custom") {
 		return errors.New("unsupported accent, locale or subscription template")
 	}
-	if !oneOf(str(d, "subscription_default_format"), "auto", "base64", "raw", "clash", "singbox") || !oneOf(str(d, "subscription_theme"), "system", "light", "dark") {
+	if !oneOf(str(d, "subscription_default_format"), "auto", "base64", "raw", "clash", "singbox", "xray") || !oneOf(str(d, "subscription_theme"), "system", "light", "dark") {
 		return errors.New("unsupported subscription format or theme")
 	}
 	for _, k := range []string{"support_url", "announcement_url"} {

@@ -30,6 +30,15 @@ id veloray >/dev/null 2>&1||useradd --system --home /var/lib/veloray --shell /us
 install -d -o veloray -g veloray -m 0750 /var/lib/veloray
 install -d -m 0750 /etc/veloray /etc/veloray-node
 chown root:veloray /etc/veloray
+install -d -o root -g veloray -m 0750 /etc/veloray/templates
+if [[ -d examples/subscription ]];then
+ install -d -o root -g veloray -m 0750 /etc/veloray/templates/example /etc/veloray/templates/example/assets
+ for item in examples/subscription/index.html examples/subscription/assets/*;do
+  [[ -f "$item" ]]||continue
+  target="/etc/veloray/templates/example/${item#examples/subscription/}"
+  [[ -e "$target" ]]||install -o root -g veloray -m 0640 "$item" "$target"
+ done
+fi
 install -d -m 0700 /var/lib/veloray-agent
 install -d -m 0755 /opt/veloray/releases /usr/local/etc/xray /etc/nginx/sites-available /etc/nginx/sites-enabled
 version="$(bin/linux-$arch/veloray version)"
@@ -47,6 +56,8 @@ cp -a "bin/linux-$arch/"* "$release/bin/linux-$arch/"
 [[ -x /usr/local/bin/xray ]]||vr_run bash scripts/xray-install.sh
 if [[ -n "${VELORAY_SINGBOX_DIRECTORY:-}" ]];then vr_run bash scripts/singbox-install.sh;elif [[ ! -x /usr/local/bin/sing-box ]];then echo 'Use the complete VeloRay runtime package to install sing-box.' >&2;exit 1;fi
 vr_run systemctl enable --now postgresql nginx
+subscriptions_active=false
+if systemctl is-active --quiet veloray-subscriptions.service;then subscriptions_active=true;fi
 existing=false
 if [[ -f /etc/veloray/veloray.env ]];then
  existing=true
@@ -60,6 +71,7 @@ if [[ -f /etc/veloray/veloray.env ]];then
   PGHOST="${POSTGRES_HOST:-127.0.0.1}" PGPORT="${POSTGRES_PORT:-5432}" PGUSER="${POSTGRES_USER:-veloray}" PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -Fc --no-owner --no-acl "${POSTGRES_DB:-veloray}" >"$backup/database.dump"
   cp -a /etc/veloray "$backup/";[[ ! -d /etc/veloray-node ]]||cp -a /etc/veloray-node "$backup/";cp -a /usr/local/etc/xray "$backup/";chmod -R go-rwx "$backup"
  fi
+ if $subscriptions_active;then vr_run systemctl stop veloray-subscriptions.service;fi
  systemctl stop veloray-web.service veloray-reconcile.timer veloray-reconcile.service 2>/dev/null||true
 else
  [[ -n "${VELORAY_PUBLIC_HOST:-}" ]]||read -rp "$(prompt 'Public host (domain or IP): ' 'دامنه یا آی‌پی عمومی: ')" VELORAY_PUBLIC_HOST
@@ -153,7 +165,7 @@ VELORAY_XRAY_SERVICE=xray.service
 VELORAY_AGENT_STATE=/var/lib/veloray-agent/state.json
 ENV
 chmod 0600 /etc/veloray-node/agent.env
-install -m 0644 deploy/systemd/{veloray-web,veloray-agent,xray}.service /etc/systemd/system/
+install -m 0644 deploy/systemd/{veloray-web,veloray-agent,veloray-subscriptions,xray}.service /etc/systemd/system/
 ln -sfn "$release" /opt/veloray/current
 systemctl disable --now veloray-reconcile.timer 2>/dev/null||true
 vr_step 'Start HTTPS and panel services' 'راه‌اندازی HTTPS و سرویس‌های پنل'
@@ -165,6 +177,10 @@ vr_run systemctl restart veloray-agent.service
 vr_run veloray render-nginx
 vr_run systemctl restart veloray-web.service
 vr_wait http://127.0.0.1:8610/api/health
+if $subscriptions_active;then
+ vr_run systemctl restart veloray-subscriptions.service
+ vr_wait http://127.0.0.1:8611/api/health
+fi
 vr_step 'Check VPN ports and resolve conflicts' 'بررسی پورت‌های VPN و رفع تداخل'
 if ! vr_resolve_ports;then
  # Stop an already failing Xray loop; never stop the process occupying its port.

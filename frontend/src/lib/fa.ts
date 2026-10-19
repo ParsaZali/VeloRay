@@ -1,4 +1,53 @@
 const entries = `
+Install app|نصب برنامه
+Update app|به‌روزرسانی برنامه
+
+Recent subscription requests|درخواست‌های اخیر اشتراک
+Rotate subscription|تعویض لینک اشتراک
+All existing subscription URLs will stop working. Share the new URL with this customer.|همه لینک‌های اشتراک قبلی از کار می‌افتند. لینک جدید را به این مشتری بدهید.
+
+Customers|مشتریان
+Services and plans|سرویس‌ها و پلن‌ها
+Config profiles|پروفایل‌های تنظیمات
+Add customer|افزودن مشتری
+Add service|افزودن سرویس
+Add profile|افزودن پروفایل
+Add snippet|افزودن اسنیپت
+Service|سرویس
+Customer|مشتری
+Profile|پروفایل
+Snippet|اسنیپت
+Profiles|پروفایل‌ها
+Snippets|اسنیپت‌ها
+Revision|نسخه
+Assign nodes|انتخاب نودها
+No records yet|هنوز موردی ثبت نشده است
+No inbounds available|اینباندی در دسترس نیست
+Quota and access|سهمیه و دسترسی
+Traffic quota (GiB)|سهمیه ترافیک (گیبی‌بایت)
+Concurrent IP limit|محدودیت آی‌پی هم‌زمان
+Renewal interval (days)|فاصله تمدید (روز)
+Duration after first use (days)|مدت پس از اولین استفاده (روز)
+Start duration after first use|شروع مدت از اولین استفاده
+Apply plan defaults|اعمال مقادیر پلن
+Expiry (UTC)|انقضا (UTC)
+Calendar renewal|تمدید تقویمی
+Use day interval|استفاده از فاصله روزانه
+Hourly|ساعتی
+Daily|روزانه
+Weekly|هفتگی
+Monthly|ماهانه
+Every|هر
+Timezone|منطقه زمانی
+Xray policy JSON|سیاست Xray به صورت JSON
+sing-box policy JSON|سیاست sing-box به صورت JSON
+Policy JSON|سیاست به صورت JSON
+Services grant access to their inbounds. Plan defaults apply when selected for a customer.|سرویس دسترسی به ایـنباندهای انتخاب‌شده را می‌دهد. مقادیر پلن هنگام انتخاب برای مشتری اعمال می‌شوند.
+One account shares quota, expiry and subscription across inbounds and nodes.|یک حساب، سهمیه و انقضا و اشتراک مشترک روی چند ایـنباند و نود دارد.
+Share network policy across nodes. Changes deploy together. The last 50 revisions can be restored.|سیاست شبکه را میان نودها مشترک کنید. تغییرات با هم اعمال می‌شوند و ۵۰ نسخه آخر قابل بازگردانی هستند.
+Allowed sections: DNS, routing, outbounds and logging; Xray also supports policy. Managed listeners and telemetry remain controlled by the panel.|بخش‌های مجاز: DNS، مسیریابی، خروجی‌ها و لاگ؛ در Xray بخش policy هم مجاز است. ورودی‌ها و آمار تحت مدیریت پنل باقی می‌مانند.
+HWID: 0 inherits the global limit; -1 disables it. Zero quota or IP limit means unlimited.|در HWID، صفر یعنی محدودیت سراسری و منفی یک یعنی غیرفعال. سهمیه یا محدودیت آی‌پی صفر یعنی نامحدود.
+
 Protocol detection|تشخیص پروتکل
 
 Outbound tags|تگ‌های خروجی
@@ -900,4 +949,153 @@ Object.assign(fa, {
   "Subscription downloads": "دانلود فایل‌های اشتراک",
   "Show export buttons for supported client configuration formats.":
     "نمایش دکمه‌های دریافت کانفیگ برای فرمت‌های پشتیبانی‌شده.",
+});
+
+Object.assign(fa, {
+  "Simple subscription page": "صفحهٔ سادهٔ اشتراک",
+  "Custom HTML file": "فایل HTML سفارشی",
+  "HTML template file": "فایل قالب HTML",
+  "Validate template": "بررسی قالب",
+  "Template is valid. Save settings to activate it.":
+    "قالب معتبر است. برای فعال‌سازی، تنظیمات را ذخیره کنید.",
+  "Template validation failed": "بررسی قالب ناموفق بود",
+  "Use an HTML file inside /etc/veloray/templates. Changes reload automatically; an invalid file falls back to the simple page.":
+    "فایل HTML را در مسیر /etc/veloray/templates قرار دهید. تغییرات خودکار خوانده می‌شوند؛ اگر فایل نامعتبر باشد، صفحهٔ ساده نمایش داده می‌شود.",
+  "Subscription device policy": "سیاست دستگاه‌های اشتراک",
+  "Default HWID device limit": "سقف پیش‌فرض دستگاه بر اساس HWID",
+  "0 = unlimited. A positive limit requires HWID support.":
+    "صفر یعنی نامحدود. تعیین سقف نیازمند برنامهٔ سازگار با HWID است.",
+  "Require HWID even without a device cap":
+    "الزام ارسال HWID حتی بدون سقف دستگاه",
+  "Apps without HWID cannot download configurations when enabled. Existing copied configurations are not revoked.":
+    "با فعال‌بودن این گزینه، برنامه‌های فاقد HWID نمی‌توانند کانفیگ دریافت کنند. کانفیگ‌های قبلاً کپی‌شده باطل نمی‌شوند.",
+  "Client configuration templates": "قالب کانفیگ کلاینت‌ها",
+  "Optional JSON objects. Leave blank for built-in output. Generated proxies and outbounds are inserted automatically. Use $VELO_PROXIES inside a Clash group's proxies array.":
+    "قالب JSON اختیاری است. برای خروجی داخلی خالی بگذارید. پروکسی‌ها و خروجی‌ها خودکار درج می‌شوند. برای نام پروکسی‌ها در آرایهٔ proxies گروه Clash از $VELO_PROXIES استفاده کنید.",
+  "Subscription hosts": "آدرس‌های انتشار اشتراک",
+  "Publish an inbound through several addresses without changing its listener. A zero port uses the inbound port. If all hosts for an inbound are disabled, it is hidden from subscriptions.":
+    "یک ورودی را بدون تغییر تنظیمات واقعی سرور از چند آدرس منتشر کنید. پورت صفر از پورت ورودی استفاده می‌کند. اگر همهٔ آدرس‌های یک ورودی غیرفعال باشند، آن ورودی در اشتراک نمایش داده نمی‌شود.",
+  "Could not load inbounds": "دریافت ورودی‌ها ناموفق بود",
+  "New host": "آدرس جدید",
+  "Select inbound": "انتخاب ورودی",
+  "Public address": "آدرس عمومی",
+  "Public port": "پورت عمومی",
+  "Host header": "هدر Host",
+  "Remove host": "حذف آدرس",
+  "Add host": "افزودن آدرس",
+  "HWID device limit": "سقف دستگاه بر اساس HWID",
+  "0 = panel default · -1 = disabled · requires a compatible app":
+    "صفر = پیش‌فرض پنل · منفی یک = غیرفعال · نیازمند برنامهٔ سازگار",
+  "Could not update device": "به‌روزرسانی دستگاه ناموفق بود",
+  Revoked: "مسدودشده",
+  "Allow device": "اجازه به دستگاه",
+  "Revoke device": "مسدودکردن دستگاه",
+  "Forget device": "حذف سابقهٔ دستگاه",
+  "Check subscription": "بررسی اشتراک",
+  "Could not check subscription": "بررسی اشتراک ناموفق بود",
+  "Checks account policy and export compatibility. This does not test connectivity from a user's network.":
+    "وضعیت حساب و سازگاری فرمت خروجی بررسی می‌شود. اتصال از شبکهٔ کاربر آزمایش نمی‌شود.",
+  "HWID required": "الزام HWID",
+  Limit: "سقف",
+  "Custom template unavailable; the simple page will be used.":
+    "قالب سفارشی در دسترس نیست؛ صفحهٔ ساده نمایش داده می‌شود.",
+  Unavailable: "در دسترس نیست",
+  Available: "در دسترس",
+  account_inactive: "حساب غیرفعال است یا اعتبار و سهمیهٔ آن تمام شده است.",
+  inbound_disabled: "ورودی غیرفعال است.",
+  node_disabled: "نود غیرفعال است.",
+  host_hidden: "این آدرس در اشتراک پنهان شده است.",
+  subscriptions_disabled: "اشتراک‌ها غیرفعال هستند.",
+  maintenance: "پنل در حالت نگهداری است.",
+  "Filter by service": "فیلتر بر اساس سرویس",
+  "All services": "همهٔ سرویس‌ها",
+  "Select visible": "انتخاب موارد نمایش‌داده‌شده",
+  "Clear selection": "پاک کردن انتخاب",
+  "Bulk actions": "عملیات گروهی",
+  "Select up to 200 customers. Selection includes hidden rows.":
+    "حداکثر ۲۰۰ مشتری انتخاب کنید. ردیف‌های پنهان هم در انتخاب باقی می‌مانند.",
+  "This affects every selected customer and all their connections. Changes roll back together if deployment fails.":
+    "این عملیات بر همهٔ مشتری‌های انتخاب‌شده و اتصال‌های آن‌ها اعمال می‌شود. اگر اعمال تنظیمات ناموفق باشد، همهٔ تغییرات برمی‌گردند.",
+  "Edit quota and access": "ویرایش سهمیه و دسترسی",
+  "Replace traffic quota": "جایگزینی سهمیهٔ ترافیک",
+  "Replace expiry": "جایگزینی تاریخ انقضا",
+  "Empty expiry means no expiration.": "تاریخ خالی یعنی بدون انقضا.",
+  "Replace service access": "جایگزینی دسترسی سرویس‌ها",
+  "Direct inbounds and usage are preserved. Plan defaults are not reapplied.":
+    "ورودی‌های مستقیم و مصرف حفظ می‌شوند. پیش‌فرض‌های پلن دوباره اعمال نمی‌شوند.",
+  "Current usage will be reset. Lifetime traffic is preserved.":
+    "مصرف دورهٔ جاری صفر می‌شود. مصرف کل حفظ می‌شود.",
+  "Selected customers, their connections and subscription URLs will be deleted.":
+    "مشتری‌های انتخاب‌شده، اتصال‌ها و لینک‌های اشتراک آن‌ها حذف می‌شوند.",
+  "Apply to selected": "اعمال بر موارد انتخاب‌شده",
+  "Outbound traffic": "ترافیک خروجی‌ها",
+  "Independent raw counters per core and tag. These totals do not consume customer quota and may include several hops.":
+    "شمارندهٔ خام و مستقل برای هر هسته و برچسب. این اعداد از سهمیهٔ مشتری کم نمی‌شوند و ممکن است چند مسیر متوالی را شامل شوند.",
+  "Traffic period": "بازهٔ ترافیک",
+  "Refresh traffic": "تازه‌سازی ترافیک",
+  "Current outbound telemetry is unavailable. Upgrade the node agent and apply its configuration.":
+    "آمار فعلی خروجی‌ها در دسترس نیست. عامل نود را به‌روز و تنظیمات آن را اعمال کنید.",
+  "Last collected": "آخرین دریافت",
+  "Period upload (GiB)": "آپلود بازه (GiB)",
+  "Period download (GiB)": "دانلود بازه (GiB)",
+  "Tracked upload (GiB)": "آپلود ثبت‌شده (GiB)",
+  "Tracked download (GiB)": "دانلود ثبت‌شده (GiB)",
+  "No outbound traffic recorded yet.":
+    "هنوز ترافیکی برای خروجی‌ها ثبت نشده است.",
+  "Tracked totals start with the first durable agent sample; period history follows traffic retention. Reusing a tag continues its totals.":
+    "جمع ثبت‌شده از نخستین نمونهٔ پایدار عامل شروع می‌شود؛ سابقهٔ بازه تابع مدت نگهداری ترافیک است. استفادهٔ مجدد از برچسب، جمع قبلی را ادامه می‌دهد.",
+  "Next hop (optional)": "گام بعدی (اختیاری)",
+  "Connect directly": "اتصال مستقیم",
+  "Dial this outbound through another outbound. Recursive chains are rejected.":
+    "این خروجی از طریق خروجی دیگری متصل می‌شود. زنجیره‌های حلقوی پذیرفته نمی‌شوند.",
+  "Default candidate": "گزینهٔ پیش‌فرض",
+  "First candidate": "نخستین گزینه",
+  "Probe URL": "نشانی آزمون",
+  "Probe interval": "فاصلهٔ آزمون‌ها",
+  "Latency tolerance (ms)": "تحمل اختلاف تأخیر (میلی‌ثانیه)",
+  "Probe idle timeout": "مهلت بی‌کاری آزمون",
+  "Interrupt existing connections when switching":
+    "قطع اتصال‌های موجود هنگام تعویض مسیر",
+
+  "Subscription policies": "سیاست‌های اشتراک",
+  "Subscription policy": "سیاست اشتراک",
+  "Add policy": "افزودن سیاست",
+  "Combine local connections with external links. Policies can override export templates and defaults for assigned customers, services and apps.":
+    "اتصال‌های محلی را با لینک‌های خارجی ترکیب کنید. سیاست‌ها قالب و فرمت پیش‌فرض را برای مشتری‌ها، سرویس‌ها و برنامه‌های انتخاب‌شده تعیین می‌کنند.",
+  "Cached connections": "اتصال ذخیره‌شده",
+  "Refresh source": "تازه‌سازی منبع",
+  "External feed URL": "نشانی ساب خارجی",
+  "External connection links": "لینک‌های اتصال خارجی",
+  "Public HTTPS only. Refresh explicitly after saving; failed refreshes retain the previous cache.":
+    "فقط نشانی عمومی HTTPS. پس از ذخیره منبع را تازه‌سازی کنید؛ در صورت خطا، نسخهٔ قبلی حفظ می‌شود.",
+  "Client applications": "برنامه‌های مصرف‌کننده",
+  "No app selection applies to every app. Application matching controls presentation, not authorization.":
+    "اگر برنامه‌ای انتخاب نکنید، سیاست برای همه اعمال می‌شود. انتخاب برنامه فقط نحوهٔ نمایش و خروجی را تعیین می‌کند.",
+  "Client templates": "قالب‌های خروجی",
+  "External traffic and expiry are enforced by the external provider. Local account eligibility and HWID checks still protect this subscription.":
+    "مصرف و انقضای اتصال خارجی با ارائه‌دهندهٔ آن است. اعتبار حساب محلی و محدودیت دستگاه همچنان بررسی می‌شود.",
+  "Notification destinations": "مقصدهای اعلان",
+  "Notification destination": "مقصد اعلان",
+  "Add destination": "افزودن مقصد",
+  "Route events independently to signed HTTPS endpoints or Discord. Empty filters receive all events; use client.*, node.* or an exact event name.":
+    "رویدادها را جداگانه به وبهوک امضاشده یا دیسکورد بفرستید. فیلتر خالی همهٔ رویدادها را می‌گیرد؛ از client.*، node.* یا نام دقیق رویداد استفاده کنید.",
+  "Signed webhook": "وبهوک امضاشده",
+  Channel: "کانال",
+  "Event filters": "فیلتر رویدادها",
+  "Delivery queued": "ارسال در صف قرار گرفت",
+  "Pending deliveries for this destination will also be removed.":
+    "ارسال‌های در انتظار این مقصد هم حذف می‌شوند.",
+  "Date display": "نمایش تاریخ",
+  Calendar: "تقویم",
+  "Language default": "پیش‌فرض زبان",
+  "Persian (Jalali)": "فارسی (شمسی)",
+  Gregorian: "میلادی",
+  "Display timezone": "منطقهٔ زمانی نمایش",
+  "Date inputs keep their labeled timezone and Gregorian format. Display preferences are saved for this browser.":
+    "ورود تاریخ با قالب میلادی و منطقهٔ زمانی درج‌شده در فیلد انجام می‌شود. ترجیح نمایش در همین مرورگر ذخیره می‌شود.",
+  "Save date preferences": "ذخیرهٔ نمایش تاریخ",
+  "Enter a valid IANA timezone.":
+    "نام معتبر منطقهٔ زمانی وارد کنید؛ مثلاً Asia/Tehran.",
+  "OIDC issuer (optional)": "نشانی صادرکنندهٔ OIDC (اختیاری)",
+  "OIDC subject (optional)": "شناسهٔ حساب OIDC (اختیاری)",
 });

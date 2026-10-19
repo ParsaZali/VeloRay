@@ -98,7 +98,7 @@ func InspectConfigPorts(ctx context.Context, run Runtime, service string, raw []
 		}
 		networks := []string{"tcp"}
 		switch {
-		case in.Protocol == "wireguard" || in.Protocol == "hysteria" || in.StreamSettings.Network == "kcp" || in.StreamSettings.Network == "mkcp" || in.StreamSettings.Network == "quic" || in.StreamSettings.Network == "hysteria":
+		case in.Protocol == "tuic" || in.Protocol == "wireguard" || in.Protocol == "hysteria" || in.StreamSettings.Network == "kcp" || in.StreamSettings.Network == "mkcp" || in.StreamSettings.Network == "quic" || in.StreamSettings.Network == "hysteria":
 			networks = []string{"udp"}
 		case in.Protocol == "shadowsocks":
 			networks = []string{"tcp", "udp"}
@@ -241,8 +241,10 @@ func (m *Manager) Ports(ctx context.Context, raw []byte) ([]PortCheck, error) {
 type Counter struct {
 	Name  string `json:"name"`
 	Value int64  `json:"value"`
+	Core  string `json:"core,omitempty"`
 }
 type Snapshot struct {
+	OutboundAccounting     string                      `json:"outbound_accounting"`
 	CoreLedgers            map[string]string           `json:"core_ledgers"`
 	Stat                   []Counter                   `json:"stat"`
 	Accounting             string                      `json:"accounting"`
@@ -440,7 +442,7 @@ func (m *Manager) Stats(ctx context.Context) (Snapshot, error) {
 			return Snapshot{}, err
 		}
 	}
-	s := Snapshot{Accounting: "durable-v1", LedgerID: m.state.ID, Stat: []Counter{}, OnlineUsers: []string{}, ObservedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	s := Snapshot{Accounting: "durable-v1", OutboundAccounting: "core-scoped-v1", LedgerID: m.state.ID, Stat: []Counter{}, OnlineUsers: []string{}, ObservedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	s.OnlineIPs = map[string]map[string]int64{}
 	if m.Core == "singbox" {
 		if running {
@@ -502,7 +504,7 @@ func (m *Manager) Stats(ctx context.Context) (Snapshot, error) {
 	}
 	s.OnlineIPCoreAvailable = map[string]bool{fallbackCore(m.Core): s.OnlineIPsAvailable}
 	for k, v := range m.state.Counters {
-		s.Stat = append(s.Stat, Counter{k, v.Total})
+		s.Stat = append(s.Stat, Counter{Name: k, Value: v.Total, Core: fallbackCore(m.Core)})
 	}
 	return s, nil
 }
@@ -658,8 +660,14 @@ func (m *Manager) Apply(ctx context.Context, id string, raw []byte) error {
 	if e = m.persist(); e != nil {
 		return e
 	}
+	additions, live := liveUserAdditions(before, raw)
+	live = live && m.Core != "singbox" && m.status(ctx).Running
 	if e = atomicWrite(m.ConfigPath, raw, 0640); e == nil {
-		e = m.restart(ctx)
+		if live {
+			e = m.addUsersLive(ctx, additions)
+		} else {
+			e = m.restart(ctx)
+		}
 	}
 	if e != nil {
 		rollbackErr := m.restore(ctx, before)

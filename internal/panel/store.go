@@ -24,7 +24,7 @@ type Query interface {
 }
 type Store struct{ Pool *pgxpool.Pool }
 
-var tables = map[string]string{"nodes": "vr_nodes", "inbounds": "vr_inbounds", "clients": "vr_clients", "users": "vr_users", "api_keys": "vr_api_keys", "audit": "vr_audit", "outbounds": "vr_outbounds", "routing_rules": "vr_routing_rules"}
+var tables = map[string]string{"webhook_endpoints": "vr_webhook_endpoints", "subscription_policies": "vr_subscription_policies", "profiles": "vr_profiles", "snippets": "vr_snippets", "customers": "vr_accounts", "services": "vr_services", "nodes": "vr_nodes", "inbounds": "vr_inbounds", "clients": "vr_clients", "users": "vr_users", "api_keys": "vr_api_keys", "audit": "vr_audit", "outbounds": "vr_outbounds", "routing_rules": "vr_routing_rules"}
 
 func OpenStore(ctx context.Context, dsn string) (*Store, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
@@ -80,6 +80,9 @@ func get(ctx context.Context, q Query, kind string, id int64) (Data, error) {
 	if err == nil && kind == "clients" {
 		err = hydrateClient(ctx, q, d, nil)
 	}
+	if err == nil && kind == "customers" {
+		err = hydrateCustomer(ctx, q, d)
+	}
 	return d, err
 }
 func list(ctx context.Context, q Query, kind, where string, args ...any) ([]Data, error) {
@@ -111,6 +114,13 @@ func list(ctx context.Context, q Query, kind, where string, args ...any) ([]Data
 		for _, d := range out {
 			if err = hydrateClient(ctx, q, d, cache); err != nil {
 				return nil, err
+			}
+		}
+	}
+	if err == nil && kind == "customers" {
+		for _, d := range out {
+			if err = hydrateCustomer(ctx, q, d); err != nil {
+				break
 			}
 		}
 	}

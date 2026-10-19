@@ -59,13 +59,23 @@ func (s *Server) reconcileNode(ctx context.Context, id int64) error {
 	if !flag(n, "enabled") {
 		return nil
 	}
+	previousStatus := str(n, "status")
 	health, e := s.nodeCall(ctx, n, "/health", nil)
 	if e != nil {
+		original := e
 		n["status"] = "offline"
-		_ = save(ctx, tx, "nodes", n)
-		_ = tx.Commit(ctx)
-		return e
+		if e = auditNodeTransition(ctx, tx, n, previousStatus); e != nil {
+			return e
+		}
+		if e = save(ctx, tx, "nodes", n); e != nil {
+			return e
+		}
+		if e = tx.Commit(ctx); e != nil {
+			return e
+		}
+		return original
 	}
+
 	n["status"] = "degraded"
 	n["_online_available"] = false
 	n["last_seen_at"] = stamp()
@@ -82,6 +92,9 @@ func (s *Server) reconcileNode(ctx context.Context, id int64) error {
 			}
 			n["status"] = "degraded"
 			n["accounting_error"] = original.Error()
+			if e = auditNodeTransition(ctx, tx, n, previousStatus); e != nil {
+				return e
+			}
 			if e = save(ctx, tx, "nodes", n); e != nil {
 				return e
 			}
@@ -93,6 +106,9 @@ func (s *Server) reconcileNode(ctx context.Context, id int64) error {
 		n["accounting_error"] = ""
 	}
 	if e = save(ctx, tx, "nodes", n); e != nil {
+		return e
+	}
+	if e = auditNodeTransition(ctx, tx, n, previousStatus); e != nil {
 		return e
 	}
 	cs, e := list(ctx, tx, "clients", `WHERE inbound_id IN(SELECT id FROM vr_inbounds WHERE node_id=$1)`, id)
@@ -107,13 +123,27 @@ func (s *Server) reconcileNode(ctx context.Context, id int64) error {
 		}
 		dirty = !pending
 	}
+	seenPrincipals := map[string]bool{}
 	for _, c := range cs {
+		if seenPrincipals[accountKey(c)] {
+			continue
+		}
+		seenPrincipals[accountKey(c)] = true
 		changed := false
 		now := time.Now().UTC()
-		if next, te := timestamp(c, "next_renewal_at"); te == nil && !next.After(now) && num(c, "renewal_interval_days") > 0 {
-			interval := time.Duration(num(c, "renewal_interval_days")) * 24 * time.Hour
-			steps := now.Sub(next)/interval + 1
-			c["next_renewal_at"] = stamp(next.Add(steps * interval))
+		_, renewEvery, _, renewErr := renewalSpec(c)
+		if renewErr != nil {
+			return renewErr
+		}
+		if next, te := timestamp(c, "next_renewal_at"); te == nil && !next.After(now) && renewEvery > 0 {
+			upcoming, err := calendarRenewal(c, next, now)
+			if err != nil {
+				return err
+			}
+			c["next_renewal_at"] = stamp(upcoming)
+			if e = audit(ctx, tx, 0, "client.renewed", accountKey(c), Data{}); e != nil {
+				return e
+			}
 			resetTraffic(c)
 			if str(c, "disabled_reason") == "quota" {
 				c["enabled"] = true
@@ -122,6 +152,9 @@ func (s *Server) reconcileNode(ctx context.Context, id int64) error {
 			changed = true
 		}
 		if activateFirstUse(c, now, flag(obj(n, "_online_clients"), fmt.Sprint(num(c, "id")))) {
+			if e = audit(ctx, tx, 0, "client.first_use", accountKey(c), Data{}); e != nil {
+				return e
+			}
 			changed = true
 		}
 		if num(c, "device_limit") > 0 || len(obj(c, "_device_denied")) > 0 {
@@ -179,9 +212,23 @@ func (s *Server) reconcileNode(ctx context.Context, id int64) error {
 		if reason != "" && flag(c, "enabled") {
 			c["enabled"] = false
 			c["disabled_reason"] = reason
+			if e = audit(ctx, tx, 0, "client."+reason, accountKey(c), Data{}); e != nil {
+				return e
+			}
 			changed = true
 		}
 		if changed {
+			related, err := clientNodes(ctx, tx, c)
+			if err != nil {
+				return err
+			}
+			for _, otherID := range related {
+				if otherID != id {
+					if e = queueJob(ctx, tx, otherID, "shared account policy changed", nil); e != nil {
+						return e
+					}
+				}
+			}
 			if e = save(ctx, tx, "clients", c); e != nil {
 				return e
 			}
@@ -236,7 +283,7 @@ func (s *Server) runJob(ctx context.Context, id int64) error {
 	}
 	if e == nil {
 		var cfg Data
-		cfg, e = buildConfig(ctx, tx, n)
+		cfg, e = s.buildConfig(ctx, tx, n)
 		if e == nil {
 			_, e = s.nodeCall(ctx, n, "/xray/apply", Data{"config": cfg, "operation_id": randomToken(24)})
 		}
@@ -253,7 +300,7 @@ func (s *Server) runJob(ctx context.Context, id int64) error {
 			return qe
 		}
 	} else {
-		if cfg, ce := buildConfig(ctx, tx, n); ce == nil && cfg["_singbox"] != nil {
+		if cfg, ce := s.buildConfig(ctx, tx, n); ce == nil && cfg["_singbox"] != nil {
 			n["_singbox_deployed"] = true
 		}
 		n["deploy_state"] = "applied"
@@ -354,6 +401,18 @@ func (s *Server) maintain(ctx context.Context) error {
 	if e != nil {
 		return e
 	}
+	if _, e = s.Store.Pool.Exec(ctx, `DELETE FROM vr_subscription_requests WHERE at<now()-$1*interval '1 day'`, num(cfg, "traffic_history_days")); e != nil {
+		return e
+	}
+	if _, e = s.Store.Pool.Exec(ctx, `DELETE FROM vr_outbound_traffic_windows WHERE at<now()-$1*interval '1 day'`, num(cfg, "traffic_history_days")); e != nil {
+		return e
+	}
+	if _, e = s.Store.Pool.Exec(ctx, "DELETE FROM vr_oidc_states WHERE expires_at<now()"); e != nil {
+		return e
+	}
+	if _, e = s.Store.Pool.Exec(ctx, "DELETE FROM vr_oidc_challenges WHERE expires_at<now()"); e != nil {
+		return e
+	}
 	if flag(cfg, "telegram_enabled") {
 		if e = s.telegram(ctx, cfg); e != nil {
 			s.Logger.Warn("Telegram unavailable", "error", fmt.Sprintf("%T", e))
@@ -451,4 +510,11 @@ func (s *Server) recoverOperation(ctx context.Context, op string) error {
 		return e
 	}
 	return tx.Commit(ctx)
+}
+
+func auditNodeTransition(ctx context.Context, q Query, node Data, previous string) error {
+	if previous == str(node, "status") {
+		return nil
+	}
+	return audit(ctx, q, 0, "node."+str(node, "status"), fmt.Sprintf("node:%d", num(node, "id")), Data{})
 }

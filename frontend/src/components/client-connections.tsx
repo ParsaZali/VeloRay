@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { Globe, MonitorSmartphone, RefreshCw, X } from "lucide-react";
+import {
+  Globe,
+  MonitorSmartphone,
+  RefreshCw,
+  X,
+  Ban,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 import { Dialog } from "@/components/common/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +17,7 @@ import {
   type ClientIPList,
   type ClientDeviceList,
 } from "@/lib/api";
+import { useSession } from "@/lib/session";
 import { localeName, t, useLocale } from "@/lib/i18n";
 
 const date = (value: string) => {
@@ -25,6 +34,30 @@ export function ClientConnections({
   onClose: () => void;
 }) {
   useLocale();
+  const session = useSession();
+  const canManage = Boolean(
+    session?.is_superuser || session?.permissions?.includes("clients.write"),
+  );
+  const [pendingDevice, setPendingDevice] = useState<number | null>(null);
+  async function deviceAction(
+    id: number,
+    action: "revoke" | "allow" | "forget",
+  ) {
+    if (pendingDevice !== null) return;
+    setPendingDevice(id);
+    try {
+      await api(`/clients/${client.id}/device-action/`, {
+        method: "POST",
+        body: JSON.stringify({ device_id: id, action }),
+      });
+      setRevision((v) => v + 1);
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("Could not update device"));
+    } finally {
+      setPendingDevice(null);
+    }
+  }
   const [data, setData] = useState<ClientIPList | ClientDeviceList | null>(
     null,
   );
@@ -177,7 +210,10 @@ export function ClientConnections({
                   />
                   <div className="min-w-0 flex-1">
                     <h3 className="break-words text-sm font-semibold">
-                      {item.device_model || t("Device")}
+                      {item.device_model || t("Device")}{" "}
+                      {item.revoked && (
+                        <Badge tone="neutral">{t("Revoked")}</Badge>
+                      )}
                     </h3>
                     {(item.device_os || item.os_version) && (
                       <p className="mt-1 text-xs text-[var(--muted)]">
@@ -216,6 +252,39 @@ export function ClientConnections({
                         <dd>{date(item.last_seen_at)}</dd>
                       </div>
                     </dl>
+                    {canManage && (
+                      <div className="mt-4 flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={pendingDevice !== null}
+                          onClick={() =>
+                            void deviceAction(
+                              item.id,
+                              item.revoked ? "allow" : "revoke",
+                            )
+                          }
+                        >
+                          {item.revoked ? (
+                            <RotateCcw size={14} />
+                          ) : (
+                            <Ban size={14} />
+                          )}
+                          {item.revoked
+                            ? t("Allow device")
+                            : t("Revoke device")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={pendingDevice !== null}
+                          onClick={() => void deviceAction(item.id, "forget")}
+                        >
+                          <Trash2 size={14} />
+                          {t("Forget device")}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </article>

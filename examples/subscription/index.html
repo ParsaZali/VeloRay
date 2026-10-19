@@ -1,0 +1,4 @@
+<!doctype html>
+<html lang="{{.Locale}}" dir="{{.Direction}}">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Site}}</title><link rel="stylesheet" href="{{.AssetsURL}}style.css"></head>
+<body><main><small>{{.Site}}</small><h1>{{.Name}}</h1><dl><dt>{{.UsageLabel}}</dt><dd>{{.Used}} / {{.Quota}}</dd><dt>{{.ExpiryLabel}}</dt><dd>{{.Expiry}}</dd></dl><label>{{.URLLabel}}<input dir="ltr" readonly value="{{.URL}}"></label>{{if .ShowQR}}<img width="192" height="192" src="{{.QR}}" alt="{{.QRLabel}}">{{end}}{{if .Support}}<p><a href="{{.Support}}">{{.SupportLabel}}</a></p>{{end}}</main></body></html>

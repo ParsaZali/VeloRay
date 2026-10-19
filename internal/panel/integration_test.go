@@ -23,6 +23,7 @@ type nodeMock struct {
 	statsCalls, restarts int
 	portConflict         bool
 	stats                []any
+	statMetadata         Data
 }
 
 func (m *nodeMock) handler(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +42,7 @@ func (m *nodeMock) handler(w http.ResponseWriter, r *http.Request) {
 		if entries == nil {
 			entries = []any{Data{"name": "user>>>veloray:1:alice>>>traffic>>>uplink", "value": m.value}}
 		}
-		writeJSON(w, 200, Data{"accounting": "durable-v1", "ledger_id": "stable-ledger", "stat": entries})
+		writeJSON(w, 200, merge(Data{"accounting": "durable-v1", "ledger_id": "stable-ledger", "stat": entries}, m.statMetadata))
 	case "/xray/validate":
 		if m.portConflict {
 			var input Data
@@ -251,7 +252,7 @@ func integration(t *testing.T) (*Server, context.Context) {
 	if e = store.Migrate(ctx); e != nil {
 		t.Fatal(e)
 	}
-	_, e = store.Pool.Exec(ctx, `TRUNCATE vr_nodes,vr_inbounds,vr_clients,vr_users,vr_api_keys,vr_audit,vr_sessions,vr_stats_cursors,vr_traffic_windows,vr_owner_traffic_windows,vr_jobs,vr_operations,vr_rate_limits,vr_telegram_updates,vr_telegram_actions,vr_webhook_deliveries RESTART IDENTITY CASCADE`)
+	_, e = store.Pool.Exec(ctx, `TRUNCATE vr_oidc_states,vr_oidc_challenges,vr_webhook_endpoints,vr_subscription_policies,vr_subscription_requests,vr_profiles,vr_snippets,vr_config_revisions,vr_services,vr_accounts,vr_nodes,vr_inbounds,vr_clients,vr_users,vr_api_keys,vr_audit,vr_sessions,vr_stats_cursors,vr_traffic_windows,vr_owner_traffic_windows,vr_jobs,vr_operations,vr_rate_limits,vr_telegram_updates,vr_telegram_actions,vr_webhook_deliveries RESTART IDENTITY CASCADE`)
 	if e != nil {
 		t.Fatal(e)
 	}

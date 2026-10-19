@@ -202,6 +202,7 @@ test("outbound defaults, guided creation, duplicate, status and delete", async (
     .getByLabel("UUID", { exact: true })
     .fill("11111111-1111-4111-8111-111111111111");
   await form.getByLabel("SNI", { exact: true }).fill("edge.example.com");
+  await choose(page, "Next hop (optional)", "direct");
   const request = page.waitForRequest(
     (r) => r.method() === "POST" && r.url().includes("/api/outbounds/"),
   );
@@ -210,6 +211,7 @@ test("outbound defaults, guided creation, duplicate, status and delete", async (
     .click();
   const data = (await request).postDataJSON();
   expect(data.config.settings.vnext[0].address).toBe("edge.example.com");
+  expect(data.config.streamSettings.sockopt.dialerProxy).toBe("direct");
   expect(data.config.streamSettings.tlsSettings.serverName).toBe(
     "edge.example.com",
   );
@@ -569,7 +571,10 @@ test("compact subscription portal fits desktop and mobile while preserving conne
   );
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/portal-preview");
-  const copyButton = page.getByRole("button", { name: "Copy link", exact: true });
+  const copyButton = page.getByRole("button", {
+    name: "Copy link",
+    exact: true,
+  });
   await expect(copyButton).toBeVisible();
   await copyButton.click();
   await expect(page.getByRole("status")).toHaveText("Link copied");
@@ -639,7 +644,6 @@ test("theme reveals a circular palette and respects reduced motion", async ({
   await expect(page.locator("html")).not.toHaveAttribute("data-theme-reveal");
 });
 
-
 test("PasarGuard-inspired portal supports chart, four languages, search, QR and mobile", async ({
   page,
 }) => {
@@ -663,18 +667,35 @@ test("PasarGuard-inspired portal supports chart, four languages, search, QR and 
     const originalFetch = window.fetch.bind(window);
     window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
       const path = new URL(
-        typeof input === "string" ? input : input instanceof Request ? input.url : String(input),
+        typeof input === "string"
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input),
         location.href,
       );
-      if (path.pathname.startsWith("/sub/") && path.searchParams.get("format") === "stats") {
+      if (
+        path.pathname.startsWith("/sub/") &&
+        path.searchParams.get("format") === "stats"
+      ) {
         return Promise.resolve(
           new Response(
             JSON.stringify({
               range: "7d",
               history_available: true,
               points: [
-                { at: "2026-10-15T00:00:00Z", bytes: 1048576, upload_bytes: 524288, download_bytes: 524288 },
-                { at: "2026-10-16T00:00:00Z", bytes: 2097152, upload_bytes: 1048576, download_bytes: 1048576 },
+                {
+                  at: "2026-10-15T00:00:00Z",
+                  bytes: 1048576,
+                  upload_bytes: 524288,
+                  download_bytes: 524288,
+                },
+                {
+                  at: "2026-10-16T00:00:00Z",
+                  bytes: 2097152,
+                  upload_bytes: 1048576,
+                  download_bytes: 1048576,
+                },
               ],
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
@@ -692,23 +713,41 @@ test("PasarGuard-inspired portal supports chart, four languages, search, QR and 
   await expect(page.locator("#traffic-chart")).toBeVisible();
   await expect(page.locator("#chart-total")).toContainText("MB");
   await page.locator('[data-metric="upload_bytes"]').click();
-  await expect(page.locator('[data-metric="upload_bytes"]')).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("#traffic-chart")).toHaveAttribute("aria-label", /Upload/);
+  await expect(page.locator('[data-metric="upload_bytes"]')).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.locator("#traffic-chart")).toHaveAttribute(
+    "aria-label",
+    /Upload/,
+  );
   await page.locator('[data-metric="download_bytes"]').click();
-  await expect(page.locator("#traffic-chart")).toHaveAttribute("aria-label", /Download/);
+  await expect(page.locator("#traffic-chart")).toHaveAttribute(
+    "aria-label",
+    /Download/,
+  );
   await page.locator('[data-metric="bytes"]').click();
-  await expect(page.locator("#download-traffic")).toHaveAttribute("href", /export=csv.*range=7d/);
+  await expect(page.locator("#download-traffic")).toHaveAttribute(
+    "href",
+    /export=csv.*range=7d/,
+  );
   const copy = page.getByRole("button", { name: "Copy link" });
   await copy.click();
   await expect(page.locator("#copy-feedback")).toHaveText("Link copied");
-  await expect(page.getByRole("button", { name: "QR code" }).first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "QR code" }).first(),
+  ).toBeVisible();
   await page.getByRole("button", { name: "QR code" }).first().click();
   await expect(page.locator("#qr-dialog")).toBeVisible();
   await page.locator("#close-qr").click();
-  await page.getByPlaceholder("Search name, protocol or server").fill("missing");
+  await page
+    .getByPlaceholder("Search name, protocol or server")
+    .fill("missing");
   await expect(page.locator(".profile-item:visible")).toHaveCount(0);
   await expect(page.locator("#profiles-empty")).toBeVisible();
-  await page.getByPlaceholder("Search name, protocol or server").fill("primary");
+  await page
+    .getByPlaceholder("Search name, protocol or server")
+    .fill("primary");
   await expect(page.locator(".profile-item:visible")).toHaveCount(1);
   await page.locator("#portal-language").selectOption("fa");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
@@ -721,13 +760,761 @@ test("PasarGuard-inspired portal supports chart, four languages, search, QR and 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 700 });
-    await expect.poll(() =>
-      page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-    ).toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      )
+      .toBe(true);
   }
   await page.screenshot({
     path: "test-results/modern-subscription-mobile.png",
     fullPage: true,
   });
   expect(errors).toEqual([]);
+});
+
+test("simple subscription page has persistent themes, copying, QR and no horizontal overflow", async ({
+  page,
+}) => {
+  const file = process.env.VELORAY_TEST_SIMPLE_PORTAL_HTML;
+  test.skip(!file, "simple portal render fixture is required");
+  const html = readFileSync(file!, "utf8");
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.route("**/simple-preview", (route) =>
+    route.fulfill({ contentType: "text/html", body: html }),
+  );
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/simple-preview");
+  await expect(page.getByRole("heading", { name: "Arman" })).toBeVisible();
+  await expect(page.locator("#traffic-chart")).toHaveCount(0);
+  await page.getByLabel("Appearance").selectOption("dark");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.reload();
+  await expect(page.getByLabel("Appearance")).toHaveValue("dark");
+  await page.getByLabel("Appearance").selectOption("light");
+  await page
+    .getByRole("button", { name: "Copy link", exact: true })
+    .first()
+    .click();
+  await expect(page.getByRole("status")).toHaveText("Link copied");
+  await page.getByRole("button", { name: "QR", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  for (const width of [1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: `test-results/simple-subscription-${width}-light.png`,
+      fullPage: true,
+    });
+  }
+  await page.getByLabel("Appearance").selectOption("dark");
+  await page.screenshot({
+    path: "test-results/simple-subscription-mobile-dark.png",
+    fullPage: true,
+  });
+  expect(errors).toEqual([]);
+});
+
+test("subscription settings validate custom file, edit hosts and retain device policy", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await panel(page, "/settings", {
+    "subscription-template/validate": { json: { valid: true, bytes: 500 } },
+    inbounds: { json: [{ id: 1, name: "Main", node_name: "Local" }] },
+  });
+  await page.getByRole("button", { name: "Subscription", exact: true }).click();
+  const template = page.getByRole("combobox", {
+    name: "Template",
+    exact: true,
+  });
+  await template.click();
+  await page
+    .getByRole("option", { name: "Custom HTML file", exact: true })
+    .click();
+  await page
+    .getByLabel("HTML template file")
+    .fill("/etc/veloray/templates/custom/index.html");
+  await page.getByRole("button", { name: "Validate template" }).click();
+  await expect(
+    page.getByText("Template is valid. Save settings to activate it."),
+  ).toBeVisible();
+  await page.getByText("Subscription hosts (0)", { exact: true }).click();
+  await page.getByRole("button", { name: "Add host" }).click();
+  const fieldset = page.locator("fieldset").filter({
+    has: page.getByRole("textbox", { name: "Public address", exact: true }),
+  });
+  await fieldset
+    .getByRole("textbox", { name: "Name", exact: true })
+    .fill("CDN");
+  await fieldset
+    .getByRole("textbox", { name: "Public address", exact: true })
+    .fill("edge.example");
+  await fieldset
+    .getByRole("combobox", { name: "Inbound", exact: true })
+    .click();
+  await page.getByRole("option", { name: "Main · Local" }).click();
+  await page.getByText("Subscription device policy", { exact: true }).click();
+  await page.getByLabel("Default HWID device limit").fill("2");
+  const saved = page.waitForRequest(
+    (request) =>
+      request.url().endsWith("/api/settings") && request.method() === "PATCH",
+  );
+  await page.getByRole("button", { name: "Save settings" }).click();
+  const payload = (await saved).postDataJSON();
+  expect(payload.subscription_template).toBe("custom");
+  expect(payload.subscription_hwid_limit).toBe(2);
+  expect(payload.subscription_hosts[0]).toMatchObject({
+    name: "CDN",
+    address: "edge.example",
+    inbound: 1,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+async function managementPanel(page: Page, path: string) {
+  const inbound = (id: number, node_name: string) => ({
+    id,
+    node: id,
+    node_name,
+    name: `Edge ${id}`,
+    protocol: "vless",
+    core: "xray",
+    enabled: true,
+    supports_clients: true,
+  });
+  const data: Record<string, any[]> = {
+    customers: [],
+    services: [],
+    profiles: [],
+    snippets: [],
+    "subscription-policies": [],
+  };
+  await panel(page, path, {
+    inbounds: { json: [inbound(1, "North"), inbound(2, "South")] },
+    ...Object.fromEntries(Object.keys(data).map((k) => [k, { json: [] }])),
+  });
+  await page.route("**/api/**", async (route) => {
+    const resource = new URL(route.request().url()).pathname
+        .replace(/^\/api\//, "")
+        .replace(/\/$/, ""),
+      [kind, id, action] = resource.split("/"),
+      rows = data[kind];
+    if (!rows) {
+      await route.fallback();
+      return;
+    }
+    const method = route.request().method(),
+      item = rows.find((i) => i.id === +id);
+    if (action === "assign" && method === "POST") {
+      Object.assign(item, route.request().postDataJSON());
+      await route.fulfill({ json: { node_ids: item.node_ids } });
+      return;
+    }
+    if (action === "revisions") {
+      await route.fulfill({
+        json: [{ revision: item.revision, created_at: "2026-10-18T12:00:00Z" }],
+      });
+      return;
+    }
+    if (method === "POST") {
+      const v = {
+        ...route.request().postDataJSON(),
+        id: rows.length + 1,
+        revision: 1,
+        used_traffic_bytes: 123,
+        subscription_url: "https://vpn.example/sub/stable-example-token",
+        connections: [{}, {}],
+      };
+      rows.push(v);
+      await route.fulfill({ json: v, status: 201 });
+      return;
+    }
+    if (method === "PATCH") {
+      Object.assign(item, route.request().postDataJSON());
+      item.revision++;
+      await route.fulfill({ json: item });
+      return;
+    }
+    if (method === "DELETE") {
+      rows.splice(rows.indexOf(item), 1);
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    await route.fulfill({
+      json: id
+        ? item
+        : rows.map(({ body, ...metadata }) =>
+            kind === "profiles" || kind === "snippets"
+              ? metadata
+              : { ...metadata, body },
+          ),
+    });
+  });
+  await page.reload();
+  await expect(page.getByRole("status", { name: "Loading…" })).toHaveCount(0);
+  return data;
+}
+test("services and customers keep shared policy and managed fields in CRUD forms", async ({
+  page,
+}) => {
+  const data = await managementPanel(page, "/services");
+  await page.getByRole("button", { name: "Add service", exact: true }).click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name", { exact: true }).fill("Standard");
+  await dialog.getByLabel("Edge 1 · North · vless").check();
+  await dialog.getByLabel("Traffic quota (GiB)").fill("10");
+  await dialog.getByLabel("HWID limit", { exact: true }).fill("2");
+  await dialog.getByRole("combobox", { name: "Calendar renewal" }).click();
+  await page.getByRole("option", { name: "Monthly", exact: true }).click();
+  await dialog.getByLabel("Timezone", { exact: true }).fill("Asia/Tehran");
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(data.services[0].defaults.traffic_limit_bytes).toBe(10 * 1073741824);
+  expect(data.services[0].defaults.renewal_period).toBe("month");
+  await page.getByRole("button", { name: "Customers", exact: true }).click();
+  await page.getByRole("button", { name: "Add customer", exact: true }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name", { exact: true }).fill("Shared buyer");
+  await dialog.getByLabel("Standard", { exact: true }).check();
+  await dialog.getByRole("combobox", { name: "Apply plan defaults" }).click();
+  await page.getByRole("option", { name: "Standard", exact: true }).click();
+  await expect(dialog.getByLabel("Traffic quota (GiB)")).toHaveValue("10");
+  await dialog.getByLabel("Edge 2 · South · vless").check();
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(data.customers[0].service_ids).toEqual([1]);
+  expect(data.customers[0].inbound_ids).toEqual([2]);
+  expect(data.customers[0].hwid_limit).toBe(2);
+  await page
+    .getByRole("button", { name: "Edit Shared buyer", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByLabel("Note", { exact: true })
+    .fill("Keeps usage and token");
+  const request = page.waitForRequest(
+    (r) => r.method() === "PATCH" && r.url().includes("/customers/1"),
+  );
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Save", exact: true })
+    .click();
+  const body = (await request).postDataJSON();
+  expect(body.used_traffic_bytes).toBeUndefined();
+  expect(body.subscription_token).toBeUndefined();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+test("profile editor supports reusable snippets, node assignment and history", async ({
+  page,
+}) => {
+  const data = await managementPanel(page, "/profiles");
+  await page.getByRole("button", { name: "Snippets", exact: true }).click();
+  await page.getByRole("button", { name: "Add snippet", exact: true }).click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name", { exact: true }).fill("Shared DNS");
+  await dialog
+    .getByLabel("Policy JSON", { exact: true })
+    .fill('{"dns":{"queryStrategy":"UseIPv4"}}');
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole("button", { name: "Profiles", exact: true }).click();
+  await page.getByRole("button", { name: "Add profile", exact: true }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name", { exact: true }).fill("Regional policy");
+  await dialog.getByLabel("Shared DNS", { exact: true }).check();
+  await dialog
+    .getByLabel("Xray policy JSON", { exact: true })
+    .fill('{"routing":{"domainStrategy":"IPIfNonMatch"}}');
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(data.profiles[0].body.snippet_ids).toEqual([1]);
+  await page.getByRole("button", { name: "Assign nodes", exact: true }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Local", { exact: true }).check();
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(data.profiles[0].node_ids).toEqual([1]);
+  await page.getByRole("button", { name: "History", exact: true }).click();
+  await expect(
+    page.getByRole("dialog").getByText("Revision 1", { exact: false }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+test("management forms remain usable at 390px with a light theme", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await managementPanel(page, "/customers");
+  await page.evaluate(() => document.documentElement.classList.remove("dark"));
+  await page.getByRole("button", { name: "Add customer", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("customer service filtering and bulk edits preserve selection and require explicit fields", async ({
+  page,
+}) => {
+  const data = await managementPanel(page, "/customers");
+  data.services.push(
+    { id: 1, name: "North plan", inbound_ids: [1], defaults: {} },
+    { id: 2, name: "South plan", inbound_ids: [2], defaults: {} },
+  );
+  data.customers.push(
+    ...[
+      { id: 1, name: "Alice", service_ids: [1] },
+      { id: 2, name: "Bob", service_ids: [2] },
+      { id: 3, name: "Cora", service_ids: [1] },
+    ].map((c) => ({
+      ...c,
+      note: "",
+      inbound_ids: [1],
+      enabled: true,
+      used_traffic_bytes: 123,
+      traffic_limit_bytes: 1073741824,
+      connections: [{}],
+    })),
+  );
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Alice", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("combobox", { name: "Filter by service" }).click();
+  await page.getByRole("option", { name: "North plan", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Bob", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Select visible", exact: true })
+    .click();
+  await page.getByRole("combobox", { name: "Filter by service" }).click();
+  await page.getByRole("option", { name: "All services", exact: true }).click();
+  await expect(
+    page.getByRole("checkbox", { name: "Select Bob", exact: true }),
+  ).not.toBeChecked();
+  await page
+    .getByRole("button", { name: "Bulk actions (2)", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("combobox", { name: "Action", exact: true }).click();
+  await page
+    .getByRole("option", { name: "Edit quota and access", exact: true })
+    .click();
+  const apply = dialog.getByRole("button", {
+    name: "Apply to selected",
+    exact: true,
+  });
+  await expect(apply).toBeDisabled();
+  await dialog.getByLabel("Replace traffic quota", { exact: true }).check();
+  await dialog.getByLabel("Traffic quota (GiB)").fill("5");
+  let calls = 0;
+  await page.route("**/api/customers/bulk", async (route) => {
+    calls++;
+    const body = route.request().postDataJSON();
+    expect(body.ids).toEqual([1, 3]);
+    expect(body.patch).toEqual({ traffic_limit_bytes: 5 * 1073741824 });
+    if (calls === 1) {
+      await route.fulfill({
+        status: 409,
+        json: { detail: "Node unavailable; changes rolled back" },
+      });
+      return;
+    }
+    for (const row of data.customers)
+      if (body.ids.includes(row.id)) Object.assign(row, body.patch);
+    await route.fulfill({ json: { count: 2, status: "applied" } });
+  });
+  await apply.click();
+  await expect(dialog.getByRole("alert")).toContainText("changes rolled back");
+  await expect(dialog).toBeVisible();
+  await apply.click();
+  await expect(dialog).toHaveCount(0);
+  expect(data.customers[0].used_traffic_bytes).toBe(123);
+  expect(data.customers[1].traffic_limit_bytes).toBe(1073741824);
+  expect(data.customers[2].traffic_limit_bytes).toBe(5 * 1073741824);
+  await expect(
+    page.getByRole("button", { name: "Bulk actions (0)", exact: true }),
+  ).toBeDisabled();
+});
+
+test("outbound traffic stays scoped to the selected core and handles unavailable telemetry", async ({
+  page,
+}) => {
+  const calls: string[] = [];
+  await panel(page, "/outbounds", {
+    outbounds: { json: [] },
+    "outbound-traffic": {
+      json: {
+        available: true,
+        collected_at: "2026-10-19T10:00:00Z",
+        outbounds: [],
+      },
+    },
+  });
+  await page.route("**/api/outbound-traffic?**", async (route) => {
+    const url = new URL(route.request().url());
+    calls.push(url.search);
+    const sing = url.searchParams.get("core") === "singbox";
+    await route.fulfill({
+      json: {
+        available: !sing,
+        collected_at: "2026-10-19T10:00:00Z",
+        outbounds: sing
+          ? []
+          : [
+              {
+                tag: "direct",
+                upload_bytes: 3 * 1073741824,
+                download_bytes: 5 * 1073741824,
+                period_upload_bytes: 1073741824,
+                period_download_bytes: 2 * 1073741824,
+              },
+            ],
+      },
+    });
+  });
+  await page.getByText("Outbound traffic", { exact: true }).click();
+  const table = page.getByRole("table", { name: "Outbound traffic · xray" });
+  await expect(table).toBeVisible();
+  await expect(
+    table.getByRole("row", { name: "direct 1.000 2.000 3.000 5.000" }),
+  ).toBeVisible();
+  expect(calls[0]).toContain("core=xray&hours=24");
+  await page
+    .getByRole("combobox", { name: "Traffic period", exact: true })
+    .click();
+  await page.getByRole("option", { name: "7 days", exact: true }).click();
+  await expect.poll(() => calls.at(-1)).toContain("hours=168");
+  await page.getByRole("combobox", { name: "Core", exact: true }).click();
+  await page.getByRole("option", { name: "sing-box", exact: true }).click();
+  await expect(table).toHaveCount(0);
+  await page.getByText("Outbound traffic", { exact: true }).click();
+  await expect(
+    page.getByText(
+      "Current outbound telemetry is unavailable. Upgrade the node agent and apply its configuration.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  expect(calls.at(-1)).toContain("core=singbox&hours=24");
+});
+
+test("sing-box group editor exposes probe and switching controls", async ({
+  page,
+}) => {
+  await panel(page, "/outbounds");
+  await page.getByRole("combobox", { name: "Core", exact: true }).click();
+  await page.getByRole("option", { name: "sing-box", exact: true }).click();
+  await page.getByRole("button", { name: "New outbound", exact: true }).click();
+  const form = page.getByRole("dialog");
+  await form.getByLabel("Name", { exact: true }).fill("Auto edge");
+  await form.getByLabel("Tag", { exact: true }).fill("auto-edge");
+  await choose(page, "Protocol", "urltest");
+  await form.getByLabel("Outbound tags", { exact: true }).fill("direct");
+  await form
+    .getByLabel("Probe URL", { exact: true })
+    .fill("https://probe.example/generate_204");
+  await form.getByLabel("Probe interval", { exact: true }).fill("1m");
+  await form.getByLabel("Latency tolerance (ms)", { exact: true }).fill("120");
+  await form.getByLabel("Probe idle timeout", { exact: true }).fill("15m");
+  const interrupt = form.getByLabel(
+    "Interrupt existing connections when switching",
+    { exact: true },
+  );
+  await expect(interrupt).not.toBeChecked();
+  await interrupt.check();
+  const request = page.waitForRequest(
+    (r) => r.method() === "POST" && r.url().includes("/api/outbounds/"),
+  );
+  await form
+    .getByRole("button", { name: "Save & deploy", exact: true })
+    .click();
+  const body = (await request).postDataJSON();
+  expect(body.config).toEqual({
+    outbounds: ["direct"],
+    url: "https://probe.example/generate_204",
+    interval: "1m",
+    tolerance: 120,
+    idle_timeout: "15m",
+    interrupt_exist_connections: true,
+  });
+  await expect(form).toHaveCount(0);
+  await page.getByRole("button", { name: "New outbound", exact: true }).click();
+  await choose(page, "Protocol", "direct");
+  await expect(
+    page.getByRole("combobox", { name: "Next hop (optional)", exact: true }),
+  ).toHaveCount(0);
+  await choose(page, "Protocol", "selector");
+  await choose(page, "Default candidate", "direct");
+  await expect(
+    page.getByRole("combobox", { name: "Default candidate", exact: true }),
+  ).toContainText("direct");
+});
+
+test("subscription policies assign customers and services without leaking external links in the list", async ({
+  page,
+}) => {
+  const data = await managementPanel(page, "/subscription-policies");
+  data.customers.push({
+    id: 1,
+    name: "Shared buyer",
+    note: "",
+    inbound_ids: [1],
+    service_ids: [],
+  });
+  data.services.push({
+    id: 1,
+    name: "Standard",
+    inbound_ids: [1],
+    defaults: {},
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Add policy", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name", { exact: true }).fill("Regional feed");
+  await dialog
+    .getByLabel("External feed URL", { exact: true })
+    .fill("https://feed.example/sub/private-url-token");
+  await dialog
+    .getByLabel("External connection links", { exact: true })
+    .fill(
+      "vless://955cc471-391e-4f25-bc37-c8336ed2be5b@edge.example:443?security=tls#External",
+    );
+  await dialog.getByLabel("Shared buyer", { exact: true }).check();
+  await dialog.getByLabel("Standard", { exact: true }).check();
+  await dialog.getByLabel("hiddify", { exact: true }).check();
+  await dialog.getByText("Client templates", { exact: true }).click();
+  await dialog
+    .getByRole("textbox", { name: "clash", exact: true })
+    .fill('{"mixed-port":7890}');
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  const row = data["subscription-policies"][0];
+  expect(row.customer_ids).toEqual([1]);
+  expect(row.service_ids).toEqual([1]);
+  expect(row.body.apps).toEqual(["hiddify"]);
+  expect(row.body.templates.clash).toBe('{"mixed-port":7890}');
+  await expect(
+    page.getByText("https://feed.example/sub/private-url-token", {
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Edit Regional feed", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog").getByLabel("External feed URL", { exact: true }),
+  ).toHaveValue("https://feed.example/sub/private-url-token");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("calendar preferences preserve Persian New Year and timezone boundaries", async ({
+  page,
+}) => {
+  await panel(page, "/settings");
+  await page.getByRole("button", { name: "System", exact: true }).click();
+  await page.getByRole("combobox", { name: "Calendar", exact: true }).click();
+  await page
+    .getByRole("option", { name: "Persian (Jalali)", exact: true })
+    .click();
+  await page
+    .getByLabel("Display timezone", { exact: true })
+    .fill("Asia/Tehran");
+  await page
+    .getByRole("button", { name: "Save date preferences", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("Saved");
+  const output = await page.evaluate(async () => {
+    const { formatDate } = await import("/src/lib/dates.ts");
+    return formatDate("2024-03-19T21:00:00Z");
+  });
+  expect(output).toContain("1403");
+  expect(output).toContain("01/01");
+  await page
+    .getByLabel("Display timezone", { exact: true })
+    .fill("Not/A_Timezone");
+  await page
+    .getByRole("button", { name: "Save date preferences", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("valid IANA timezone");
+  expect(
+    await page.evaluate(() => localStorage.getItem("veloray-timezone")),
+  ).toBe("Asia/Tehran");
+});
+
+test("notification destinations support independent event routing and do not submit parent settings", async ({
+  page,
+}) => {
+  const rows: any[] = [];
+  await panel(page, "/settings");
+  let settingsSaves = 0;
+  await page.route("**/api/settings", async (route) => {
+    if (route.request().method() !== "GET") settingsSaves++;
+    await route.fallback();
+  });
+  await page.route("**/api/webhooks/endpoints**", async (route) => {
+    const id = new URL(route.request().url()).pathname.split("/")[4];
+    if (route.request().method() === "POST") {
+      const row = { ...route.request().postDataJSON(), id: rows.length + 1 };
+      rows.push(row);
+      await route.fulfill({ status: 201, json: row });
+      return;
+    }
+    await route.fulfill({
+      json: id
+        ? rows.find((r) => r.id === +id)
+        : rows.map(({ url, signing_secret, ...rest }) => rest),
+    });
+  });
+  await page.getByRole("button", { name: "Webhooks", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Add destination", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name", { exact: true }).fill("Operations");
+  await dialog.getByRole("combobox", { name: "Channel", exact: true }).click();
+  await page.getByRole("option", { name: "Discord", exact: true }).click();
+  await dialog
+    .getByLabel("HTTPS destination URL", { exact: true })
+    .fill("https://discord.com/api/webhooks/test/private-token");
+  await dialog
+    .getByLabel("Event filters", { exact: true })
+    .fill("node.*\nclient.quota");
+  await dialog.getByLabel("Enabled", { exact: true }).check();
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(settingsSaves).toBe(0);
+  expect(rows[0].events).toEqual(["node.*", "client.quota"]);
+  await expect(
+    page.getByText("https://discord.com/api/webhooks/test/private-token", {
+      exact: true,
+    }),
+  ).toHaveCount(0);
+});
+
+test("OIDC login keeps the local second factor and password fallback", async ({
+  page,
+}) => {
+  let completed = false;
+  const attempts: unknown[] = [];
+  await page.addInitScript(() => {
+    localStorage.setItem("veloray-locale", "en");
+    localStorage.setItem("veloray-login-locale", "en");
+  });
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/me") {
+      await route.fulfill(
+        completed
+          ? {
+              json: {
+                id: 1,
+                username: "admin",
+                is_superuser: true,
+                permissions: [],
+              },
+            }
+          : { status: 401, json: { detail: "Authentication required" } },
+      );
+    } else if (/^\/api\/(nodes|clients|traffic-history)\/?$/.test(path))
+      await route.fulfill({ json: [] });
+    else if (path === "/api/overview")
+      await route.fulfill({
+        json: {
+          nodes_total: 0,
+          nodes_online: 0,
+          clients_total: 0,
+          clients_active: 0,
+          clients_expiring_7d: 0,
+          inbounds_total: 0,
+          protocols: [],
+          traffic_used_bytes: 0,
+          traffic_raw_bytes: 0,
+          traffic_upload_bytes: 0,
+          traffic_download_bytes: 0,
+        },
+      });
+    else if (path === "/api/auth/oidc")
+      await route.fulfill({ json: { enabled: true } });
+    else if (path === "/api/auth/oidc/complete") {
+      attempts.push(route.request().postDataJSON());
+      if (attempts.length === 1)
+        await route.fulfill({
+          status: 400,
+          json: { detail: "Invalid authentication code" },
+        });
+      else {
+        completed = true;
+        await route.fulfill({
+          json: { id: 1, username: "admin", is_superuser: true },
+        });
+      }
+    } else if (path === "/api/settings")
+      await route.fulfill({
+        json: { site_name: "VeloRay", default_locale: "en" },
+      });
+    else if (path.endsWith("/auth/csrf"))
+      await route.fulfill({
+        json: {},
+        headers: { "Set-Cookie": "csrftoken=test-csrf; Path=/; SameSite=Lax" },
+      });
+    else await route.fulfill({ json: {} });
+  });
+  await page.goto("/?oidc=totp");
+  await expect(
+    page.getByRole("heading", { name: "Verify your identity", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Username", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByLabel("Authenticator / recovery code", { exact: true })
+    .fill("111111");
+  await page
+    .getByRole("button", { name: "Verify and continue", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Invalid authentication code",
+  );
+  await page
+    .getByLabel("Authenticator / recovery code", { exact: true })
+    .fill("222222");
+  await page
+    .getByRole("button", { name: "Verify and continue", exact: true })
+    .click();
+  await expect(page.locator("#main-content")).toBeVisible();
+  expect(attempts).toEqual([{ totp_code: "111111" }, { totp_code: "222222" }]);
+  await expect(page).toHaveURL(/\/$/);
+  completed = false;
+  await page.goto("/?oidc=totp");
+  await page
+    .getByRole("button", { name: "Back to login", exact: true })
+    .click();
+  await expect(
+    page.getByRole("textbox", { name: "Username", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Sign in with SSO", exact: true }),
+  ).toBeVisible();
 });

@@ -384,7 +384,9 @@ for command in chown id nginx journalctl sleep;do printf '#!/usr/bin/env bash\ne
 cat >"$TEST_ROOT/host-tools/systemctl" <<'SYSTEMD'
 #!/usr/bin/env bash
 echo "$*" >>"$HOST_ROOT/service-calls"
+if [[ "$1" == is-enabled && "$*" == *veloray-subscriptions.service* && "${TEST_SUBSCRIPTIONS_ACTIVE:-}" != 1 ]];then exit 1;fi
 if [[ "$1" == is-active ]];then
+ [[ "$*" != *veloray-subscriptions.service* || "${TEST_SUBSCRIPTIONS_ACTIVE:-}" == 1 ]]||exit 3
  [[ "$*" != *"${TEST_FAILED_UNIT:-__none__}"* ]]||exit 3
  [[ "$*" == *--quiet* ]]||echo active
 fi
@@ -412,12 +414,35 @@ pass web-assets-readable-after-private-umask
 test -f "$HOST_ROOT/admin";test -f "$HOST_ROOT/database";test -f "$HOST_ROOT/role"
 original_env="$(sha256sum "$HOST_ROOT/etc/veloray/veloray.env")"
 pass host-fresh-install
+test -f "$HOST_ROOT/etc/systemd/system/veloray-subscriptions.service"
+if grep -Eq '^(enable|restart) .*veloray-subscriptions.service' "$HOST_ROOT/service-calls";then echo 'Fresh install activated optional subscription service' >&2;exit 1;fi
+pass independent-subscriptions-installed-disabled
 : >"$HOST_ROOT/app-calls"
 host_install
 [[ "$(sha256sum "$HOST_ROOT/etc/veloray/veloray.env")" == "$original_env" ]]
 grep -Fxq backup "$HOST_ROOT/app-calls"
 if grep -Fxq bootstrap "$HOST_ROOT/app-calls";then echo 'Upgrade reset the administrator' >&2;exit 1;fi
 pass host-repeat-keeps-secrets
+: >"$HOST_ROOT/service-calls"
+export TEST_SUBSCRIPTIONS_ACTIVE=1
+host_install
+grep -Fxq 'stop veloray-subscriptions.service' "$HOST_ROOT/service-calls"
+grep -Fxq 'restart veloray-subscriptions.service' "$HOST_ROOT/service-calls"
+pass independent-subscriptions-preserved-on-update
+: >"$HOST_ROOT/service-calls"
+bash "$HOST_ROOT/usr/local/bin/velorayctl" restart >"$TEST_ROOT/host-result" 2>&1
+grep -Eq '^restart .*veloray-subscriptions.service' "$HOST_ROOT/service-calls"
+bash "$HOST_ROOT/usr/local/bin/velorayctl" stop >"$TEST_ROOT/host-result" 2>&1
+grep -Eq '^stop .*veloray-subscriptions.service' "$HOST_ROOT/service-calls"
+unset TEST_SUBSCRIPTIONS_ACTIVE
+pass independent-subscriptions-controller-lifecycle
+export TEST_SUBSCRIPTIONS_ACTIVE=1
+: >"$HOST_ROOT/service-calls"
+printf 'RESTORE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" restore "$HOST_ROOT/recovery.tar.gz" >"$TEST_ROOT/host-result" 2>&1
+grep -Fxq 'stop veloray-subscriptions.service' "$HOST_ROOT/service-calls"
+grep -Fxq 'start veloray-subscriptions.service' "$HOST_ROOT/service-calls"
+unset TEST_SUBSCRIPTIONS_ACTIVE
+pass independent-subscriptions-paused-during-restore
 reset_host
 export TEST_BOOTSTRAP_FAIL=1
 if host_install;then echo 'Interrupted bootstrap accepted' >&2;exit 1;fi
@@ -434,6 +459,10 @@ printf 'CANCEL\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall >"$TEST
 test -d "$HOST_ROOT/opt/veloray";pass uninstall-cancel
 printf 'REMOVE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall >"$TEST_ROOT/host-result" 2>&1
 test ! -d "$HOST_ROOT/opt/veloray"
+test ! -f "$HOST_ROOT/etc/systemd/system/veloray-subscriptions.service"
+grep -Eq '^disable --now .*veloray-auto-update.timer' "$HOST_ROOT/service-calls"
+grep -Eq '^disable --now .*veloray-subscriptions.service' "$HOST_ROOT/service-calls"
+pass uninstall-stops-subscriptions-and-updater
 test -f "$HOST_ROOT/database";test -f "$HOST_ROOT/var/lib/veloray-agent/state.json"
 [[ "$(sha256sum "$HOST_ROOT/etc/veloray/veloray.env")" == "$original_env" ]]
 pass uninstall-keeps-data-and-keys
@@ -491,6 +520,9 @@ pass private-operation-logs
 if [[ -n "${VELORAY_TEST_PANEL_BINARY:-}" ]];then
  VELORAY_ENV_FILE="$HOST_ROOT/etc/veloray/veloray.env" "$VELORAY_TEST_PANEL_BINARY" >"$TEST_ROOT/host-result" 2>&1
  grep -Fq 'Reset administrator password' "$TEST_ROOT/host-result";pass compiled-default-opens-menu
+ VELORAY_ENV_FILE="$HOST_ROOT/etc/veloray/veloray.env" "$VELORAY_TEST_PANEL_BINARY" auto-update status >"$TEST_ROOT/host-result" 2>&1
+ grep -Fq 'Repository: ParsaZali/VeloRay (main)' "$TEST_ROOT/host-result"
+ pass compiled-auto-update-dispatch
  VELORAY_ENV_FILE="$HOST_ROOT/etc/veloray/veloray.env" "$VELORAY_TEST_PANEL_BINARY" reset >"$TEST_ROOT/host-result" 2>&1
  grep -Fq 'Existing sessions were revoked' "$TEST_ROOT/host-result";pass compiled-reset-alias
 fi
