@@ -156,7 +156,7 @@ func TestIntegrationNodeBillingPreservesRawAccountingAndPrivacy(t *testing.T) {
 	if count != 1 {
 		t.Fatal("budget warning duplicate", count)
 	}
-	if _, e = s.Store.Pool.Exec(ctx, "UPDATE vr_node_billing SET cycle_end=now()-interval '1 minute' WHERE node_id=$1", id); e != nil {
+	if _, e = s.Store.Pool.Exec(ctx, "UPDATE vr_node_billing SET cycle_start=now()-interval '1 month',cycle_end=now()-interval '1 minute' WHERE node_id=$1", id); e != nil {
 		t.Fatal(e)
 	}
 	tx, _ = s.Store.Pool.Begin(ctx)
@@ -169,6 +169,13 @@ func TestIntegrationNodeBillingPreservesRawAccountingAndPrivacy(t *testing.T) {
 	out, _, e = managementRequest(t, s, ctx, admin, "GET", path, nil)
 	if e != nil || num(obj(out.(Data), "usage"), "used_bytes") != 2 || num(obj(out.(Data), "usage"), "lifetime_bytes") != 92 || len(out.(Data)["history"].([]Data)) != 1 {
 		t.Fatal(out, e)
+	}
+	// Reset-day/timezone edits preserve the previous cycle's end, which can
+	// fall after the new policy's canonical month start.
+	currentStart, _ := timestamp(obj(out.(Data), "usage"), "cycle_start")
+	archivedEnd, _ := timestamp(out.(Data)["history"].([]Data)[0], "cycle_end")
+	if currentStart.Before(archivedEnd) {
+		t.Fatal("billing periods overlap after boundary change", currentStart, archivedEnd)
 	}
 	for _, resource := range []string{"operations/nodes/1/billing", "monitors"} {
 		if e = s.roleAuthorize(Actor{User: Data{"role": "viewer"}, Scope: "admin"}, "GET", resource); e == nil {
