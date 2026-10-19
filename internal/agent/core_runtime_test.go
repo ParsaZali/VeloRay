@@ -58,6 +58,12 @@ func TestRealCoresTrafficAndAuthenticatedIPs(t *testing.T) {
 				args = []string{"run", "-c"}
 				config = map[string]any{"log": map[string]any{"level": "warn"}, "inbounds": []any{map[string]any{"type": "vless", "tag": "in-test", "listen": "127.0.0.1", "listen_port": listen, "users": []any{map[string]any{"name": name, "uuid": id}}}}, "outbounds": []any{map[string]any{"type": "direct", "tag": "direct"}}, "experimental": map[string]any{"v2ray_api": map[string]any{"listen": "127.0.0.1:10086", "stats": map[string]any{"enabled": true, "users": []string{name}}}, "clash_api": map[string]any{"external_controller": "127.0.0.1:10087"}}}
 			}
+			cfg := config.(map[string]any)
+			if core == "xray" {
+				cfg["policy"].(map[string]any)["system"] = map[string]any{"statsOutboundUplink": true, "statsOutboundDownlink": true}
+			} else {
+				cfg["experimental"].(map[string]any)["v2ray_api"].(map[string]any)["stats"].(map[string]any)["outbounds"] = []string{"direct"}
+			}
 			raw, _ := json.Marshal(config)
 			path := filepath.Join(t.TempDir(), "config.json")
 			if e = os.WriteFile(path, raw, 0600); e != nil {
@@ -106,6 +112,28 @@ func TestRealCoresTrafficAndAuthenticatedIPs(t *testing.T) {
 				t.Fatal("traffic payload changed")
 			}
 			ctx := context.Background()
+			var traffic []byte
+			if core == "xray" {
+				traffic, e = exec.Command(binaryPath, "api", "statsquery", "--server=127.0.0.1:10085").Output()
+			} else {
+				traffic, e = (&Manager{Core: "singbox"}).querySingStats(ctx)
+			}
+			var outboundCounters struct{ Stat []Counter }
+			if e != nil {
+				t.Fatal(e)
+			}
+			if e = json.Unmarshal(traffic, &outboundCounters); e != nil {
+				t.Fatal(e)
+			}
+			outboundValues := map[string]int64{}
+			for _, counter := range outboundCounters.Stat {
+				outboundValues[counter.Name] = counter.Value
+			}
+			for _, direction := range []string{"uplink", "downlink"} {
+				if outboundValues["outbound>>>direct>>>traffic>>>"+direction] < int64(len(payload)) {
+					t.Fatal("real outbound traffic missing", string(traffic))
+				}
+			}
 			if core == "xray" {
 				ips, e := xrayOnlineIPs(ctx)
 				if e != nil || ips[name]["127.0.0.2"] == 0 {

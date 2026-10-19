@@ -42,6 +42,38 @@ budgets. An unavailable node or invalid configuration rolls the database mutatio
 back and compensates nodes that already applied it. A concurrent membership change
 outside the prepared node set returns 409 and can be retried.
 
+## Bulk customer operations
+
+`POST /api/customers/bulk` accepts 1–200 unique integer `ids` and an `action`:
+`patch`, `enable`, `disable`, `reset` or `delete`. It requires `clients.write`;
+`delete` additionally requires `clients.delete`. Every account is owner-scoped,
+including after locking. No account belonging to another reseller is changed.
+
+For `patch`, supply a nonempty `patch` object containing quota/renewal/device
+policy fields, `expires_at`, `next_renewal_at`, `service_ids` or `inbound_ids`.
+Names, ownership, plan application, tokens, credentials and accounting totals
+cannot be bulk patched. Example:
+
+```json
+{"ids":[12,19],"action":"patch","patch":{"traffic_limit_bytes":10737418240,"service_ids":[3]}}
+```
+
+Only supplied fields change. Access arrays replace their respective memberships;
+changing services keeps direct inbound access and never reapplies plan defaults.
+An old plan reference is cleared if that service is removed. Each customer must
+retain at least one effective inbound. Credentials and existing usage survive
+policy/access edits. `reset` clears current usage, preserving lifetime totals;
+manual/expired disabled states are respected. Enabling an expired or exhausted
+account fails until its policy/usage has been corrected.
+
+All selected changes share one transaction and one compensated deployment per
+affected node. Owner budgets apply to the complete batch. Any invalid account,
+budget overflow or node failure rolls back the whole operation. The Customers UI
+supports service/text filters, explicit selection, and a confirmation form that
+only sends checked patch fields. Select-visible chooses at most 200 loaded rows;
+selection can include rows hidden by the current filter. Nothing implicitly
+selects every customer in a service.
+
 ## Calendar quota renewal
 
 Existing `renewal_interval_days` remains supported. New customer/plan fields are:
@@ -59,7 +91,9 @@ short months and restoring the day in a longer month (January 31 → February 28
 → March 31). Missed periods advance directly to the next future renewal; usage
 resets once, without extending expiry. Quota-disabled accounts can reactivate,
 while expired or manually disabled accounts remain governed by their policy.
-Changing schedule fields reanchors the next renewal.
+Changing schedule fields reanchors the next renewal; an explicitly supplied next
+instant is honored. A nonexistent local time during a spring DST gap advances by
+the gap for that occurrence and returns to the original wall clock afterward.
 
 ## Shared profiles, snippets and revision history
 

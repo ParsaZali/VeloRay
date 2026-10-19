@@ -75,7 +75,7 @@ remain unfinished. See `customer-management.md` and
 - [x] Reusable customer service plans and user templates (policy defaults).
 - [x] Internal service access groups.
 - [ ] External subscription policy groups.
-- [ ] Group-scoped operations for quotas, expiries, filtering and access.
+- [x] Service-filtered selection and atomic bulk quota, expiry, enable/reset/delete and access edits (up to 200 explicit accounts).
 - [x] Reusable config profiles shared across nodes with snippets/version history.
 - [x] Preserve existing reseller authorization and accounting semantics (integration coverage).
 
@@ -91,7 +91,7 @@ remain unfinished. See `customer-management.md` and
 - [x] Subscription request history with bounded retention, no URL-token logging.
 - [x] HWID enrollment, device revocation and cap enforcement for supporting apps.
 - [x] Calendar-aware renewals: hourly, daily, weekly, monthly date and rolling.
-- [ ] Bulk editing and independent outbound accounting.
+- [x] Bulk customer editing and independent core/tag-scoped outbound accounting.
 - [x] Robust handling of revoked shared-token aliases and device reassignment.
 
 ## Stage 3 — Xray, sing-box and network functionality
@@ -101,6 +101,7 @@ remain unfinished. See `customer-management.md` and
       ShadowTLS, Naive, Snell and optional SSH proxy.
 - [ ] Validate feasibility per engine and distinguish upstream engine capability
       from the panel UI's explicitly supported configuration forms.
+- [x] Guided outbound chaining and sing-box selector/URL-test controls, with cycle/dependency validation.
 - [ ] Fallbacks, outbound balancing, geo asset browsing, transparent proxy,
       transparent capture, WARP / provider integrations, external-provider
       subscriptions, link-aware DNS and domain fronting controls.

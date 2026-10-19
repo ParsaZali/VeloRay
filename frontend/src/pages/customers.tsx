@@ -70,7 +70,17 @@ function Workspace({ kind }: { kind: "customers" | "services" }) {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(true),
-    [query, setQuery] = useState("");
+    [query, setQuery] = useState(""),
+    [serviceFilter, setServiceFilter] = useState(0),
+    [selected, setSelected] = useState<number[]>([]),
+    [bulkOpen, setBulkOpen] = useState(false),
+    [bulkAction, setBulkAction] = useState("disable"),
+    [quotaPatch, setQuotaPatch] = useState(false),
+    [quota, setQuota] = useState("0"),
+    [expiryPatch, setExpiryPatch] = useState(false),
+    [expiry, setExpiry] = useState(""),
+    [accessPatch, setAccessPatch] = useState(false),
+    [bulkServices, setBulkServices] = useState<number[]>([]);
   async function load(signal?: AbortSignal) {
     try {
       const [a, b, c] = await Promise.all([
@@ -80,6 +90,9 @@ function Workspace({ kind }: { kind: "customers" | "services" }) {
       ]);
       if (!signal?.aborted) {
         setRows(a);
+        setSelected((ids) =>
+          ids.filter((id) => a.some((row) => row.id === id)),
+        );
         setPlans(b);
         setInbounds(c);
         setLoading(false);
@@ -176,6 +189,43 @@ function Workspace({ kind }: { kind: "customers" | "services" }) {
           : { ...d, [key]: v }),
     );
   }
+  const visibleRows = rows.filter(
+    (i) =>
+      `${i.name} ${i.note}`.toLowerCase().includes(query.toLowerCase()) &&
+      (!serviceFilter || i.service_ids?.includes(serviceFilter)),
+  );
+  async function bulkSave(e: FormEvent) {
+    e.preventDefault();
+    if (!selected.length || selected.length > 200) return;
+    setBusy(true);
+    setError("");
+    const patch = {
+      ...(quotaPatch
+        ? { traffic_limit_bytes: Math.round(Number(quota) * 1073741824) }
+        : {}),
+      ...(expiryPatch
+        ? { expires_at: expiry ? new Date(expiry + "Z").toISOString() : null }
+        : {}),
+      ...(accessPatch ? { service_ids: bulkServices } : {}),
+    };
+    try {
+      await api("/customers/bulk", {
+        method: "POST",
+        body: JSON.stringify({
+          ids: selected,
+          action: bulkAction,
+          ...(bulkAction === "patch" ? { patch } : {}),
+        }),
+      });
+      setBulkOpen(false);
+      setSelected([]);
+      await load();
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <div className="space-y-5">
       <PageHeader
@@ -196,7 +246,7 @@ function Workspace({ kind }: { kind: "customers" | "services" }) {
             : "One account shares quota, expiry and subscription across inbounds and nodes.",
         )}
       </p>
-      {error && !editor && !deleting && !rotating && (
+      {error && !editor && !deleting && !rotating && !bulkOpen && (
         <p role="alert" className="text-red-500">
           {error}
         </p>
@@ -207,99 +257,305 @@ function Workspace({ kind }: { kind: "customers" | "services" }) {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
+      {!services && (
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="label min-w-48">
+            {t("Filter by service")}
+            <Select
+              value={serviceFilter}
+              onChange={(e) => setServiceFilter(+e.target.value)}
+            >
+              <option value={0}>{t("All services")}</option>
+              {plans.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+          {editable && (
+            <>
+              <Button
+                variant="outline"
+                disabled={!visibleRows.length}
+                onClick={() =>
+                  setSelected(visibleRows.slice(0, 200).map((i) => i.id!))
+                }
+              >
+                {t("Select visible")}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={!selected.length}
+                onClick={() => setSelected([])}
+              >
+                {t("Clear selection")}
+              </Button>
+              <Button
+                disabled={!selected.length}
+                onClick={() => {
+                  setError("");
+                  setBulkOpen(true);
+                }}
+              >
+                {t("Bulk actions")} ({selected.length})
+              </Button>
+              <span className="text-[11px] text-[var(--muted)]">
+                {t(
+                  "Select up to 200 customers. Selection includes hidden rows.",
+                )}
+              </span>
+            </>
+          )}
+        </div>
+      )}
       {loading ? (
         <p role="status">{t("Loading…")}</p>
       ) : (
         <div className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">
-          {rows
-            .filter((i) =>
-              `${i.name} ${i.note}`.toLowerCase().includes(query.toLowerCase()),
-            )
-            .map((item) => (
-              <article
-                key={item.id}
-                className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"
-              >
-                <div className="min-w-0 flex-1">
-                  <h3 className="break-words text-[13px] font-medium">
-                    {item.name}
-                  </h3>
-                  <p className="break-words text-[12px] text-[var(--muted)]">
-                    {item.note}
+          {visibleRows.map((item) => (
+            <article
+              key={item.id}
+              className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"
+            >
+              {!services && editable && (
+                <input
+                  type="checkbox"
+                  aria-label={`${t("Select")} ${item.name}`}
+                  checked={selected.includes(item.id!)}
+                  disabled={
+                    !selected.includes(item.id!) && selected.length >= 200
+                  }
+                  onChange={() => setSelected((ids) => flip(ids, item.id!))}
+                />
+              )}
+              <div className="min-w-0 flex-1">
+                <h3 className="break-words text-[13px] font-medium">
+                  {item.name}
+                </h3>
+                <p className="break-words text-[12px] text-[var(--muted)]">
+                  {item.note}
+                </p>
+                {!services && (
+                  <p className="text-[11px] text-[var(--muted)]">
+                    {item.connections?.length || 0} {t("Connections")} ·{" "}
+                    {((item.used_traffic_bytes || 0) / 1073741824).toFixed(2)}{" "}
+                    GiB /{" "}
+                    {item.traffic_limit_bytes
+                      ? (item.traffic_limit_bytes / 1073741824).toFixed(2) +
+                        " GiB"
+                      : t("Unlimited")}
                   </p>
-                  {!services && (
-                    <p className="text-[11px] text-[var(--muted)]">
-                      {item.connections?.length || 0} {t("Connections")} ·{" "}
-                      {((item.used_traffic_bytes || 0) / 1073741824).toFixed(2)}{" "}
-                      GiB /{" "}
-                      {item.traffic_limit_bytes
-                        ? (item.traffic_limit_bytes / 1073741824).toFixed(2) +
-                          " GiB"
-                        : t("Unlimited")}
-                    </p>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {!services && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(
-                            item.subscription_url || "",
-                          );
-                          setError("");
-                        } catch (e) {
-                          setError(message(e));
-                        }
-                      }}
-                    >
-                      {t("Copy subscription")}
-                    </Button>
-                  )}
-                  {!services && editable && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {!services && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(
+                          item.subscription_url || "",
+                        );
                         setError("");
-                        setRotating(item);
-                      }}
-                    >
-                      {t("Rotate subscription")}
-                    </Button>
-                  )}
-                  {editable && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      aria-label={`${t("Edit")} ${item.name}`}
-                      onClick={() => open(item)}
-                    >
-                      {t("Edit")}
-                    </Button>
-                  )}
-                  {(services ? editable : can(session, "clients.delete")) && (
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      aria-label={`${t("Delete")} ${item.name}`}
-                      onClick={() => {
-                        setError("");
-                        setDeleting(item);
-                      }}
-                    >
-                      {t("Delete")}
-                    </Button>
-                  )}
-                </div>
-              </article>
-            ))}
-          {rows.length === 0 && (
+                      } catch (e) {
+                        setError(message(e));
+                      }
+                    }}
+                  >
+                    {t("Copy subscription")}
+                  </Button>
+                )}
+                {!services && editable && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setError("");
+                      setRotating(item);
+                    }}
+                  >
+                    {t("Rotate subscription")}
+                  </Button>
+                )}
+                {editable && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    aria-label={`${t("Edit")} ${item.name}`}
+                    onClick={() => open(item)}
+                  >
+                    {t("Edit")}
+                  </Button>
+                )}
+                {(services ? editable : can(session, "clients.delete")) && (
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    aria-label={`${t("Delete")} ${item.name}`}
+                    onClick={() => {
+                      setError("");
+                      setDeleting(item);
+                    }}
+                  >
+                    {t("Delete")}
+                  </Button>
+                )}
+              </div>
+            </article>
+          ))}
+          {visibleRows.length === 0 && (
             <p className="p-4 text-[12px]">{t("No records yet")}</p>
           )}
         </div>
+      )}
+      {bulkOpen && (
+        <Dialog
+          label={t("Bulk actions")}
+          onClose={() => !busy && setBulkOpen(false)}
+        >
+          <form onSubmit={bulkSave} className="space-y-4">
+            <h3>
+              {t("Bulk actions")} · {selected.length}
+            </h3>
+            <p className="text-[12px]">
+              {t(
+                "This affects every selected customer and all their connections. Changes roll back together if deployment fails.",
+              )}
+            </p>
+            <label className="label">
+              {t("Action")}
+              <Select
+                value={bulkAction}
+                onChange={(e) => setBulkAction(e.target.value)}
+              >
+                <option value="disable">{t("Disable")}</option>
+                <option value="enable">{t("Enable")}</option>
+                <option value="reset">{t("Reset usage")}</option>
+                <option value="patch">{t("Edit quota and access")}</option>
+                {can(session, "clients.delete") && (
+                  <option value="delete">{t("Delete")}</option>
+                )}
+              </Select>
+            </label>
+            {bulkAction === "patch" && (
+              <>
+                <label className="flex gap-2 text-[12px]">
+                  <input
+                    type="checkbox"
+                    checked={quotaPatch}
+                    onChange={(e) => setQuotaPatch(e.target.checked)}
+                  />
+                  {t("Replace traffic quota")}
+                </label>
+                {quotaPatch && (
+                  <label className="label">
+                    {t("Traffic quota (GiB)")}
+                    <Input
+                      type="number"
+                      required
+                      min={0}
+                      step="0.001"
+                      value={quota}
+                      onChange={(e) => setQuota(e.target.value)}
+                    />
+                  </label>
+                )}
+                <label className="flex gap-2 text-[12px]">
+                  <input
+                    type="checkbox"
+                    checked={expiryPatch}
+                    onChange={(e) => setExpiryPatch(e.target.checked)}
+                  />
+                  {t("Replace expiry")}
+                </label>
+                {expiryPatch && (
+                  <label className="label">
+                    {t("Expiry (UTC)")}
+                    <Input
+                      type="datetime-local"
+                      value={expiry}
+                      onChange={(e) => setExpiry(e.target.value)}
+                    />
+                    <span>{t("Empty expiry means no expiration.")}</span>
+                  </label>
+                )}
+                <label className="flex gap-2 text-[12px]">
+                  <input
+                    type="checkbox"
+                    checked={accessPatch}
+                    onChange={(e) => setAccessPatch(e.target.checked)}
+                  />
+                  {t("Replace service access")}
+                </label>
+                {accessPatch && (
+                  <fieldset className="space-y-2">
+                    <legend>{t("Services and plans")}</legend>
+                    <p className="text-[11px] text-[var(--muted)]">
+                      {t(
+                        "Direct inbounds and usage are preserved. Plan defaults are not reapplied.",
+                      )}
+                    </p>
+                    {plans.map((p) => (
+                      <label key={p.id} className="flex gap-2 text-[12px]">
+                        <input
+                          type="checkbox"
+                          checked={bulkServices.includes(p.id!)}
+                          onChange={() =>
+                            setBulkServices((ids) => flip(ids, p.id!))
+                          }
+                        />
+                        {p.name}
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
+              </>
+            )}
+            {bulkAction === "reset" && (
+              <p className="text-[12px]">
+                {t(
+                  "Current usage will be reset. Lifetime traffic is preserved.",
+                )}
+              </p>
+            )}
+            {bulkAction === "delete" && (
+              <p role="note" className="text-[12px] text-red-500">
+                {t(
+                  "Selected customers, their connections and subscription URLs will be deleted.",
+                )}
+              </p>
+            )}
+            {error && (
+              <p role="alert" className="text-red-500">
+                {error}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => setBulkOpen(false)}
+              >
+                {t("Cancel")}
+              </Button>
+              <Button
+                type="submit"
+                variant={bulkAction === "delete" ? "danger" : "default"}
+                disabled={
+                  busy ||
+                  (bulkAction === "patch" &&
+                    !quotaPatch &&
+                    !expiryPatch &&
+                    !accessPatch)
+                }
+              >
+                {t(busy ? "Saving…" : "Apply to selected")}
+              </Button>
+            </div>
+          </form>
+        </Dialog>
       )}
       {editor && (
         <Dialog

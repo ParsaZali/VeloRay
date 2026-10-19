@@ -108,6 +108,7 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 	}
 	node["_core_ledgers"] = obj(stats, "core_ledgers")
 	node["_ledger_id"] = ledgerID
+	node["_outbound_accounting"] = str(stats, "outbound_accounting")
 	node["_online_ips"] = obj(stats, "online_ips")
 	node["_online_ips_available"] = flag(stats, "online_ips_available")
 	node["_online_ip_cores"] = obj(stats, "online_ip_cores")
@@ -158,11 +159,22 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 			return e
 		}
 		name, value := str(v, "name"), num(v, "value")
+		parts := strings.Split(name, ">>>")
+		metric := name
+		isOutbound := len(parts) == 4 && parts[0] == "outbound" && parts[2] == "traffic" && oneOf(parts[3], "uplink", "downlink")
+		if isOutbound {
+			// Older agents omit the core, making identical Xray/sing-box tags
+			// ambiguous. Ignore those counters without disturbing client billing.
+			if !oneOf(str(v, "core"), "xray", "singbox") || len(parts[1]) == 0 || len(parts[1]) > 256 {
+				continue
+			}
+			metric = str(v, "core") + ">>>" + name
+		}
 		if value < 0 {
 			return errors.New("negative agent counter")
 		}
 		var previous int64
-		e = q.QueryRow(ctx, `SELECT total FROM vr_stats_cursors WHERE node_id=$1 AND metric=$2`, id, name).Scan(&previous)
+		e = q.QueryRow(ctx, `SELECT total FROM vr_stats_cursors WHERE node_id=$1 AND metric=$2`, id, metric).Scan(&previous)
 		if e != nil && !errors.Is(e, pgx.ErrNoRows) {
 			return e
 		}
@@ -170,14 +182,19 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 			return errors.New("durable counter decreased")
 		}
 		delta := value - previous
-		_, e = q.Exec(ctx, `INSERT INTO vr_stats_cursors(node_id,metric,total) VALUES($1,$2,$3) ON CONFLICT(node_id,metric) DO UPDATE SET total=excluded.total`, id, name, value)
+		_, e = q.Exec(ctx, `INSERT INTO vr_stats_cursors(node_id,metric,total) VALUES($1,$2,$3) ON CONFLICT(node_id,metric) DO UPDATE SET total=excluded.total`, id, metric, value)
 		if e != nil {
 			return e
 		}
 		if delta == 0 {
 			continue
 		}
-		parts := strings.Split(name, ">>>")
+		if isOutbound {
+			if e = recordOutboundDelta(ctx, q, id, str(v, "core"), parts[1], parts[3], delta); e != nil {
+				return e
+			}
+			continue
+		}
 		if len(parts) != 4 || parts[2] != "traffic" || !oneOf(parts[3], "uplink", "downlink") {
 			continue
 		}

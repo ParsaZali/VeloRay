@@ -142,3 +142,20 @@ CREATE INDEX IF NOT EXISTS vr_customer_services ON vr_accounts USING gin ((data-
 CREATE INDEX IF NOT EXISTS vr_service_inbounds ON vr_services USING gin ((data->'inbound_ids'));
 CREATE INDEX IF NOT EXISTS vr_customer_owner ON vr_accounts (((data->>'owner_id')::bigint));
 CREATE INDEX IF NOT EXISTS vr_node_profile ON vr_nodes ((COALESCE((data->>'profile_id')::bigint,0)));
+
+-- Engine-scoped outbound counters are operational telemetry, never billable usage.
+CREATE TABLE IF NOT EXISTS vr_outbound_traffic_totals (
+ node_id bigint NOT NULL REFERENCES vr_nodes(id) ON DELETE CASCADE,
+ core text NOT NULL CHECK(core IN ('xray','singbox')), tag text NOT NULL CHECK(length(tag) BETWEEN 1 AND 256),
+ upload_bytes bigint NOT NULL DEFAULT 0 CHECK(upload_bytes>=0),
+ download_bytes bigint NOT NULL DEFAULT 0 CHECK(download_bytes>=0),
+ updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(node_id,core,tag)
+);
+CREATE TABLE IF NOT EXISTS vr_outbound_traffic_windows (
+ at timestamptz NOT NULL, node_id bigint NOT NULL REFERENCES vr_nodes(id) ON DELETE CASCADE,
+ core text NOT NULL CHECK(core IN ('xray','singbox')), tag text NOT NULL CHECK(length(tag) BETWEEN 1 AND 256),
+ upload_bytes bigint NOT NULL DEFAULT 0 CHECK(upload_bytes>=0),
+ download_bytes bigint NOT NULL DEFAULT 0 CHECK(download_bytes>=0), PRIMARY KEY(at,node_id,core,tag)
+);
+CREATE INDEX IF NOT EXISTS vr_outbound_traffic_recent ON vr_outbound_traffic_windows(node_id,core,at);
+INSERT INTO vr_schema(version) VALUES(7) ON CONFLICT DO NOTHING;

@@ -2,6 +2,7 @@ package panel
 
 import (
 	"encoding/json"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"strings"
@@ -43,6 +44,25 @@ func TestXrayClientExportNeverIncludesServerSecrets(t *testing.T) {
 					t.Fatal(p, security, e, string(out))
 				}
 			}
+		}
+	}
+}
+
+func TestPortalOffersJSONForProtocolsWithoutPortableURI(t *testing.T) {
+	s := &Server{Config: Config{PublicURL: "https://panel.example"}}
+	i := defaults("inbounds")
+	i["protocol"], i["security"], i["port"], i["core"] = "snell", "none", 443, "singbox"
+	i["protocol_settings"] = Data{"psk": "private-server-psk"}
+	c := defaults("clients")
+	c["name"], c["credential"], c["subscription_token"] = "snell-user", "private-user-key", strings.Repeat("t", 32)
+	for _, style := range []string{"default", "dashboard", "compact"} {
+		cfg := defaultSettings()
+		cfg["subscription_template"] = style
+		w := httptest.NewRecorder()
+		s.portal(w, httptest.NewRequest("GET", "/", nil), c, i, Data{"public_host": "vpn.example"}, cfg, "", "")
+		html := w.Body.String()
+		if w.Code != 200 || !strings.Contains(html, "?format=singbox") || strings.Contains(html, "?format=clash") || strings.Contains(html, "private-server-psk") || strings.Contains(html, "private-user-key") {
+			t.Fatal(style, "incorrect or unsafe format links", w.Code, html)
 		}
 	}
 }

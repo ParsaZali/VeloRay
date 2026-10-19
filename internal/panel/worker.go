@@ -92,6 +92,9 @@ func (s *Server) reconcileNode(ctx context.Context, id int64) error {
 			}
 			n["status"] = "degraded"
 			n["accounting_error"] = original.Error()
+			if e = auditNodeTransition(ctx, tx, n, previousStatus); e != nil {
+				return e
+			}
 			if e = save(ctx, tx, "nodes", n); e != nil {
 				return e
 			}
@@ -399,6 +402,9 @@ func (s *Server) maintain(ctx context.Context) error {
 		return e
 	}
 	if _, e = s.Store.Pool.Exec(ctx, `DELETE FROM vr_subscription_requests WHERE at<now()-$1*interval '1 day'`, num(cfg, "traffic_history_days")); e != nil {
+		return e
+	}
+	if _, e = s.Store.Pool.Exec(ctx, `DELETE FROM vr_outbound_traffic_windows WHERE at<now()-$1*interval '1 day'`, num(cfg, "traffic_history_days")); e != nil {
 		return e
 	}
 	if flag(cfg, "telegram_enabled") {

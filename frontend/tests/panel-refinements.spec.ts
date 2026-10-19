@@ -202,6 +202,7 @@ test("outbound defaults, guided creation, duplicate, status and delete", async (
     .getByLabel("UUID", { exact: true })
     .fill("11111111-1111-4111-8111-111111111111");
   await form.getByLabel("SNI", { exact: true }).fill("edge.example.com");
+  await choose(page, "Next hop (optional)", "direct");
   const request = page.waitForRequest(
     (r) => r.method() === "POST" && r.url().includes("/api/outbounds/"),
   );
@@ -210,6 +211,7 @@ test("outbound defaults, guided creation, duplicate, status and delete", async (
     .click();
   const data = (await request).postDataJSON();
   expect(data.config.settings.vnext[0].address).toBe("edge.example.com");
+  expect(data.config.streamSettings.sockopt.dialerProxy).toBe("direct");
   expect(data.config.streamSettings.tlsSettings.serverName).toBe(
     "edge.example.com",
   );
@@ -928,4 +930,39 @@ test("profile editor supports reusable snippets, node assignment and history",as
 });
 test("management forms remain usable at 390px with a light theme",async({page})=>{
  await page.setViewportSize({width:390,height:844});await managementPanel(page,"/customers");await page.evaluate(()=>document.documentElement.classList.remove("dark"));await page.getByRole("button",{name:"Add customer",exact:true}).click();await expect(page.getByRole("dialog")).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await page.keyboard.press("Escape");await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("customer service filtering and bulk edits preserve selection and require explicit fields",async({page})=>{
+ const data=await managementPanel(page,"/customers");
+ data.services.push({id:1,name:"North plan",inbound_ids:[1],defaults:{}},{id:2,name:"South plan",inbound_ids:[2],defaults:{}});
+ data.customers.push(...[{id:1,name:"Alice",service_ids:[1]},{id:2,name:"Bob",service_ids:[2]},{id:3,name:"Cora",service_ids:[1]}].map(c=>({...c,note:"",inbound_ids:[1],enabled:true,used_traffic_bytes:123,traffic_limit_bytes:1073741824,connections:[{}]})));
+ await page.reload();await expect(page.getByRole("heading",{name:"Alice",exact:true})).toBeVisible();
+ await page.getByRole("combobox",{name:"Filter by service"}).click();await page.getByRole("option",{name:"North plan",exact:true}).click();
+ await expect(page.getByRole("heading",{name:"Bob",exact:true})).toHaveCount(0);await page.getByRole("button",{name:"Select visible",exact:true}).click();
+ await page.getByRole("combobox",{name:"Filter by service"}).click();await page.getByRole("option",{name:"All services",exact:true}).click();
+ await expect(page.getByRole("checkbox",{name:"Select Bob",exact:true})).not.toBeChecked();
+ await page.getByRole("button",{name:"Bulk actions (2)",exact:true}).click();const dialog=page.getByRole("dialog");
+ await dialog.getByRole("combobox",{name:"Action",exact:true}).click();await page.getByRole("option",{name:"Edit quota and access",exact:true}).click();
+ const apply=dialog.getByRole("button",{name:"Apply to selected",exact:true});await expect(apply).toBeDisabled();
+ await dialog.getByLabel("Replace traffic quota",{exact:true}).check();await dialog.getByLabel("Traffic quota (GiB)").fill("5");
+ let calls=0;await page.route("**/api/customers/bulk",async route=>{calls++;const body=route.request().postDataJSON();expect(body.ids).toEqual([1,3]);expect(body.patch).toEqual({traffic_limit_bytes:5*1073741824});if(calls===1){await route.fulfill({status:409,json:{detail:"Node unavailable; changes rolled back"}});return}for(const row of data.customers)if(body.ids.includes(row.id))Object.assign(row,body.patch);await route.fulfill({json:{count:2,status:"applied"}})});
+ await apply.click();await expect(dialog.getByRole("alert")).toContainText("changes rolled back");await expect(dialog).toBeVisible();await apply.click();await expect(dialog).toHaveCount(0);
+ expect(data.customers[0].used_traffic_bytes).toBe(123);expect(data.customers[1].traffic_limit_bytes).toBe(1073741824);expect(data.customers[2].traffic_limit_bytes).toBe(5*1073741824);
+ await expect(page.getByRole("button",{name:"Bulk actions (0)",exact:true})).toBeDisabled();
+});
+
+test("outbound traffic stays scoped to the selected core and handles unavailable telemetry",async({page})=>{
+ const calls:string[]=[];
+ await panel(page,"/outbounds",{outbounds:{json:[]},"outbound-traffic":{json:{available:true,collected_at:"2026-10-19T10:00:00Z",outbounds:[]}}});
+ await page.route("**/api/outbound-traffic?**",async route=>{const url=new URL(route.request().url());calls.push(url.search);const sing=url.searchParams.get("core")==="singbox";await route.fulfill({json:{available:!sing,collected_at:"2026-10-19T10:00:00Z",outbounds:sing?[]:[{tag:"direct",upload_bytes:3*1073741824,download_bytes:5*1073741824,period_upload_bytes:1073741824,period_download_bytes:2*1073741824}]}})});
+ await page.getByText("Outbound traffic",{exact:true}).click();const table=page.getByRole("table",{name:"Outbound traffic · xray"});await expect(table).toBeVisible();await expect(table.getByRole("row",{name:"direct 1.000 2.000 3.000 5.000"})).toBeVisible();expect(calls[0]).toContain("core=xray&hours=24");
+ await page.getByRole("combobox",{name:"Traffic period",exact:true}).click();await page.getByRole("option",{name:"7 days",exact:true}).click();await expect.poll(()=>calls.at(-1)).toContain("hours=168");
+ await page.getByRole("combobox",{name:"Core",exact:true}).click();await page.getByRole("option",{name:"sing-box",exact:true}).click();await expect(table).toHaveCount(0);await page.getByText("Outbound traffic",{exact:true}).click();await expect(page.getByText("Current outbound telemetry is unavailable. Upgrade the node agent and apply its configuration.",{exact:true})).toBeVisible();expect(calls.at(-1)).toContain("core=singbox&hours=24");
+});
+
+test("sing-box group editor exposes probe and switching controls",async({page})=>{
+ await panel(page,"/outbounds");await page.getByRole("combobox",{name:"Core",exact:true}).click();await page.getByRole("option",{name:"sing-box",exact:true}).click();await page.getByRole("button",{name:"New outbound",exact:true}).click();const form=page.getByRole("dialog");await form.getByLabel("Name",{exact:true}).fill("Auto edge");await form.getByLabel("Tag",{exact:true}).fill("auto-edge");await choose(page,"Protocol","urltest");
+ await form.getByLabel("Outbound tags",{exact:true}).fill("direct");await form.getByLabel("Probe URL",{exact:true}).fill("https://probe.example/generate_204");await form.getByLabel("Probe interval",{exact:true}).fill("1m");await form.getByLabel("Latency tolerance (ms)",{exact:true}).fill("120");await form.getByLabel("Probe idle timeout",{exact:true}).fill("15m");const interrupt=form.getByLabel("Interrupt existing connections when switching",{exact:true});await expect(interrupt).not.toBeChecked();await interrupt.check();
+ const request=page.waitForRequest(r=>r.method()==="POST"&&r.url().includes("/api/outbounds/"));await form.getByRole("button",{name:"Save & deploy",exact:true}).click();const body=(await request).postDataJSON();expect(body.config).toEqual({outbounds:["direct"],url:"https://probe.example/generate_204",interval:"1m",tolerance:120,idle_timeout:"15m",interrupt_exist_connections:true});
+ await expect(form).toHaveCount(0);await page.getByRole("button",{name:"New outbound",exact:true}).click();await choose(page,"Protocol","direct");await expect(page.getByRole("combobox",{name:"Next hop (optional)",exact:true})).toHaveCount(0);await choose(page,"Protocol","selector");await choose(page,"Default candidate","direct");await expect(page.getByRole("combobox",{name:"Default candidate",exact:true})).toContainText("direct");
 });

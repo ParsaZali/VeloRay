@@ -245,6 +245,9 @@ func (s *Server) customersAPI(w http.ResponseWriter, r *http.Request, path strin
 	ctx := r.Context()
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	id := int64(0)
+	if len(parts) == 2 && parts[1] == "bulk" {
+		return s.bulkCustomers(w, r, a)
+	}
 	if len(parts) == 3 && parts[2] == "rotate-token" {
 		id, e := strconv.ParseInt(parts[1], 10, 64)
 		if e != nil || id < 1 {
@@ -377,10 +380,7 @@ func (s *Server) customersAPI(w http.ResponseWriter, r *http.Request, path strin
 		if e := require(d, "name", 96); e != nil {
 			return nil, fail(400, e.Error())
 		}
-		if num(d, "renewal_interval_days") != num(prior, "renewal_interval_days") || str(d, "renewal_period") != str(prior, "renewal_period") || num(d, "renewal_every") != num(prior, "renewal_every") || str(d, "renewal_timezone") != str(prior, "renewal_timezone") {
-			d["_renewal_day"] = 0
-			d["next_renewal_at"] = nil
-		}
+
 		if flag(d, "enabled") {
 			d["disabled_reason"] = ""
 		}
@@ -404,6 +404,7 @@ func (s *Server) customersAPI(w http.ResponseWriter, r *http.Request, path strin
 				}
 			}
 		}
+		reanchorRenewal(d, prior, input)
 		if id == 0 {
 			d["subscription_token"] = randomToken(32)
 		}

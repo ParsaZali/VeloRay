@@ -20,6 +20,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { Dialog } from "@/components/common/dialog";
 import { Input, Select, Textarea } from "@/components/ui/controls";
 import { can, useSession } from "@/lib/session";
+import { OutboundTraffic } from "@/components/outbound-traffic";
 import {
   configPath,
   needsProtocolSniff,
@@ -66,6 +67,7 @@ function NetworkPage({ kind }: { kind: "outbounds" | "routing_rules" }) {
         api<NodeItem[]>("/nodes", { signal }),
         routing ? api<Entry[]>("/outbounds", { signal }) : Promise.resolve([]),
       ]);
+      if (signal?.aborted) return;
       setItems(a);
       setNodes(b);
       setOutbounds(routing ? c : a);
@@ -587,6 +589,18 @@ function NetworkPage({ kind }: { kind: "outbounds" | "routing_rules" }) {
           </div>
         </CardContent>
       </Card>
+      {!routing &&
+        nodeFilter > 0 &&
+        can(session, "nodes.read") &&
+        can(session, "traffic.read") &&
+        (session?.is_superuser ||
+          (!session?.own_clients_only && session?.role !== "reseller")) && (
+          <OutboundTraffic
+            key={`${nodeFilter}:${coreFilter}`}
+            node={nodeFilter}
+            core={coreFilter}
+          />
+        )}
       {inspecting && (
         <Dialog label={t("Configuration")} onClose={() => setInspecting(null)}>
           <div className="flex items-center justify-between mb-4">
@@ -1119,6 +1133,140 @@ function NetworkPage({ kind }: { kind: "outbounds" | "routing_rules" }) {
                     />
                   </label>
                 )}
+              {validJSON && !routing && (
+                <>
+                  {![
+                    "selector",
+                    "urltest",
+                    "blackhole",
+                    "dns",
+                    "loopback",
+                    ...(!xray ? ["direct"] : []),
+                  ].includes(protocol) && (
+                    <label className="label">
+                      {t("Next hop (optional)")}
+                      <Select
+                        value={
+                          xray
+                            ? configPath(
+                                config,
+                                ["streamSettings", "sockopt", "dialerProxy"],
+                                configPath(config, ["proxySettings", "tag"]),
+                              )
+                            : config.detour || ""
+                        }
+                        onChange={(e) => {
+                          const next = xray
+                            ? setConfigPath(
+                                config,
+                                ["streamSettings", "sockopt", "dialerProxy"],
+                                e.target.value,
+                              )
+                            : { ...config, detour: e.target.value };
+                          if (xray && next.proxySettings?.tag) {
+                            delete next.proxySettings.tag;
+                            if (!Object.keys(next.proxySettings).length)
+                              delete next.proxySettings;
+                          }
+                          changeConfig(next);
+                        }}
+                      >
+                        <option value="">{t("Connect directly")}</option>
+                        {Array.from(new Set(tags))
+                          .filter(
+                            (tag) => tag !== editor.tag && tag !== "blocked",
+                          )
+                          .map((tag) => (
+                            <option key={tag} value={tag}>
+                              {tag}
+                            </option>
+                          ))}
+                      </Select>
+                      <span>
+                        {t(
+                          "Dial this outbound through another outbound. Recursive chains are rejected.",
+                        )}
+                      </span>
+                    </label>
+                  )}
+                  {!xray && protocol === "selector" && (
+                    <label className="label">
+                      {t("Default candidate")}
+                      <Select
+                        value={config.default || ""}
+                        onChange={(e) => setPath(["default"], e.target.value)}
+                      >
+                        <option value="">{t("First candidate")}</option>
+                        {(config.outbounds || []).map((tag: string) => (
+                          <option key={tag} value={tag}>
+                            {tag}
+                          </option>
+                        ))}
+                      </Select>
+                    </label>
+                  )}
+                  {!xray && protocol === "urltest" && (
+                    <>
+                      <label className="label sm:col-span-2">
+                        {t("Probe URL")}
+                        <Input
+                          type="url"
+                          value={config.url || ""}
+                          placeholder="https://www.gstatic.com/generate_204"
+                          onChange={(e) => setPath(["url"], e.target.value)}
+                        />
+                      </label>
+                      <label className="label">
+                        {t("Probe interval")}
+                        <Input
+                          value={config.interval || ""}
+                          placeholder="3m"
+                          onChange={(e) =>
+                            setPath(["interval"], e.target.value)
+                          }
+                        />
+                      </label>
+                      <label className="label">
+                        {t("Latency tolerance (ms)")}
+                        <Input
+                          type="number"
+                          min={0}
+                          max={60000}
+                          value={config.tolerance ?? 50}
+                          onChange={(e) =>
+                            setPath(["tolerance"], +e.target.value)
+                          }
+                        />
+                      </label>
+                      <label className="label">
+                        {t("Probe idle timeout")}
+                        <Input
+                          value={config.idle_timeout || ""}
+                          placeholder="30m"
+                          onChange={(e) =>
+                            setPath(["idle_timeout"], e.target.value)
+                          }
+                        />
+                      </label>
+                    </>
+                  )}
+                  {!xray && ["selector", "urltest"].includes(protocol) && (
+                    <label className="flex items-center gap-2 text-[12px] sm:col-span-2">
+                      <input
+                        type="checkbox"
+                        checked={!!config.interrupt_exist_connections}
+                        onChange={(e) =>
+                          setPath(
+                            ["interrupt_exist_connections"],
+                            e.target.checked,
+                          )
+                        }
+                      />
+                      {t("Interrupt existing connections when switching")}
+                    </label>
+                  )}
+                </>
+              )}
               {validJSON && routing && (
                 <>
                   <div className="sm:col-span-2 network-presets">

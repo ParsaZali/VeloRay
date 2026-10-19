@@ -1007,4 +1007,53 @@ Object.assign(fa, {
   host_hidden: "این آدرس در اشتراک پنهان شده است.",
   subscriptions_disabled: "اشتراک‌ها غیرفعال هستند.",
   maintenance: "پنل در حالت نگهداری است.",
+  "Filter by service": "فیلتر بر اساس سرویس",
+  "All services": "همهٔ سرویس‌ها",
+  "Select visible": "انتخاب موارد نمایش‌داده‌شده",
+  "Clear selection": "پاک کردن انتخاب",
+  "Bulk actions": "عملیات گروهی",
+  "Select up to 200 customers. Selection includes hidden rows.":
+    "حداکثر ۲۰۰ مشتری انتخاب کنید. ردیف‌های پنهان هم در انتخاب باقی می‌مانند.",
+  "This affects every selected customer and all their connections. Changes roll back together if deployment fails.":
+    "این عملیات بر همهٔ مشتری‌های انتخاب‌شده و اتصال‌های آن‌ها اعمال می‌شود. اگر اعمال تنظیمات ناموفق باشد، همهٔ تغییرات برمی‌گردند.",
+  "Edit quota and access": "ویرایش سهمیه و دسترسی",
+  "Replace traffic quota": "جایگزینی سهمیهٔ ترافیک",
+  "Replace expiry": "جایگزینی تاریخ انقضا",
+  "Empty expiry means no expiration.": "تاریخ خالی یعنی بدون انقضا.",
+  "Replace service access": "جایگزینی دسترسی سرویس‌ها",
+  "Direct inbounds and usage are preserved. Plan defaults are not reapplied.":
+    "ورودی‌های مستقیم و مصرف حفظ می‌شوند. پیش‌فرض‌های پلن دوباره اعمال نمی‌شوند.",
+  "Current usage will be reset. Lifetime traffic is preserved.":
+    "مصرف دورهٔ جاری صفر می‌شود. مصرف کل حفظ می‌شود.",
+  "Selected customers, their connections and subscription URLs will be deleted.":
+    "مشتری‌های انتخاب‌شده، اتصال‌ها و لینک‌های اشتراک آن‌ها حذف می‌شوند.",
+  "Apply to selected": "اعمال بر موارد انتخاب‌شده",
+  "Outbound traffic": "ترافیک خروجی‌ها",
+  "Independent raw counters per core and tag. These totals do not consume customer quota and may include several hops.":
+    "شمارندهٔ خام و مستقل برای هر هسته و برچسب. این اعداد از سهمیهٔ مشتری کم نمی‌شوند و ممکن است چند مسیر متوالی را شامل شوند.",
+  "Traffic period": "بازهٔ ترافیک",
+  "Refresh traffic": "تازه‌سازی ترافیک",
+  "Current outbound telemetry is unavailable. Upgrade the node agent and apply its configuration.":
+    "آمار فعلی خروجی‌ها در دسترس نیست. عامل نود را به‌روز و تنظیمات آن را اعمال کنید.",
+  "Last collected": "آخرین دریافت",
+  "Period upload (GiB)": "آپلود بازه (GiB)",
+  "Period download (GiB)": "دانلود بازه (GiB)",
+  "Tracked upload (GiB)": "آپلود ثبت‌شده (GiB)",
+  "Tracked download (GiB)": "دانلود ثبت‌شده (GiB)",
+  "No outbound traffic recorded yet.":
+    "هنوز ترافیکی برای خروجی‌ها ثبت نشده است.",
+  "Tracked totals start with the first durable agent sample; period history follows traffic retention. Reusing a tag continues its totals.":
+    "جمع ثبت‌شده از نخستین نمونهٔ پایدار عامل شروع می‌شود؛ سابقهٔ بازه تابع مدت نگهداری ترافیک است. استفادهٔ مجدد از برچسب، جمع قبلی را ادامه می‌دهد.",
+  "Next hop (optional)": "گام بعدی (اختیاری)",
+  "Connect directly": "اتصال مستقیم",
+  "Dial this outbound through another outbound. Recursive chains are rejected.":
+    "این خروجی از طریق خروجی دیگری متصل می‌شود. زنجیره‌های حلقوی پذیرفته نمی‌شوند.",
+  "Default candidate": "گزینهٔ پیش‌فرض",
+  "First candidate": "نخستین گزینه",
+  "Probe URL": "نشانی آزمون",
+  "Probe interval": "فاصلهٔ آزمون‌ها",
+  "Latency tolerance (ms)": "تحمل اختلاف تأخیر (میلی‌ثانیه)",
+  "Probe idle timeout": "مهلت بی‌کاری آزمون",
+  "Interrupt existing connections when switching":
+    "قطع اتصال‌های موجود هنگام تعویض مسیر",
 });

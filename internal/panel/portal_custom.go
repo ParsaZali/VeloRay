@@ -143,7 +143,7 @@ func portalSampleData() map[string]any {
 	}
 	d["Locale"], d["Direction"], d["URL"], d["AssetsURL"] = "en", "ltr", "https://example.test/sub/example", "https://example.test/sub/example/assets/"
 	d["Name"], d["Site"] = "Example user", "VeloRay"
-	for _, key := range strings.Fields("Compact Limited ShowQR ShowApps ShowURI Clash HasDeviceLimit ShowAnalytics ShowDownloads") {
+	for _, key := range strings.Fields("Compact Limited ShowQR ShowApps ShowURI Clash SingBox Xray HasDeviceLimit ShowAnalytics ShowDownloads") {
 		d[key] = false
 	}
 	for _, key := range strings.Fields("Percent ConnectionCount DeviceCount DeviceLimit") {

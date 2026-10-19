@@ -184,6 +184,9 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 	case "traffic-history":
 		out, e := s.trafficHistoryForActor(ctx, r, a)
 		return out, 200, e
+	case "outbound-traffic":
+		out, e := s.outboundTraffic(r, a)
+		return out, 200, e
 	}
 	kind := parts[0]
 	if kind == "admin" && len(parts) >= 2 {
@@ -414,10 +417,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 		prior := clone(d)
 		d = merge(d, input)
 		if kind == "clients" {
-			if num(d, "renewal_interval_days") != num(prior, "renewal_interval_days") || str(d, "renewal_period") != str(prior, "renewal_period") || num(d, "renewal_every") != num(prior, "renewal_every") || str(d, "renewal_timezone") != str(prior, "renewal_timezone") {
-				d["_renewal_day"] = 0
-				d["next_renewal_at"] = nil
-			}
+			reanchorRenewal(d, prior, input)
 			if flag(d, "enabled") {
 				d["disabled_reason"] = ""
 			}

@@ -35,13 +35,34 @@ func calendarRenewal(c Data, anchor, now time.Time) (time.Time, error) {
 	anchor = anchor.In(loc)
 	now = now.In(loc)
 	if period == "hour" {
-		interval := time.Duration(every) * time.Hour
+		seconds := every * 3600
 		steps := int64(1)
 		if !anchor.After(now) {
-			steps = int64(now.Sub(anchor)/interval) + 1
+			elapsed := now.Unix() - anchor.Unix()
+			if now.Nanosecond() < anchor.Nanosecond() {
+				elapsed--
+			}
+			steps = elapsed/seconds + 1
 		}
-		return anchor.Add(time.Duration(steps) * interval).UTC(), nil
+		return time.Unix(anchor.Unix()+steps*seconds, int64(anchor.Nanosecond())).UTC(), nil
 	}
+	clock, e := time.Parse("15:04:05.999999999", str(c, "_renewal_clock"))
+	if e != nil {
+		clock = anchor
+		c["_renewal_clock"] = anchor.Format("15:04:05.999999999")
+	}
+	wall := func(year int, month time.Month, day int) time.Time {
+		target := time.Date(year, month, day, clock.Hour(), clock.Minute(), clock.Second(), clock.Nanosecond(), loc)
+		wanted := time.Date(year, month, day, clock.Hour(), clock.Minute(), clock.Second(), clock.Nanosecond(), time.UTC)
+		actual := time.Date(target.Year(), target.Month(), target.Day(), target.Hour(), target.Minute(), target.Second(), target.Nanosecond(), time.UTC)
+		// A nonexistent wall time advances by the DST gap for this occurrence.
+		// Keep the original clock for the following day's/month's renewal.
+		if actual.Before(wanted) {
+			target = target.Add(wanted.Sub(actual))
+		}
+		return target
+	}
+
 	if period == "month" {
 		day := num(c, "_renewal_day")
 		if day < 1 || day > 31 {
@@ -57,13 +78,13 @@ func calendarRenewal(c Data, anchor, now time.Time) (time.Time, error) {
 			}
 		}
 		candidate := func(step int64) time.Time {
-			first := time.Date(anchor.Year(), anchor.Month()+time.Month(step*every), 1, anchor.Hour(), anchor.Minute(), anchor.Second(), anchor.Nanosecond(), loc)
+			first := time.Date(anchor.Year(), anchor.Month()+time.Month(step*every), 1, 12, 0, 0, 0, loc)
 			last := time.Date(first.Year(), first.Month()+1, 0, 0, 0, 0, 0, loc).Day()
 			d := int(day)
 			if d > last {
 				d = last
 			}
-			return time.Date(first.Year(), first.Month(), d, anchor.Hour(), anchor.Minute(), anchor.Second(), anchor.Nanosecond(), loc)
+			return wall(first.Year(), first.Month(), d)
 		}
 		next := candidate(step)
 		if !next.After(now) {
@@ -77,8 +98,10 @@ func calendarRenewal(c Data, anchor, now time.Time) (time.Time, error) {
 	}
 	// Compare calendar dates in UTC solely for ordinal arithmetic; construction in
 	// the requested location preserves wall-clock renewal time across DST.
-	ordinal := func(t time.Time) time.Time { return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC) }
-	elapsed := int64(ordinal(now).Sub(ordinal(anchor)) / (24 * time.Hour))
+	ordinal := func(t time.Time) int64 {
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC).Unix() / 86400
+	}
+	elapsed := ordinal(now) - ordinal(anchor)
 	steps := int64(1)
 	if elapsed > 0 {
 		steps = elapsed / days
@@ -86,9 +109,9 @@ func calendarRenewal(c Data, anchor, now time.Time) (time.Time, error) {
 			steps = 1
 		}
 	}
-	next := anchor.AddDate(0, 0, int(steps*days))
+	next := wall(anchor.Year(), anchor.Month(), anchor.Day()+int(steps*days))
 	if !next.After(now) {
-		next = anchor.AddDate(0, 0, int((steps+1)*days))
+		next = wall(anchor.Year(), anchor.Month(), anchor.Day()+int((steps+1)*days))
 	}
 	return next.UTC(), nil
 }
@@ -109,4 +132,20 @@ func scheduleRenewal(c Data, now time.Time) error {
 		c["next_renewal_at"] = stamp(next)
 	}
 	return nil
+}
+
+func reanchorRenewal(d, previous, input Data) {
+	changed := false
+	for _, k := range []string{"renewal_interval_days", "renewal_period", "renewal_every", "renewal_timezone"} {
+		if (oneOf(k, "renewal_every", "renewal_interval_days") && num(d, k) != num(previous, k)) || (!oneOf(k, "renewal_every", "renewal_interval_days") && str(d, k) != str(previous, k)) {
+			changed = true
+		}
+	}
+	_, explicit := input["next_renewal_at"]
+	if changed || explicit {
+		d["_renewal_day"], d["_renewal_clock"] = 0, ""
+		if !explicit {
+			d["next_renewal_at"] = nil
+		}
+	}
 }

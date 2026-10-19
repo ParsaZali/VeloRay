@@ -93,6 +93,9 @@ func applyNetworkEntities(ctx context.Context, q Query, node, cfg Data, core str
 		entries = append(entries, v)
 	}
 	cfg["outbounds"] = entries
+	if e = validateOutboundGraph(cfg, core); e != nil {
+		return e
+	}
 	rules, e := list(ctx, q, "routing_rules", "WHERE node_id=$1 ORDER BY (data->>'priority')::bigint,id", num(node, "id"))
 	if e != nil {
 		return e
@@ -255,9 +258,6 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data, fieldKey ...str
 		}
 		entries = append(entries, v)
 	}
-	if !has && !flag(node, "_singbox_deployed") {
-		return nil, nil
-	}
 	cfg := Data{"log": Data{"level": "info", "timestamp": true}, "inbounds": entries, "outbounds": []any{Data{"type": "direct", "tag": "direct"}}, "route": Data{"final": "direct", "rules": []any{}}, "experimental": Data{"v2ray_api": Data{"listen": "127.0.0.1:10086", "stats": Data{"enabled": true, "users": users, "inbounds": meteredInbounds, "outbounds": []any{}}}, "clash_api": Data{"external_controller": "127.0.0.1:10087", "secret": ""}}}
 	sharedPatch, err := profileConfigPatch(ctx, q, node, "singbox", fieldKey...)
 	if err != nil {
@@ -267,6 +267,17 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data, fieldKey ...str
 	if e = applyNetworkEntities(ctx, q, node, cfg, "singbox"); e != nil {
 		return nil, e
 	}
+	outboundTags := []any{}
+	for _, entry := range array(cfg, "outbounds") {
+		v, _ := entry.(Data)
+		if v == nil {
+			v, _ = entry.(map[string]any)
+		}
+		if tag := str(v, "tag"); tag != "" {
+			outboundTags = append(outboundTags, tag)
+		}
+	}
+	obj(obj(obj(cfg, "experimental"), "v2ray_api"), "stats")["outbounds"] = outboundTags
 	device, e := deviceRulesForNode(ctx, q, node, "singbox")
 	if e != nil {
 		return nil, e
@@ -274,6 +285,9 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data, fieldKey ...str
 	route := obj(cfg, "route")
 	route["rules"] = append(device, array(route, "rules")...)
 	cfg["route"] = route
+	if !has && !flag(node, "_singbox_deployed") {
+		return nil, nil
+	}
 	return cfg, nil
 }
 func singClientOutbound(c, i, n Data) (Data, error) {

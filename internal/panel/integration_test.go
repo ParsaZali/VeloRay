@@ -23,6 +23,7 @@ type nodeMock struct {
 	statsCalls, restarts int
 	portConflict         bool
 	stats                []any
+	statMetadata         Data
 }
 
 func (m *nodeMock) handler(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +42,7 @@ func (m *nodeMock) handler(w http.ResponseWriter, r *http.Request) {
 		if entries == nil {
 			entries = []any{Data{"name": "user>>>veloray:1:alice>>>traffic>>>uplink", "value": m.value}}
 		}
-		writeJSON(w, 200, Data{"accounting": "durable-v1", "ledger_id": "stable-ledger", "stat": entries})
+		writeJSON(w, 200, merge(Data{"accounting": "durable-v1", "ledger_id": "stable-ledger", "stat": entries}, m.statMetadata))
 	case "/xray/validate":
 		if m.portConflict {
 			var input Data

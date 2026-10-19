@@ -44,3 +44,48 @@ func TestCalendarRenewalKeepsMonthDayAndLocalWallClock(t *testing.T) {
 		}
 	}
 }
+
+func TestRenewalSpringGapAndAncientAnchor(t *testing.T) {
+	parse := func(s string) time.Time {
+		v, e := time.Parse(time.RFC3339, s)
+		if e != nil {
+			t.Fatal(e)
+		}
+		return v
+	}
+	c := Data{"renewal_period": "day", "renewal_every": 1, "renewal_timezone": "America/New_York"}
+	before := parse("2028-03-11T07:30:00Z")
+	gap, e := calendarRenewal(c, before, before)
+	if e != nil || stamp(gap) != "2028-03-12T07:30:00Z" {
+		t.Fatal("DST gap did not advance", gap, e)
+	}
+	next, e := calendarRenewal(c, gap, gap)
+	if e != nil || stamp(next) != "2028-03-13T06:30:00Z" {
+		t.Fatal("DST gap permanently shifted renewal clock", next, e)
+	}
+	for _, period := range []string{"hour", "day", "week"} {
+		c = Data{"renewal_period": period, "renewal_every": 1, "renewal_timezone": "UTC"}
+		now := parse("2030-05-15T12:00:00Z")
+		next, e := calendarRenewal(c, parse("1000-01-01T00:00:00Z"), now)
+		if e != nil || !next.After(now) || next.Sub(now) > 7*24*time.Hour {
+			t.Fatal("elapsed duration overflowed", period, next, e)
+		}
+	}
+}
+
+func TestRenewalIntervalEditReanchorsWithoutDiscardingExplicitInstant(t *testing.T) {
+	previous := Data{"renewal_period": "month", "renewal_every": 1, "renewal_timezone": "UTC", "next_renewal_at": "2030-01-31T12:00:00Z", "_renewal_day": 31, "_renewal_clock": "12:00:00"}
+	d := clone(previous)
+	d["renewal_every"] = 2
+	reanchorRenewal(d, previous, Data{"renewal_every": 2})
+	if d["next_renewal_at"] != nil || str(d, "_renewal_clock") != "" || num(d, "_renewal_day") != 0 {
+		t.Fatal("numeric interval edit not detected", d)
+	}
+	d = clone(previous)
+	d["renewal_every"] = 2
+	d["next_renewal_at"] = "2030-02-20T14:00:00Z"
+	reanchorRenewal(d, previous, Data{"renewal_every": 2, "next_renewal_at": d["next_renewal_at"]})
+	if str(d, "next_renewal_at") != "2030-02-20T14:00:00Z" {
+		t.Fatal("explicit instant discarded", d)
+	}
+}

@@ -241,8 +241,10 @@ func (m *Manager) Ports(ctx context.Context, raw []byte) ([]PortCheck, error) {
 type Counter struct {
 	Name  string `json:"name"`
 	Value int64  `json:"value"`
+	Core  string `json:"core,omitempty"`
 }
 type Snapshot struct {
+	OutboundAccounting     string                      `json:"outbound_accounting"`
 	CoreLedgers            map[string]string           `json:"core_ledgers"`
 	Stat                   []Counter                   `json:"stat"`
 	Accounting             string                      `json:"accounting"`
@@ -440,7 +442,7 @@ func (m *Manager) Stats(ctx context.Context) (Snapshot, error) {
 			return Snapshot{}, err
 		}
 	}
-	s := Snapshot{Accounting: "durable-v1", LedgerID: m.state.ID, Stat: []Counter{}, OnlineUsers: []string{}, ObservedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	s := Snapshot{Accounting: "durable-v1", OutboundAccounting: "core-scoped-v1", LedgerID: m.state.ID, Stat: []Counter{}, OnlineUsers: []string{}, ObservedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	s.OnlineIPs = map[string]map[string]int64{}
 	if m.Core == "singbox" {
 		if running {
@@ -502,7 +504,7 @@ func (m *Manager) Stats(ctx context.Context) (Snapshot, error) {
 	}
 	s.OnlineIPCoreAvailable = map[string]bool{fallbackCore(m.Core): s.OnlineIPsAvailable}
 	for k, v := range m.state.Counters {
-		s.Stat = append(s.Stat, Counter{k, v.Total})
+		s.Stat = append(s.Stat, Counter{Name: k, Value: v.Total, Core: fallbackCore(m.Core)})
 	}
 	return s, nil
 }

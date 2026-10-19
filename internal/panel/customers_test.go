@@ -218,3 +218,32 @@ func TestIntegrationCustomerRotationRevokesEveryAliasAndHistoryIsPrivate(t *test
 		t.Fatal("rotated URL failed", w.Code, w.Body.String())
 	}
 }
+
+func TestIntegrationSelectingPlanReanchorsRenewalAndHonorsExplicitNext(t *testing.T) {
+	s, ctx := integration(t)
+	_, i, _ := fixture(t, s, ctx, &nodeMock{running: true, stats: []any{}})
+	admin := Actor{User: Data{"is_superuser": true}, Scope: "admin"}
+	out, _, e := managementRequest(t, s, ctx, admin, "POST", "services", Data{"name": "monthly", "inbound_ids": []any{num(i, "id")}, "defaults": Data{"renewal_period": "month", "renewal_every": 1}})
+	if e != nil {
+		t.Fatal(e)
+	}
+	service := num(out.(Data), "id")
+	explicit := stamp(time.Now().Add(12 * time.Hour))
+	out, _, e = managementRequest(t, s, ctx, admin, "POST", "customers", Data{"name": "calendar", "service_ids": []any{service}, "renewal_period": "day", "renewal_every": 1, "next_renewal_at": explicit})
+	if e != nil {
+		t.Fatal(e)
+	}
+	customer := out.(Data)
+	if str(customer, "next_renewal_at") != explicit {
+		t.Fatal("explicit renewal replaced", customer)
+	}
+	out, _, e = managementRequest(t, s, ctx, admin, "PATCH", fmt.Sprintf("customers/%d", num(customer, "id")), Data{"plan_id": service})
+	if e != nil {
+		t.Fatal(e)
+	}
+	customer = out.(Data)
+	next, e := timestamp(customer, "next_renewal_at")
+	if e != nil || str(customer, "renewal_period") != "month" || time.Until(next) < 20*24*time.Hour {
+		t.Fatal("plan did not reanchor calendar", customer, e)
+	}
+}

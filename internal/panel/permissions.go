@@ -237,7 +237,7 @@ func (s *Server) roleAuthorize(a Actor, method, path string) error {
 		resource = "api"
 	case "overview":
 		resource = "dashboard"
-	case "traffic-history":
+	case "traffic-history", "outbound-traffic":
 		resource = "traffic"
 	case "system-info":
 		resource = "nodes"
