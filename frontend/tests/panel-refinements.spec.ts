@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { dirname, join, resolve, extname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test, expect, type Page } from "@playwright/test";
 import {
   outboundTemplate,
@@ -1797,3 +1799,201 @@ test("Persian picker maps leap Esfand and Nowruz to Gregorian API values with ke
   await expect(calendar).toHaveCount(0);
   await expect(dialog).toBeVisible();
 });
+
+for (const legacyName of [
+  "modernX.html",
+  "sub-dashboard.html",
+  "sub-fish.html",
+]) {
+  test(`supplied ${legacyName} supports real CSP, copy, QR, dates and themes without CDNs`, async ({
+    page,
+  }) => {
+    const directory =
+      process.env.VELORAY_TEST_LEGACY_PORTAL_DIR ||
+      (process.env.VELORAY_TEST_SIMPLE_PORTAL_HTML
+        ? join(
+            dirname(process.env.VELORAY_TEST_SIMPLE_PORTAL_HTML),
+            "veloray-legacy-portals",
+          )
+        : "");
+    test.skip(!directory, "Rendered legacy fixtures are required");
+    const html = readFileSync(join(directory, legacyName), "utf8");
+    const rawHeaders = JSON.parse(
+      readFileSync(join(directory, legacyName + ".headers.json"), "utf8"),
+    );
+    const headers = Object.fromEntries(
+      Object.entries(rawHeaders).map(([k, v]) => [
+        k,
+        (v as string[]).join(", "),
+      ]),
+    );
+    const errors: string[] = [],
+      external: string[] = [];
+    let qrRequests = 0,
+      infoRequests = 0;
+    page.on("pageerror", (e) => errors.push(e.message));
+    page.on("request", (r) => {
+      if (
+        !r.url().startsWith("https://panel.example/") &&
+        !r.url().startsWith("data:")
+      )
+        external.push(r.url());
+    });
+    await page
+      .context()
+      .grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.addInitScript(() => {
+      (window as any).__cspViolations = [];
+      document.addEventListener("securitypolicyviolation", (e) =>
+        (window as any).__cspViolations.push(e.violatedDirective),
+      );
+    });
+    await page.route("https://panel.example/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get("format") === "info") {
+        infoRequests++;
+        await route.fulfill({
+          json: {
+            downloadByte: 256 * 1024 ** 2,
+            uploadByte: 128 * 1024 ** 2,
+            totalByte: 5 * 1024 ** 3,
+            usedByte: 1024 ** 3,
+            expire: Date.now() + 30 * 86400000,
+            lastOnline: Date.now() - 60000,
+            isOnline: true,
+            enabled: true,
+          },
+        });
+        return;
+      }
+      if (url.searchParams.get("format") === "qr") {
+        qrRequests++;
+        expect(url.searchParams.get("data")).not.toContain("&amp;");
+        expect(url.searchParams.get("data")).toMatch(
+          /^(vless:\/\/|https:\/\/panel.example\/sub\/)/,
+        );
+        await route.fulfill({
+          contentType: "image/png",
+          body: readFileSync(join(directory, legacyName + ".qr.png")),
+        });
+        return;
+      }
+      if (url.pathname.startsWith("/sub/")) {
+        await route.fulfill({ headers, body: html });
+        return;
+      }
+      const publicRoot = fileURLToPath(
+          new URL("../public/", import.meta.url),
+        ).replace(/\/$/, ""),
+        file = resolve(publicRoot, "." + url.pathname);
+      if (!file.startsWith(publicRoot + "/")) {
+        await route.abort();
+        return;
+      }
+      const type = (
+        {
+          ".js": "text/javascript",
+          ".css": "text/css",
+          ".woff2": "font/woff2",
+        } as Record<string, string>
+      )[extname(file)];
+      await route.fulfill({
+        contentType: type || "application/octet-stream",
+        body: readFileSync(file),
+      });
+    });
+    await page.goto(
+      "https://panel.example/sub/" + "s".repeat(32) + "?format=portal",
+    );
+    if (legacyName === "modernX.html") {
+      await expect(
+        page.locator("#configsContainer [data-vr-click]"),
+      ).toHaveCount(2);
+      const initial = await page.locator("html").getAttribute("data-theme");
+      await page.locator("#themeToggleBtn").click();
+      await expect(page.locator("html")).not.toHaveAttribute(
+        "data-theme",
+        initial!,
+      );
+      await page.locator('[data-vr-click="copyLink(this)"]').click();
+      expect(
+        await page.evaluate(() => navigator.clipboard.readText()),
+      ).toContain("vless://");
+      await page.locator('[data-vr-click^="openQRModal"]').click();
+      await expect(page.locator("#qrModal")).toHaveClass(/active/);
+      await page.locator("#qrModal .modal-close-btn").click();
+      await expect(page.locator("#qrModal")).not.toHaveClass(/active/);
+      await expect(page.locator("#daysLeftBadge")).toContainText("روز");
+    } else if (legacyName === "sub-dashboard.html") {
+      await expect(page.locator("#usedStatValue")).toHaveText(
+        /^[۱1](?:[٫.][۰0])?$/,
+      );
+      await page.locator("#copyMainBtn").click();
+      expect(
+        await page.evaluate(() => navigator.clipboard.readText()),
+      ).toContain("/sub/");
+      await page.locator("#qrMainBtn").click();
+      await expect(page.locator("#qrModalImg")).toHaveClass(/loaded/);
+      await page.locator("#closeModalBtn").click();
+      await page.locator('[data-target="tab-configs"]').click();
+      await page
+        .locator("#configListContainer [data-vr-click^=copyText]")
+        .first()
+        .click();
+      expect(
+        await page.evaluate(() => navigator.clipboard.readText()),
+      ).toContain("format=xray");
+      await page
+        .locator("#configListContainer [data-vr-click^=showQR]")
+        .first()
+        .click();
+      await expect(page.locator("#qrModalImg")).toHaveClass(/loaded/);
+      await page.locator("#closeModalBtn").click();
+      const initial = await page.locator("html").getAttribute("data-theme");
+      await page.locator("#themeToggleBtn").click();
+      await expect(page.locator("html")).not.toHaveAttribute(
+        "data-theme",
+        initial!,
+      );
+    } else {
+      await page.locator("#copySub").click();
+      expect(
+        await page.evaluate(() => navigator.clipboard.readText()),
+      ).toContain("/sub/");
+      await page.locator("#qrSub").click();
+      await expect(page.locator("#qrHolder img")).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(page.locator("#jsonBtn")).toHaveAttribute(
+        "href",
+        /format=xray/,
+      );
+      await expect.poll(() => infoRequests).toBeGreaterThan(0);
+      await expect(page.locator("#daysText")).toContainText("روز");
+      await expect(page.locator("#usedNum")).toContainText("۱");
+      const initial = await page.locator("html").getAttribute("data-theme");
+      await page.locator("#themeBtn").click();
+      await expect(page.locator("html")).not.toHaveAttribute(
+        "data-theme",
+        initial!,
+      );
+    }
+    await expect.poll(() => qrRequests).toBeGreaterThan(0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      )
+      .toBe(true);
+    await page.screenshot({
+      path: `test-results/legacy-${legacyName}.png`,
+      fullPage: true,
+    });
+    expect(errors).toEqual([]);
+    expect(external).toEqual([]);
+    expect(await page.evaluate(() => (window as any).__cspViolations)).toEqual(
+      [],
+    );
+    await expect(page.locator("img[src=Route]")).toHaveCount(0);
+  });
+}

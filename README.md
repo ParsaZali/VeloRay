@@ -36,6 +36,7 @@ The product version is **1.0**. Maintenance updates retain this version until th
 
 New management and subscription capabilities are described in the
 [delivery guide](docs/subscription-customization.md),
+[3x-ui HTML compatibility guide](docs/legacy-subscription-templates.md),
 [customer guide](docs/customer-management.md),
 [external policy guide](docs/subscription-policies.md),
 [independent service guide](docs/independent-subscriptions.md),

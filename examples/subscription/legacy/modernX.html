@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .subTitle }}</title>
+    
+    <style>
+        @font-face {
+            font-family: 'Vazirmatn';
+            src: url('https://raw.githubusercontent.com/rastikerdar/vazirmatn/master/fonts/webfonts/Vazirmatn-Regular.woff2') format('woff2');
+            font-weight: 400;
+        }
+        @font-face {
+            font-family: 'Vazirmatn';
+            src: url('https://raw.githubusercontent.com/rastikerdar/vazirmatn/master/fonts/webfonts/Vazirmatn-Medium.woff2') format('woff2');
+            font-weight: 500;
+        }
+        @font-face {
+            font-family: 'Vazirmatn';
+            src: url('https://raw.githubusercontent.com/rastikerdar/vazirmatn/master/fonts/webfonts/Vazirmatn-Bold.woff2') format('woff2');
+            font-weight: 700;
+        }
+        @font-face {
+            font-family: 'Vazirmatn';
+            src: url('https://raw.githubusercontent.com/rastikerdar/vazirmatn/master/fonts/webfonts/Vazirmatn-Black.woff2') format('woff2');
+            font-weight: 900;
+        }
+    </style>
+
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+
+    <style>
+        /* متغیرهای رنگی برای حالت روشن (Light Mode) */
+        :root {
+            --bg-page: #F4F7FE;
+            --card-bg: #FFFFFF;
+            --text-main: #1E293B;
+            --text-muted: #64748B;
+            --border-color: #E2E8F0;
+            --border-hover: #CBD5E1;
+            
+            --brand-primary: #4361EE;
+            --brand-hover: #3A56D4;
+            --brand-light: #EEF2FF;
+            
+            --accent-warm: #FF6B6B;
+            --accent-warm-light: #FFF1F2;
+            
+            --accent-green: #10B981;
+            --accent-yellow: #F59E0B;
+            --accent-purple: #8B5CF6;
+            
+            --status-active-bg: #D1FAE5;
+            --status-active-text: #059669;
+            --status-disabled-bg: #FFE4E6;
+            --status-disabled-text: #E11D48;
+            
+            --surface-50: #F8FAFC;
+            --surface-100: #F1F5F9;
+            --surface-200: #E2E8F0;
+            
+            --badge-bg: #DBEAFE;
+            --shadow-soft: 0 10px 25px rgba(112, 128, 175, 0.1);
+        }
+
+        /* متغیرهای رنگی برای حالت تاریک (Dark Mode) */
+        [data-theme="dark"] {
+            --bg-page: #0B0F19;
+            --card-bg: #141A28;
+            --text-main: #F8FAFC;
+            --text-muted: #94A3B8;
+            --border-color: #2D3748;
+            --border-hover: #4A5568;
+            
+            --brand-primary: #5A7BFF;
+            --brand-hover: #4361EE;
+            --brand-light: rgba(67, 97, 238, 0.15);
+            
+            --accent-warm: #FF7878;
+            --accent-warm-light: rgba(255, 107, 107, 0.15);
+            
+            --accent-green: #34D399;
+            --accent-yellow: #FBBF24;
+            --accent-purple: #A78BFA;
+            
+            --status-active-bg: rgba(16, 185, 129, 0.15);
+            --status-active-text: #34D399;
+            --status-disabled-bg: rgba(225, 29, 72, 0.15);
+            --status-disabled-text: #FB7185;
+            
+            --surface-50: #1A202C;
+            --surface-100: #2D3748;
+            --surface-200: #4A5568;
+            
+            --badge-bg: rgba(67, 97, 238, 0.2);
+            --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        /* اجبار فونت وزیر */
+        body, span, div, h1, a, label, p, canvas, li {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Vazirmatn', -apple-system, sans-serif !important;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        button:not(.action-icon-btn, .header-icon-btn) {
+            font-family: 'Vazirmatn', sans-serif !important;
+        }
+
+        /* ایزوله‌سازی آیکون‌ها */
+        .action-icon-btn, .header-icon-btn, i, .vpn-logo i, [class^="ph-"], [class*=" ph-"] {
+            font-family: 'Phosphor' !important;
+            font-style: normal !important;
+            font-weight: normal !important;
+            text-transform: none !important;
+            line-height: 1 !important;
+        }
+
+        body {
+            background-color: var(--bg-page);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 40px 20px;
+            transition: background-color 0.4s ease, color 0.4s ease;
+        }
+
+        /* --- انیمیشن‌های آبشاری لود صفحه --- */
+        @keyframes fadeInUp {
+            0% { opacity: 0; transform: translateY(25px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        /* --- ساختار گرید --- */
+        .grid-container {
+            width: 100%;
+            max-width: 650px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        .ui-card {
+            background: var(--card-bg);
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: var(--shadow-soft);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.4s ease;
+            border: 1px solid rgba(255, 255, 255, 0.02);
+            /* اتصال انیمیشن لود به کارت‌ها */
+            animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+        }
+
+        /* تاخیر پله‌ای برای هر کارت */
+        .ui-card:nth-child(1) { animation-delay: 0.05s; }
+        .ui-card:nth-child(2) { animation-delay: 0.15s; }
+        .ui-card:nth-child(3) { animation-delay: 0.25s; }
+        .ui-card:nth-child(4) { animation-delay: 0.35s; }
+        .ui-card:nth-child(5) { animation-delay: 0.45s; }
+        .ui-card:nth-child(6) { animation-delay: 0.55s; }
+        .ui-card:nth-child(7) { animation-delay: 0.65s; }
+
+        .ui-card:hover { box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08); }
+        [data-theme="dark"] .ui-card:hover { box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6); }
+
+        .col-full { grid-column: span 2; }
+        .col-half { grid-column: span 1; }
+
+        /* --- هدر پنل --- */
+        .header-card {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand-group {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            max-width: 60%;
+        }
+
+        .brand-text-details {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .vpn-logo {
+            width: 52px;
+            height: 52px;
+            background: linear-gradient(135deg, var(--brand-primary), #4FACFE);
+            border-radius: 16px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 8px 16px rgba(67, 97, 238, 0.25);
+            flex-shrink: 0;
+        }
+
+        .vpn-logo i { font-size: 1.8rem; color: #ffffff; }
+
+        .main-title {
+            font-size: 1.35rem;
+            font-weight: 900;
+            color: var(--text-main);
+            letter-spacing: -0.5px;
+        }
+
+        .sub-id-tag {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-icon-btn {
+            background: var(--surface-50);
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.3rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .header-icon-btn:hover {
+            background: var(--surface-100);
+            color: var(--brand-primary);
+            border-color: var(--brand-primary);
+        }
+
+        /* --- نقطه زنده و وضعیت --- */
+        @keyframes blinkLive {
+            0% { box-shadow: 0 0 0 0 var(--status-active-text); }
+            70% { box-shadow: 0 0 0 6px rgba(0,0,0,0); }
+            100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--status-active-text);
+            border-radius: 50%;
+            display: inline-block;
+            animation: blinkLive 1.5s infinite;
+        }
+
+        .dead-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--status-disabled-text);
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-badge {
+            padding: 8px 14px;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .status-badge.active-status {
+            background: var(--status-active-bg) !important;
+            color: var(--status-active-text) !important;
+        }
+
+        .status-badge.disabled-status {
+            background: var(--status-disabled-bg) !important;
+            color: var(--status-disabled-text) !important;
+        }
+
+        /* --- پیشخوان حجم مصرفی --- */
+        .data-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .data-label {
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+
+        .data-numbers {
+            font-size: 2.2rem;
+            font-weight: 900;
+            color: var(--brand-primary);
+            line-height: 1;
+        }
+
+        .data-numbers span {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .cyber-progress {
+            height: 14px;
+            background: var(--surface-100);
+            border-radius: 50px;
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+
+        .cyber-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4FACFE, var(--brand-primary));
+            width: 0%; 
+            border-radius: 50px;
+            transition: width 1.2s cubic-bezier(0.1, 1, 0.1, 1);
+        }
+
+        .remained-highlight {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--text-muted);
+        }
+
+        .remained-highlight span:last-child {
+            color: var(--accent-green);
+            font-size: 1.25rem;
+            font-weight: 900;
+        }
+
+        /* --- کارت‌های تاریخ و زمان و روزشمار --- */
+        .sys-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 700;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .icon-amber { color: var(--accent-yellow); font-size: 1.3rem; }
+        .icon-purple { color: var(--accent-purple); font-size: 1.3rem; }
+
+        .sys-value-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .sys-value {
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+
+        .days-left-badge {
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 6px;
+            display: inline-block;
+            align-self: flex-start;
+        }
+        .days-safe { background: var(--status-active-bg); color: var(--status-active-text); }
+        .days-warn { background: rgba(245, 158, 11, 0.15); color: var(--accent-yellow); }
+        .days-danger { background: var(--status-disabled-bg); color: var(--status-disabled-text); }
+
+        /* --- تشخیص سیستم عامل و لینک دانلود گیت هاب --- */
+        .os-box {
+            background: var(--surface-50);
+            border: 1px dashed var(--brand-primary);
+            border-radius: 16px;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .os-info {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .os-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-muted);
+        }
+
+        /* لینک دانلود قابل کلیک */
+        .os-app-link {
+            font-size: 1.05rem;
+            font-weight: 900;
+            color: var(--brand-primary);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .os-app-link:hover {
+            color: var(--brand-hover);
+            text-decoration: underline;
+        }
+
+        .os-icon {
+            font-size: 2.2rem;
+            color: var(--text-muted);
+            opacity: 0.4;
+        }
+
+        /* --- دکمه‌های ناوبری --- */
+        .actions-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+        }
+
+        .btn-fire {
+            grid-column: span 3;
+            background: var(--brand-primary);
+            color: #ffffff;
+            padding: 16px;
+            font-size: 1.05rem;
+            font-weight: 800;
+            text-decoration: none;
+            text-align: center;
+            border-radius: 16px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 6px 15px rgba(67, 97, 238, 0.25);
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-fire:hover {
+            transform: translateY(-2px);
+            background: var(--brand-hover);
+        }
+
+        .btn-outline {
+            background: var(--surface-50);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 14px 10px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-decoration: none;
+            text-align: center;
+            border-radius: 14px;
+            transition: all 0.2s ease;
+            display: block;
+        }
+
+        .btn-outline:hover {
+            border-color: var(--brand-primary);
+            background: var(--brand-light);
+            color: var(--brand-primary);
+            transform: translateY(-1px);
+        }
+
+        /* --- باکس کلیدهای اتصال --- */
+        .terminal-header {
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: var(--text-main);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between; 
+            align-items: center;
+        }
+
+        .terminal-title-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .terminal-header i { color: var(--accent-warm); font-size: 1.3rem; }
+
+        .btn-copy-all {
+            background: var(--accent-warm-light);
+            color: var(--accent-warm);
+            border: none;
+            padding: 8px 14px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 800;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .btn-copy-all:hover {
+            background: var(--accent-warm);
+            color: #ffffff;
+        }
+
+        .config-line {
+            background: var(--surface-50);
+            border: 1px solid var(--border-color);
+            padding: 14px 16px;
+            border-radius: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .config-line:hover {
+            border-color: var(--border-hover);
+            background: var(--surface-100);
+        }
+
+        .config-line:last-child { margin-bottom: 0; }
+
+        .config-details {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 70%;
+        }
+
+        .config-badge {
+            font-size: 0.7rem;
+            font-weight: 900;
+            background: var(--badge-bg);
+            color: var(--brand-primary);
+            padding: 4px 10px;
+            border-radius: 8px;
+            text-transform: uppercase;
+        }
+
+        .config-name-text {
+            font-size: 0.9rem;
+            font-weight: 800;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: right;
+            width: 100%;
+        }
+
+        .action-icon-btn {
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 1.4rem;
+            transition: all 0.2s;
+            background: transparent;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .action-icon-btn:hover {
+            color: var(--brand-primary);
+            transform: scale(1.15) translateY(-2px);
+        }
+
+        /* --- پاپ آپ ها (Modal) --- */
+        .custom-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .custom-modal.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 32px;
+            padding: 32px;
+            text-align: center;
+            width: 90%;
+            max-width: 340px;
+            transform: scale(0.9);
+            transition: all 0.3s ease;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+        }
+
+        .custom-modal.active .modal-content {
+            transform: scale(1);
+        }
+
+        .modal-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            margin-bottom: 20px;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .qr-wrapper {
+            background: #ffffff;
+            padding: 16px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-bottom: 24px;
+            border: 1px solid #E2E8F0;
+        }
+
+        .modal-close-btn {
+            background: var(--surface-100);
+            color: var(--text-main);
+            border: none;
+            padding: 14px 20px;
+            border-radius: 16px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 0.95rem;
+            font-weight: 800;
+            transition: all 0.2s;
+        }
+
+        .modal-close-btn:hover { background: var(--surface-200); }
+
+        /* لیست آموزش */
+        .tutorial-list {
+            text-align: right;
+            list-style: none;
+            margin-bottom: 24px;
+        }
+        .tutorial-list li {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .tutorial-list li i {
+            color: var(--brand-primary);
+            font-size: 1.2rem;
+            margin-top: 2px;
+        }
+
+        /* --- فوتر --- */
+        .footer {
+            margin-top: 10px;
+            padding: 0 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+        }
+
+        .support-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: color 0.2s;
+        }
+
+        .support-link i { font-size: 1.2rem; }
+        .support-link:hover { color: var(--brand-primary); }
+
+        /* --- 📱 ریسپانسیو شبکه‌ای --- */
+        @media (max-width: 600px) {
+            body { padding: 20px 16px; }
+            .grid-container { grid-template-columns: 1fr; gap: 16px; }
+            .col-full, .col-half { grid-column: span 1; }
+            .header-card { flex-direction: column; align-items: flex-start; gap: 20px; }
+            .brand-group { max-width: 100%; }
+            .header-actions { width: 100%; justify-content: space-between; flex-direction: row-reverse;}
+            .data-numbers { font-size: 1.8rem; }
+            .btn-tri-grid { grid-template-columns: 1fr; }
+            .footer { flex-direction: column; gap: 16px; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="rawEmailsSource" style="display: none !important;">{{ range .emails }}{{ . }} {{ end }}</div>
+    <div id="rawExpireSource" style="display: none !important;">{{ .expire }}</div>
+
+    <div class="grid-container">
+        
+        <header class="ui-card header-card col-full">
+            <div class="brand-group">
+                <div class="vpn-logo">
+                    <i class="ph-bold ph-rocket-launch"></i>
+                </div>
+                <div class="brand-text-details">
+                    <h1 class="main-title">{{ .subTitle }}</h1>
+                    <div class="sub-id-tag">نام کاربر: <span id="userNameHeader" style="font-weight: 700; color: var(--text-main);">در حال دریافت...</span></div>
+                </div>
+            </div>
+            
+            <div class="header-actions">
+                <div class="status-badge {{ if .enabled }}active-status{{ else }}disabled-status{{ end }}">
+                    {{ if .enabled }}
+                        <span class="live-dot"></span> متصل و فعال
+                    {{ else }}
+                        <span class="dead-dot"></span> غیرفعال
+                    {{ end }}
+                </div>
+                
+                <button id="tutorialBtn" class="header-icon-btn" title="راهنمای اتصال">
+                    <i class="ph-bold ph-question"></i>
+                </button>
+                <button id="themeToggleBtn" class="header-icon-btn" title="تغییر تم">
+                    <i class="ph-bold ph-moon"></i>
+                </button>
+            </div>
+        </header>
+
+        <section class="ui-card col-full">
+            <div class="data-header">
+                <span class="data-label">میزان مصرف اینترنت دوره</span>
+                <div class="data-numbers">
+                    <span id="usedValue">{{ .used }}</span> <span style="margin: 0 4px;">/</span> <span id="totalValue">{{ .total }}</span>
+                </div>
+            </div>
+            <div class="cyber-progress">
+                <div id="progressBar" class="cyber-progress-fill"></div>
+            </div>
+            <div class="remained-highlight">
+                <span>ترافیک باقیمانده مجاز:</span>
+                <span id="remainedValue">{{ .remained }}</span>
+            </div>
+        </section>
+
+        <div class="ui-card col-half">
+            <div class="sys-label">
+                <i class="ph-fill ph-calendar-check icon-amber"></i>
+                تاریخ اتمام اعتبار
+            </div>
+            <div class="sys-value-wrapper">
+                <div id="expireValue" class="sys-value date-display">در حال پردازش...</div>
+                <div id="daysLeftBadge" class="days-left-badge" style="display: none;"></div>
+            </div>
+        </div>
+
+        <div class="ui-card col-half">
+            <div class="sys-label">
+                <i class="ph-fill ph-clock-counter-clockwise icon-purple"></i>
+                آخرین اتصال آنلاین
+            </div>
+            <div id="lastOnlineValue" class="sys-value date-display">{{ .lastOnline }}</div>
+        </div>
+
+        <div class="ui-card col-full">
+            <div class="os-box">
+                <div class="os-info">
+                    <span class="os-title">نرم‌افزار پیشنهادی سیستم شما:</span>
+                    <a id="osAppLink" href="#" target="_blank" class="os-app-link">
+                        <i class="ph-bold ph-download-simple"></i> در حال بررسی...
+                    </a>
+                </div>
+                <i id="osIconDisplay" class="ph-fill ph-devices os-icon"></i>
+            </div>
+
+            <div class="actions-grid" style="margin-top: 12px;">
+                <a href="{{ .subUrl }}" class="btn-fire">
+                    <i class="ph-bold ph-lightning"></i>
+                    بروزرسانی در اپلیکیشن
+                </a>
+                <a href="{{ .subUrl }}" class="btn-outline">لینک اشتراک</a>
+                <a href="{{ .subJsonUrl }}" class="btn-outline">JSON</a>
+                <a href="{{ .subClashUrl }}" class="btn-outline">Clash</a>
+            </div>
+        </div>
+
+        <section class="ui-card col-full">
+            <div class="terminal-header">
+                <div class="terminal-title-wrapper">
+                    <i class="ph-fill ph-keyhole"></i>
+                    <span>کلیدهای اتصال مستقیم</span>
+                </div>
+                <button id="copyAllBtn" class="btn-copy-all">
+                    <i class="ph-bold ph-copy-simple"></i>
+                    <span>کپی همه</span>
+                </button>
+            </div>
+            
+            <div id="rawConfigsSource" style="display: none !important;">{{ range .links }}{{ . }} {{ end }}</div>
+            <div id="configsContainer"></div>
+        </section>
+
+        <footer class="footer col-full">
+            <a href="{{ .subSupportUrl }}" class="support-link" target="_blank">
+                <i class="ph-bold ph-headset"></i>
+                ارتباط با پشتیبانی
+            </a>
+            <span style="color: var(--text-muted); font-family: monospace;">ID: <span id="footerIdValue">{{ .sId }}</span></span>
+        </footer>
+
+    </div>
+
+    <div id="qrModal" class="custom-modal" onclick="closeModal('qrModal')">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div id="qrModalTitle" class="modal-title">بارکد اتصال مستقیم</div>
+            <div class="qr-wrapper">
+                <canvas id="qrCanvas"></canvas>
+            </div>
+            <button class="modal-close-btn" onclick="closeModal('qrModal')">بستن پنجره</button>
+        </div>
+    </div>
+
+    <div id="tutorialModal" class="custom-modal" onclick="closeModal('tutorialModal')">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-title">
+                <i class="ph-fill ph-info icon-purple"></i> راهنمای اتصال سریع
+            </div>
+            <ul class="tutorial-list">
+                <li><i class="ph-bold ph-number-circle-one"></i> ابتدا نرم‌افزار مخصوص دستگاه خود را دانلود و نصب کنید.</li>
+                <li><i class="ph-bold ph-number-circle-two"></i> دکمه‌ی «کپی همه» را در بخش کلیدها یا دکمه «لینک اشتراک» را بزنید.</li>
+                <li><i class="ph-bold ph-number-circle-three"></i> وارد نرم‌افزار شده و از منوی افزودن (علامت +)، گزینه Import from Clipboard را انتخاب کنید و متصل شوید!</li>
+            </ul>
+            <button class="modal-close-btn" onclick="closeModal('tutorialModal')">متوجه شدم</button>
+        </div>
+    </div>
+
+    <script>
+        // === توابع تبدیل اعداد فارسی ===
+        function toPersianDigits(str) {
+            const id = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+            return str.toString().replace(/[0-9]/g, function(w) { return id[+w]; });
+        }
+
+        // === سیستم تغییر تم (Dark / Light) ===
+        const themeToggleBtn = document.getElementById('themeToggleBtn');
+        const themeIcon = themeToggleBtn.querySelector('i');
+        
+        let currentTheme = localStorage.getItem('vpn_theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', currentTheme);
+        updateThemeIcon(currentTheme);
+
+        themeToggleBtn.addEventListener('click', () => {
+            currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', currentTheme);
+            localStorage.setItem('vpn_theme', currentTheme);
+            updateThemeIcon(currentTheme);
+        });
+
+        function updateThemeIcon(theme) {
+            themeIcon.className = theme === 'dark' ? 'ph-bold ph-sun' : 'ph-bold ph-moon';
+        }
+
+        // === سیستم پاپ آپ (Modals) ===
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove("active");
+        }
+
+        document.getElementById('tutorialBtn').addEventListener('click', () => {
+            document.getElementById('tutorialModal').classList.add("active");
+        });
+
+        let qr = null;
+        function openQRModal(button, configName) {
+            const fullLink = button.getAttribute("data-link");
+            document.getElementById("qrModalTitle").innerText = configName;
+            
+            if (!qr) {
+                qr = new QRious({
+                    element: document.getElementById('qrCanvas'),
+                    size: 220,
+                    level: 'H',
+                    background: '#ffffff',
+                    foreground: '#000000'
+                });
+            }
+            qr.value = fullLink;
+            document.getElementById("qrModal").classList.add("active");
+        }
+
+        // === سیستم کپی ===
+        let allExtractedLinks = [];
+        function copyLink(button) {
+            const fullLink = button.getAttribute("data-link");
+            navigator.clipboard.writeText(fullLink).then(() => {
+                button.className = "ph-bold ph-check action-icon-btn";
+                button.style.color = "var(--accent-green)";
+                setTimeout(() => {
+                    button.className = "ph-bold ph-copy action-icon-btn";
+                    button.style.color = "var(--text-muted)";
+                }, 2000);
+            });
+        }
+
+        // === منطق اصلی پردازش در هنگام لود ===
+        document.addEventListener("DOMContentLoaded", function() {
+            
+            // ۱. تشخیص هوشمند سیستم‌عامل و جایگذاری لینک‌های گیت‌هاب/اپ‌استور
+            const ua = navigator.userAgent;
+            const osAppLink = document.getElementById("osAppLink");
+            const osIconDisplay = document.getElementById("osIconDisplay");
+            
+            if (/android/i.test(ua)) { 
+                osAppLink.innerHTML = '<i class="ph-bold ph-github-logo"></i> دانلود v2rayNG'; 
+                osAppLink.href = "https://github.com/2dust/v2rayNG/releases/latest";
+                osIconDisplay.className = "ph-fill ph-android-logo os-icon"; 
+            }
+            else if (/iPad|iPhone|iPod/.test(ua)) { 
+                // برای اپل لینک اپ استور قرار داده شده تا بدون دردسر نصب شود
+                osAppLink.innerHTML = '<i class="ph-bold ph-app-store-logo"></i> دانلود V2Box'; 
+                osAppLink.href = "https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690";
+                osIconDisplay.className = "ph-fill ph-apple-logo os-icon"; 
+            }
+            else if (/windows/i.test(ua)) { 
+                osAppLink.innerHTML = '<i class="ph-bold ph-github-logo"></i> دانلود v2rayN'; 
+                osAppLink.href = "https://github.com/2dust/v2rayN/releases/latest";
+                osIconDisplay.className = "ph-fill ph-windows-logo os-icon"; 
+            }
+            else if (/mac/i.test(ua)) { 
+                osAppLink.innerHTML = '<i class="ph-bold ph-github-logo"></i> دانلود V2rayU'; 
+                osAppLink.href = "https://github.com/yanue/V2rayU/releases/latest";
+                osIconDisplay.className = "ph-fill ph-apple-logo os-icon"; 
+            }
+            else if (/linux/i.test(ua)) { 
+                osAppLink.innerHTML = '<i class="ph-bold ph-github-logo"></i> دانلود Nekoray'; 
+                osAppLink.href = "https://github.com/MatsuriDayo/nekoray/releases/latest";
+                osIconDisplay.className = "ph-fill ph-linux-logo os-icon"; 
+            } else {
+                osAppLink.innerHTML = '<i class="ph-bold ph-download-simple"></i> لیست نرم‌افزارها';
+                osAppLink.href = "https://github.com/2dust/v2rayN/releases";
+            }
+
+            // ۲. نام کاربری هدر
+            const rawEmailsText = document.getElementById("rawEmailsSource").innerText.trim();
+            const userNameHeader = document.getElementById("userNameHeader");
+            if(rawEmailsText !== "" && rawEmailsText !== "null") {
+                userNameHeader.innerText = rawEmailsText.split(/\s+/)[0];
+                userNameHeader.style.direction = "ltr";
+            } else {
+                userNameHeader.innerText = "کاربر مِهمان";
+            }
+
+            // ۳. فرمت زمان و روزشمار هوشمند
+            function formatTimestamp(value) {
+                const cleanValue = value.trim();
+                if (/^\d+$/.test(cleanValue) && cleanValue.length > 5) {
+                    const timestamp = parseInt(cleanValue, 10);
+                    const date = new Date(timestamp);
+                    return date.toLocaleDateString('fa-IR') + " - " + date.toLocaleTimeString('fa-IR', {hour: '2-digit', minute:'2-digit'});
+                }
+                return value;
+            }
+
+            const rawExpire = document.getElementById("rawExpireSource").innerText.trim();
+            const expireElement = document.getElementById("expireValue");
+            const daysLeftBadge = document.getElementById("daysLeftBadge");
+            
+            expireElement.innerText = formatTimestamp(rawExpire);
+            
+            // محاسبه روزشمار
+            if (/^\d+$/.test(rawExpire) && rawExpire.length > 5) {
+                const expireTimestamp = parseInt(rawExpire, 10);
+                const now = new Date().getTime();
+                const diffTime = expireTimestamp - now;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                daysLeftBadge.style.display = "inline-block";
+                if (diffDays > 10) {
+                    daysLeftBadge.className = "days-left-badge days-safe";
+                    daysLeftBadge.innerText = toPersianDigits(diffDays) + " روز باقیمانده";
+                } else if (diffDays > 3) {
+                    daysLeftBadge.className = "days-left-badge days-warn";
+                    daysLeftBadge.innerText = toPersianDigits(diffDays) + " روز باقیمانده";
+                } else if (diffDays > 0) {
+                    daysLeftBadge.className = "days-left-badge days-danger";
+                    daysLeftBadge.innerText = "فقط " + toPersianDigits(diffDays) + " روز باقیمانده!";
+                } else {
+                    daysLeftBadge.className = "days-left-badge days-danger";
+                    daysLeftBadge.innerText = "منقضی شده";
+                }
+            } else if (rawExpire === "0" || rawExpire === "" || rawExpire.includes("نامحدود")) {
+                expireElement.innerHTML = '<span style="font-size:1.5rem; line-height:1; color:var(--brand-primary);">&infin;</span>';
+                daysLeftBadge.style.display = "inline-block";
+                daysLeftBadge.className = "days-left-badge days-safe";
+                daysLeftBadge.innerText = "زمان نامحدود";
+            }
+
+            const lastOnlineElement = document.getElementById("lastOnlineValue");
+            const lastOnlineTxt = lastOnlineElement.innerText.trim();
+            if (lastOnlineTxt === "0" || lastOnlineTxt === "" || lastOnlineTxt === "null") {
+                lastOnlineElement.innerText = "بدون اتصال";
+            } else {
+                lastOnlineElement.innerText = toPersianDigits(formatTimestamp(lastOnlineTxt));
+            }
+
+            // ۴. پردازش حجم‌ها
+            function convertToBytes(str) {
+                const cleanStr = str.toUpperCase().trim();
+                const numMatch = cleanStr.match(/[\d.]+/);
+                if (!numMatch) return 0;
+                const number = parseFloat(numMatch[0]);
+                if (cleanStr.includes("GB") || cleanStr.includes("گیگا")) return number * 1024 * 1024 * 1024;
+                if (cleanStr.includes("MB") || cleanStr.includes("مگا")) return number * 1024 * 1024;
+                if (cleanStr.includes("KB") || cleanStr.includes("کیلو")) return number * 1024;
+                if (cleanStr.includes("B") || cleanStr.includes("بایت")) return number;
+                return number * 1024 * 1024 * 1024;
+            }
+
+            function formatBytesToPersian(bytes) {
+                if (bytes <= 0) return "۰ بایت";
+                const units = ["بایت", "کیلوبایت", "مگابایت", "گیگابایت", "ترابایت"];
+                const i = Math.floor(Math.log(bytes) / Math.log(1024));
+                const formattedValue = parseFloat((bytes / Math.pow(1024, i)).toFixed(2));
+                return toPersianDigits(formattedValue) + " " + units[i];
+            }
+
+            const usedElement = document.getElementById("usedValue");
+            const totalElement = document.getElementById("totalValue");
+            const remainedElement = document.getElementById("remainedValue");
+
+            const usedBytes = convertToBytes(usedElement.innerText);
+            const totalTextRaw = totalElement.innerText;
+            const totalBytes = convertToBytes(totalTextRaw);
+            const remainedBytes = totalBytes - usedBytes;
+
+            if (totalBytes === 0 || totalTextRaw.trim() === "0" || totalTextRaw.includes("نامحدود")) {
+                totalElement.innerHTML = '<span style="font-size:1.6rem; color:var(--brand-primary);">&infin;</span>';
+                remainedElement.innerHTML = '<span style="font-size:1.6rem; color:var(--accent-green);">&infin;</span>';
+                document.getElementById("progressBar").style.width = "15%";
+                usedElement.innerText = formatBytesToPersian(usedBytes);
+            } else {
+                usedElement.innerText = formatBytesToPersian(usedBytes);
+                totalElement.innerText = formatBytesToPersian(totalBytes);
+                remainedElement.innerText = formatBytesToPersian(remainedBytes > 0 ? remainedBytes : 0);
+
+                let percentage = (usedBytes / totalBytes) * 100;
+                if (percentage > 100) percentage = 100;
+                document.getElementById("progressBar").style.width = percentage + "%";
+            }
+
+            // ۵. تفکیک و رندر کانفیگ‌ها
+            const configsContainer = document.getElementById("configsContainer");
+            const copyAllBtn = document.getElementById("copyAllBtn");
+            const rawText = document.getElementById("rawConfigsSource").innerHTML;
+            const configRegex = /(vless|vmess|trojan|ss|ssr):\/\/[^\s<]+/g;
+            const matches = rawText.match(configRegex) || [];
+
+            if (matches.length === 0) {
+                configsContainer.innerHTML = '<div style="font-size:0.9rem; color:var(--text-muted); text-align:center; padding:10px;">کلید اتصالی یافت نشد.</div>';
+                copyAllBtn.style.display = "none";
+            } else {
+                matches.forEach(function(rawLink) {
+                    let cleanLink = rawLink.split(/<br\s*\/?>/i)[0].trim();
+                    cleanLink = cleanLink.replace(/[\r\n]+/g, '').trim();
+                    allExtractedLinks.push(cleanLink);
+
+                    let protocol = "VPN";
+                    const protoMatch = cleanLink.match(/^([^:]+):\/\//);
+                    if (protoMatch) protocol = protoMatch[1];
+
+                    let name = "اتصال مستقیم";
+                    if (cleanLink.includes("#")) {
+                        name = decodeURIComponent(cleanLink.split("#")[1]).split(/[\r\n]+/)[0].trim();
+                    } else {
+                        name = cleanLink.substring(0, 20) + "...";
+                    }
+
+                    const row = document.createElement("div");
+                    row.className = "config-line";
+                    row.innerHTML = `
+                        <div class="config-details">
+                            <span class="config-badge">${protocol}</span>
+                            <span class="config-name-text">${name}</span>
+                        </div>
+                        <div class="config-actions">
+                            <button class="ph-bold ph-qr-code action-icon-btn" data-link="${cleanLink}" onclick="openQRModal(this, '${name}')"></button>
+                            <button class="ph-bold ph-copy action-icon-btn" data-link="${cleanLink}" onclick="copyLink(this)"></button>
+                        </div>
+                    `;
+                    configsContainer.appendChild(row);
+                });
+
+                copyAllBtn.addEventListener("click", function() {
+                    navigator.clipboard.writeText(allExtractedLinks.join("\n")).then(() => {
+                        const icon = copyAllBtn.querySelector("i");
+                        const label = copyAllBtn.querySelector("span");
+                        
+                        icon.className = "ph-bold ph-check";
+                        copyAllBtn.style.background = "var(--status-active-bg)";
+                        copyAllBtn.style.color = "var(--status-active-text)";
+                        label.innerText = "کپی شد!";
+
+                        setTimeout(() => {
+                            icon.className = "ph-bold ph-copy-simple";
+                            copyAllBtn.style.background = "var(--accent-warm-light)";
+                            copyAllBtn.style.color = "var(--accent-warm)";
+                            label.innerText = "کپی همه";
+                        }, 2000);
+                    });
+                });
+            }
+
+            // ۶. فارسی‌سازی آیدی فوتر
+            document.getElementById("footerIdValue").innerText = toPersianDigits(document.getElementById("footerIdValue").innerText);
+        });
+    </script>
+</body>
+</html>
