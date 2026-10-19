@@ -66,7 +66,7 @@ func run() error {
 		return nil
 	}
 	switch command {
-	case "audit", "menu", "status", "doctor", "start", "stop", "restart", "logs", "url", "reset", "admin-reset", "domain", "port", "ssl", "update", "uninstall", "repair", "ports", "inbounds", "inbound-port", "backup-schedule", "language", "node":
+	case "audit", "menu", "status", "doctor", "start", "stop", "restart", "logs", "url", "reset", "admin-reset", "domain", "port", "ssl", "update", "auto-update", "uninstall", "repair", "ports", "inbounds", "inbound-port", "backup-schedule", "language", "node":
 		controller, err := exec.LookPath("velorayctl")
 		if err != nil {
 			return errors.New("management is available after installation; run veloray help for development commands")
@@ -90,7 +90,7 @@ func run() error {
   veloray status | doctor | url    Service health and panel address
   veloray start | stop | restart   Manage panel, agent and both cores
   veloray reset [USERNAME]         Change an administrator password
-  veloray logs [web|agent|xray|singbox] Follow service logs
+  veloray logs [web|agent|xray|singbox|subscriptions] Follow service logs
   veloray audit [LIMIT]            Read server audit events
   veloray backup [FILE]            Create a private recovery backup
   veloray restore FILE            Verify and restore a backup
@@ -100,6 +100,7 @@ func run() error {
   veloray ports | inbounds         Inspect local listeners and saved inbounds
   veloray inbound-port ID PORT     Change an inbound port and update its links
   veloray update [DIRECTORY]       Install an update with a recovery backup
+  veloray auto-update enable|disable|status|check|run
   veloray uninstall                Remove services and program files
 
 Development: serve | migrate | bootstrap | bootstrap-local | reconcile | version

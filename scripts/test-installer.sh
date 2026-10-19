@@ -520,6 +520,9 @@ pass private-operation-logs
 if [[ -n "${VELORAY_TEST_PANEL_BINARY:-}" ]];then
  VELORAY_ENV_FILE="$HOST_ROOT/etc/veloray/veloray.env" "$VELORAY_TEST_PANEL_BINARY" >"$TEST_ROOT/host-result" 2>&1
  grep -Fq 'Reset administrator password' "$TEST_ROOT/host-result";pass compiled-default-opens-menu
+ VELORAY_ENV_FILE="$HOST_ROOT/etc/veloray/veloray.env" "$VELORAY_TEST_PANEL_BINARY" auto-update status >"$TEST_ROOT/host-result" 2>&1
+ grep -Fq 'Repository: ParsaZali/VeloRay (main)' "$TEST_ROOT/host-result"
+ pass compiled-auto-update-dispatch
  VELORAY_ENV_FILE="$HOST_ROOT/etc/veloray/veloray.env" "$VELORAY_TEST_PANEL_BINARY" reset >"$TEST_ROOT/host-result" 2>&1
  grep -Fq 'Existing sessions were revoked' "$TEST_ROOT/host-result";pass compiled-reset-alias
 fi
