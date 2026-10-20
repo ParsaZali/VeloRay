@@ -1206,4 +1206,20 @@ Object.assign(fa, {
     "انتخاب‌گرها با پیشوند تگ خروجی تطبیق داده می‌شوند. خروجی جدید با پیشوند منطبق خودکار عضو می‌شود. ذخیره، تنظیمات این نود را اعمال کرده و گروه‌های ارث‌رسیده از پروفایل را جایگزین می‌کند.",
   "Random and round robin distribute connections without checking availability. Least ping and least load require an observatory configured in the node or shared profile.":
     "روش تصادفی و نوبتی، اتصال‌ها را بدون بررسی دسترس‌پذیری تقسیم می‌کنند. روش کمترین تأخیر و کمترین بار به Observatory در تنظیمات نود یا پروفایل مشترک نیاز دارند.",
+  "Installed GeoIP and Geosite lists": "فهرست‌های نصب‌شدهٔ GeoIP و Geosite",
+  "Browse the assets installed on this node. Search by tag, then copy a reference or create an Xray rule. Assets are read only.":
+    "فایل‌های نصب‌شده روی این نود را با تگ جست‌وجو کنید؛ مرجع را کپی کنید یا قانون Xray بسازید. این ابزار فقط خواندنی است.",
+  "Could not copy. Select the reference and copy it manually.":
+    "کپی انجام نشد. مرجع را انتخاب و دستی کپی کنید.",
+  Asset: "فایل داده",
+  "Search tags": "جست‌وجوی تگ‌ها",
+  Matches: "نتیجه‌ها",
+  Showing: "نمایش",
+  "No matching tags.": "تگ منطبقی پیدا نشد.",
+  entries: "رکورد",
+  "Create rule": "ساخت قانون",
+  "At most 100 tags are shown. Narrow the search to find more. Xray .dat references are not sing-box rule sets.":
+    "حداکثر ۱۰۰ تگ نمایش داده می‌شود. جست‌وجو را دقیق‌تر کنید. مرجع فایل dat مخصوص Xray با Rule Set در sing-box متفاوت است.",
+  "For GitHub, use issuer https://github.com and the numeric account ID. For Telegram, use https://oauth.telegram.org and the verified OIDC subject. Each user has one SSO binding.":
+    "برای گیت‌هاب، صادرکننده https://github.com و شناسهٔ عددی حساب را وارد کنید. برای تلگرام، https://oauth.telegram.org و مقدار subject تأییدشدهٔ OIDC را وارد کنید. هر کاربر یک اتصال ورود سازمانی دارد.",
 });

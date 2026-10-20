@@ -27,7 +27,7 @@ project maintainers on licensing whenever reusing third-party code.
 - [x] Service access groups and reusable plan defaults, with reseller budgets preserved.
 - [x] Shared encrypted node profiles, reusable snippets, 50 revisions and compensated deployment.
 - [x] TUIC v5 and Snell v6 server management, exports and real-engine CI round trips.
-- [x] Naive TLS server management and URI/JSON export; compatible Naive client round trip remains unverified.
+- [x] Naive TLS server management, corrected Basic-auth identities, URI/JSON export and HTTP/1.1 CONNECT/padding interoperability. Chromium/HTTP2 client testing remains separate.
 - [x] Live addition of users on unchanged Xray VLESS/VMess/Trojan listeners, exact acknowledgment and rollback.
 - [x] Xray client JSON subscriptions and a configurable JSON template.
 - [x] Calendar-aware quota renewal and bounded, token-free subscription request history.
@@ -127,14 +127,14 @@ See [fallbacks and balancing](fallbacks-and-balancing.md) for limits and verific
 - [ ] Hot removal/update, sing-box changes and structural inbound hot apply.
 - [x] Native TUIC v5 and Snell v6 management with real-core round trips.
 - [x] Native Naive TLS management and exports.
-- [ ] Verify a compatible Naive client round trip.
+- [x] Verify a compatible Naive HTTP/1.1 client round trip with native user attribution; Chromium/HTTP2 client coverage remains separate.
 - [ ] Native, tested AmneziaWG, MTProto, ShadowTLS and optional SSH proxy management.
-- [ ] Validate feasibility per engine and distinguish upstream engine capability
-      from the panel UI's explicitly supported configuration forms.
+- [x] Validate feasibility per pinned engine and distinguish upstream engine capability
+      from supported forms; see `native-protocols-and-live-apply.md`. This does not mark the remaining protocol implementations complete.
 - [x] Guided outbound chaining and sing-box selector/URL-test controls, with cycle/dependency validation.
 - [x] Xray fallbacks and outbound balancing within the documented engine/form limits.
-- [ ] Geo asset browsing, transparent proxy,
-      transparent capture, WARP / provider integrations, external-provider
+- [x] Read-only per-node GeoIP/Geosite tag browser, asset fingerprints and guided Xray rule creation.
+- [ ] Transparent proxy, transparent capture, WARP / provider integrations, external-provider
       subscriptions, link-aware DNS and domain fronting controls.
 - [x] Outbound HTTP health probes, latency and periodic watchdog alerts (no automatic production restarts).
 - [ ] Maintain safe privileged-agent boundaries for every protocol addition.
@@ -155,7 +155,9 @@ See [fallbacks and balancing](fallbacks-and-balancing.md) for limits and verific
 - [x] Optional Discord and signed webhook destinations with audit-event routing.
 - [x] SMTP/email notifications, inactive-client and configurable quota-threshold alerts.
 - [x] Optional OIDC code/PKCE login with exact pre-bound subjects and local 2FA.
-- [ ] Direct GitHub/Telegram OAuth and LDAP adapters.
+- [x] Direct GitHub OAuth with PKCE, exact account-ID binding and local second factor.
+- [x] Telegram sign-in through the existing standard OIDC code flow and provider-aware login button (operator registration required; see `external-login-and-proxies.md`).
+- [ ] Direct LDAP adapter.
 
 ## Stage 5 — internationalization and UX
 - [x] Persian Jalali/timezone display preferences for expiry and collection dates.

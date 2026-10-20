@@ -145,6 +145,30 @@ async function choose(page: Page, label: string, value: string, dialog = true) {
   await page.locator(`.select-menu [data-value="${value}"]`).click();
 }
 
+test("installed geo assets load on demand, filter and create a rule", async ({ page }) => {
+  const requests: URL[] = [];
+  await panel(page, "/routing");
+  await page.route("**/api/nodes/1/geo-assets?*", async (route) => {
+    const url = new URL(route.request().url());requests.push(url);
+    await route.fulfill({ json: { kind: "geosite", sha256: "a".repeat(64), size: 1048576, modified: "2026-10-20T12:00:00Z", total: 200, matched: url.searchParams.get("q") === "none" ? 0 : 1, entries: url.searchParams.get("q") === "none" ? [] : [{ tag: "ir", reference: "geosite:ir", count: 45 }] } });
+  });
+  expect(requests).toHaveLength(0);
+  await page.getByText("Installed GeoIP and Geosite lists", { exact: true }).click();
+  await expect(page.getByText("geosite:ir", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Create rule geosite:ir", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Save & deploy", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator("#main-content")).toContainText("geosite:ir");
+  await page.getByLabel("Search tags", { exact: true }).fill("none");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(page.getByText("No matching tags.", { exact: true })).toBeVisible();
+  expect(requests.at(-1)?.searchParams.get("q")).toBe("none");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test("original dark and light palette, raw upload and download", async ({
   page,
 }) => {
@@ -1481,6 +1505,30 @@ test("notification destinations support independent event routing and do not sub
       exact: true,
     }),
   ).toHaveCount(0);
+});
+
+test("GitHub and Telegram login availability preserves password login and handles provider failure", async ({ page }) => {
+  let enabled = true;
+  let starts = 0;
+  await page.addInitScript(() => { localStorage.setItem("veloray-locale", "en"); localStorage.setItem("veloray-login-locale", "en"); });
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/me") await route.fulfill({status:401,json:{detail:"Authentication required"}});
+    else if (path === "/api/auth/oidc") await route.fulfill({json:{enabled,telegram:enabled,github_enabled:enabled}});
+    else if (path === "/api/auth/github/start") { starts++;expect(route.request().method()).toBe("POST");await route.fulfill({status:502,json:{detail:"Provider unavailable"}}); }
+    else await route.fulfill({json:{}});
+  });
+  await page.goto("/");
+  await expect(page.getByRole("button",{name:"Sign in with Telegram",exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"Sign in with GitHub",exact:true}).click();
+  await expect(page.getByRole("alert")).toContainText("Provider unavailable");
+  expect(starts).toBe(1);
+  await expect(page.getByLabel("Password",{exact:true})).toBeVisible();
+  enabled=false;
+  await page.reload();
+  await expect(page.getByRole("button",{name:"Sign in with GitHub",exact:true})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Sign in with Telegram",exact:true})).toHaveCount(0);
+  await expect(page.getByLabel("Password",{exact:true})).toBeVisible();
 });
 
 test("OIDC login keeps the local second factor and password fallback", async ({

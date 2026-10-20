@@ -62,12 +62,22 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
     () => new URLSearchParams(location.search).get("oidc") === "totp",
   );
   const [oidcEnabled, setOidcEnabled] = useState(false);
+  const [githubEnabled, setGithubEnabled] = useState(false);
+  const [telegram, setTelegram] = useState(false);
   const [need2fa, setNeed2fa] = useState(oidcChallenge);
   useEffect(() => {
     const c = new AbortController();
-    void api<{ enabled: boolean }>("/auth/oidc", { signal: c.signal })
+    void api<{
+      enabled: boolean;
+      github_enabled?: boolean;
+      telegram?: boolean;
+    }>("/auth/oidc", { signal: c.signal })
       .then((d) => {
-        if (!c.signal.aborted) setOidcEnabled(d.enabled);
+        if (!c.signal.aborted) {
+          setOidcEnabled(d.enabled);
+          setGithubEnabled(d.github_enabled === true);
+          setTelegram(d.telegram === true);
+        }
       })
       .catch(() => {});
     return () => c.abort();
@@ -100,6 +110,30 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
     localStorage.setItem("veloray-login-locale", next);
     setLocale(next);
     setError("");
+  }
+
+  async function startSSO(provider: "oidc" | "github") {
+    setBusy(true);
+    setError("");
+    try {
+      await api("/auth/csrf");
+      const data = await api<{ authorization_url: string }>(
+        `/auth/${provider}/start`,
+        { method: "POST", body: "{}" },
+      );
+      const url = new URL(data.authorization_url);
+      if (
+        url.protocol !== "https:" ||
+        (provider === "github" &&
+          (url.hostname !== "github.com" ||
+            url.pathname !== "/login/oauth/authorize"))
+      )
+        throw Error("Invalid identity provider URL");
+      window.location.assign(url.href);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "SSO unavailable");
+      setBusy(false);
+    }
   }
 
   async function submit(e: FormEvent) {
@@ -285,30 +319,28 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
                     variant="outline"
                     className="w-full"
                     disabled={busy}
-                    onClick={async () => {
-                      setBusy(true);
-                      setError("");
-                      try {
-                        await api("/auth/csrf");
-                        const d = await api<{ authorization_url: string }>(
-                          "/auth/oidc/start",
-                          { method: "POST", body: "{}" },
-                        );
-                        const url = new URL(d.authorization_url);
-                        if (url.protocol !== "https:")
-                          throw Error("Invalid identity provider URL");
-                        window.location.assign(url.href);
-                      } catch (e) {
-                        setError(
-                          e instanceof Error ? e.message : "SSO unavailable",
-                        );
-                        setBusy(false);
-                      }
-                    }}
+                    onClick={() => void startSSO("oidc")}
+                  >
+                    {telegram
+                      ? locale === "fa"
+                        ? "ورود با تلگرام"
+                        : "Sign in with Telegram"
+                      : locale === "fa"
+                        ? "ورود با حساب سازمانی"
+                        : "Sign in with SSO"}
+                  </Button>
+                )}
+                {githubEnabled && !need2fa && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={busy}
+                    onClick={() => void startSSO("github")}
                   >
                     {locale === "fa"
-                      ? "ورود با حساب سازمانی"
-                      : "Sign in with SSO"}
+                      ? "ورود با گیت‌هاب"
+                      : "Sign in with GitHub"}
                   </Button>
                 )}
                 {need2fa && (

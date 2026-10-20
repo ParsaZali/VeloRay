@@ -114,8 +114,9 @@ func TestIntegrationNativeProtocolsWithPinnedSingBox(t *testing.T) {
 					t.Fatal(clash, e)
 				}
 			}
-			// Naive outbound requires a client build with Chromium/cronet support. The
-			// bundled CGO-free server supports Naive inbound; verify that boundary honestly.
+			if p == "naive" && os.Getenv("VELORAY_TEST_NO_NETLINK") != "1" {
+				naiveRoundTrip(t, binary, serverFile, cert, outbound, controller, naiveUsername(c), str(obj(obj(server, "experimental"), "v2ray_api"), "listen"))
+			}
 			if p != "naive" && os.Getenv("VELORAY_TEST_NO_NETLINK") != "1" {
 				if tls := obj(outbound, "tls"); len(tls) > 0 {
 					tls["insecure"] = true

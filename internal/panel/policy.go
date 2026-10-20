@@ -134,6 +134,9 @@ func deviceRulesForNode(ctx context.Context, q Query, node Data, core string) ([
 			continue
 		}
 		user := fmt.Sprintf("veloray:%d:%s", num(c, "id"), str(c, "name"))
+		if str(i, "protocol") == "naive" {
+			user = naiveUsername(c)
+		}
 		if core == "xray" {
 			rules = append(rules, Data{"type": "field", "user": []any{user}, "source": ips, "outboundTag": "blocked"})
 		} else {

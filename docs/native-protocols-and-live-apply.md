@@ -65,8 +65,20 @@ user twice.
 CI extracts the pinned bundled runtimes, runs the complete PostgreSQL/Go race
 suite, validates the protocol/configuration matrix, exercises real Xray live-user
 addition, and performs loopback TUIC/Snell round trips with authenticated-user
-telemetry. Naive server configuration is validated; a Naive outbound client round
-trip requires a separate Chromium-enabled client and remains unverified here.
+telemetry. An independent Naive HTTP/1.1 CONNECT fixture verifies TLS, ten
+bidirectional transfers across the eight padded-record boundary, authenticated
+principal attribution and rejection of invalid passwords/missing padding. This
+does not claim testing of a Chromium/cronet or HTTP/2 client.
+
+Naive Basic-auth usernames use a reversible colon-free encoding of the canonical
+panel principal. After upgrading, use the node's **Deploy** action to apply the
+new server configuration, then refresh existing Naive subscriptions. Upgrades
+preserve core configuration files until an explicit deployment. Previously
+generated colon-containing usernames could pass configuration validation but
+could not authenticate over HTTP Basic. Counter and live-IP normalization retain
+the canonical client ID for quota, online status and device enforcement. Native
+sing-box auth-user rules use the encoded wire identity. A PostgreSQL integration
+test checks that repeated samples charge usage once and preserve connected IPs.
 
 The restricted development environment denies netlink sockets. Local full test
 runs set `VELORAY_TEST_NO_NETLINK=1` and omit sing-box runtime round trips while
@@ -80,3 +92,28 @@ competitor roadmap. They are not implemented by merely adding a protocol label.
 CI gives `CAP_NET_ADMIN` only to its extracted temporary Xray binary so the existing
 TUN configuration check can open a TUN device. This is runner-only test setup; it
 does not modify bundled binaries or grant privileges to the panel process.
+
+
+## Feasibility of additional engines and capture modes
+
+This assessment uses the shipped Xray v26.3.27 JSON protocol registry and the
+bundled sing-box 1.14.3 source/build tags, rather than a dropdown of protocol names.
+
+| Capability | Bundled engine boundary | Required panel work before support can be advertised |
+| --- | --- | --- |
+| AmneziaWG | No AmneziaWG inbound in either current protocol registry; ordinary WireGuard is a different protocol | Package and supervise a separate compatible engine/module, then implement peer lifecycle, counters, revocation and client exports |
+| MTProto | Absent from both current inbound registries | Separate MTProxy service, secret lifecycle, proven per-principal accounting and supported quota semantics |
+| ShadowTLS | sing-box supplies a TLS wrapper and inner-inbound detour | Manage and validate the paired wrapper/inner graph, both authentication layers, exports, principal attribution and revocation |
+| SSH server | sing-box supplies an SSH outbound, not an SSH server | Separate SSH server lifecycle, authorization/isolation, tunnel-only policy and independently tested traffic accounting |
+| Naive Chromium client | Naive server is bundled; optional cronet outbound is excluded from the CGO-free build | Separate compatible Chromium/cronet client packaging and HTTP/2 interoperability coverage; HTTP/1.1 fixture coverage is shipped |
+| TUN / transparent capture | Engine options exist but require host interfaces, policy routing and privileges | Confined privileged operations, management-path exclusions, rollback and host-level network tests; the default container grants no TUN or NET_ADMIN access |
+
+These are implementation boundaries, not completed integrations. Enabling a new
+protocol must preserve authenticated telemetry, quota/device enforcement and
+crash-safe state restoration. An absent server is not substituted with an outbound
+of the same name. The default agent cannot execute arbitrary shell commands or
+control unrelated host services to approximate these features.
+
+Sources: [pinned Xray protocol registry](https://github.com/XTLS/Xray-core/blob/v26.3.27/infra/conf/xray.go),
+[pinned sing-box source](https://github.com/SagerNet/sing-box/tree/v1.14.3/protocol),
+and this repository's `scripts/build-singbox.sh`.

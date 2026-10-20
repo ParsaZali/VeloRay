@@ -21,6 +21,7 @@ import { Dialog } from "@/components/common/dialog";
 import { Input, Select, Textarea } from "@/components/ui/controls";
 import { can, useSession } from "@/lib/session";
 import { OutboundTraffic } from "@/components/outbound-traffic";
+import { GeoAssets } from "@/components/geo-assets";
 import {
   XrayBalancing,
   type BalancingState,
@@ -411,6 +412,32 @@ function NetworkPage({ kind }: { kind: "outbounds" | "routing_rules" }) {
           />
         </label>
       </div>
+      {node && routing && coreFilter === "xray" && session?.is_superuser && (
+        <GeoAssets
+          key={`geo-${node.id}`}
+          node={node.id}
+          onUse={
+            editable
+              ? (entry, kind) => {
+                  const config = {
+                    ...routingPreset("xray", "custom"),
+                    [kind === "geoip" ? "ip" : "domain"]: [entry.reference],
+                  };
+                  setEditor({
+                    name: entry.tag,
+                    node: node.id,
+                    core: "xray",
+                    enabled: true,
+                    priority: 100,
+                    config,
+                  });
+                  setText(JSON.stringify(config, null, 2));
+                  setError("");
+                }
+              : undefined
+          }
+        />
+      )}
       {node && routing && coreFilter === "xray" && session?.is_superuser && (
         <XrayBalancing
           key={node.id}

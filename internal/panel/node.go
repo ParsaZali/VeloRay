@@ -93,6 +93,7 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 	if e != nil {
 		return e
 	}
+	normalizeNaiveTelemetry(stats)
 	if str(stats, "accounting") != "durable-v1" || str(stats, "ledger_id") == "" {
 		return errors.New("upgrade the node agent before collecting traffic")
 	}
@@ -199,8 +200,9 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 			continue
 		}
 		var client Data
-		if parts[0] == "user" && strings.HasPrefix(parts[1], "veloray:") {
-			p := strings.SplitN(parts[1], ":", 3)
+		principal := canonicalNaiveUsername(parts[1])
+		if parts[0] == "user" && strings.HasPrefix(principal, "veloray:") {
+			p := strings.SplitN(principal, ":", 3)
 			if len(p) >= 2 {
 				cid, _ := strconv.ParseInt(p[1], 10, 64)
 				client = clients[cid]

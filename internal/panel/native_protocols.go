@@ -1,9 +1,61 @@
 package panel
 
 import (
+	"encoding/base64"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 )
+
+// HTTP Basic usernames cannot contain colons. Encode the canonical principal
+// reversibly so subscriptions, telemetry and per-user policy share one identity.
+func naiveUsername(c Data) string {
+	return "veloray-naive-" + base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf("veloray:%d:%s", num(c, "id"), str(c, "name"))))
+}
+func canonicalNaiveUsername(name string) string {
+	const prefix = "veloray-naive-"
+	if !strings.HasPrefix(name, prefix) || len(name) > 1024 {
+		return name
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(name, prefix))
+	if err != nil {
+		return name
+	}
+	parts := strings.SplitN(string(raw), ":", 3)
+	if len(parts) != 3 || parts[0] != "veloray" || parts[2] == "" {
+		return name
+	}
+	id, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || id < 1 || strconv.FormatInt(id, 10) != parts[1] {
+		return name
+	}
+	return string(raw)
+}
+func normalizeNaiveTelemetry(stats Data) {
+	// Counter names remain exactly as supplied by the durable agent ledger.
+	// Decode their identity only after splitting the metric envelope in collect;
+	// display names may themselves contain the metric delimiter.
+	for index, name := range array(stats, "online_users") {
+		if text, ok := name.(string); ok {
+			parts := strings.Split(text, ">>>")
+			if len(parts) == 3 && parts[0] == "user" && parts[2] == "online" {
+				text = canonicalNaiveUsername(parts[1])
+			} else {
+				text = canonicalNaiveUsername(text)
+			}
+			array(stats, "online_users")[index] = text
+		}
+	}
+	ips := obj(stats, "online_ips")
+	for name, value := range ips {
+		canonical := canonicalNaiveUsername(name)
+		if canonical != name {
+			ips[canonical] = value
+			delete(ips, name)
+		}
+	}
+}
 
 func validateNativeProtocol(d Data) error {
 	p := str(d, "protocol")

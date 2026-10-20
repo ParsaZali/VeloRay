@@ -127,6 +127,9 @@ func (s *Server) checkCSRF(r *http.Request) error {
 	return nil
 }
 func clientIP(r *http.Request) string {
+	if ip, ok := r.Context().Value(proxyIPKey{}).(string); ok {
+		return ip
+	}
 	host, _, e := net.SplitHostPort(r.RemoteAddr)
 	if e == nil {
 		return host

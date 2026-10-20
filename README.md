@@ -40,6 +40,8 @@ New management and subscription capabilities are described in the
 [customer guide](docs/customer-management.md),
 [external policy guide](docs/subscription-policies.md),
 [independent service guide](docs/independent-subscriptions.md),
+[External login and proxy guide](docs/external-login-and-proxies.md),
+[Geo asset browser](docs/geo-asset-browser.md),
 [OIDC/live dashboard guide](docs/oidc-and-live-dashboard.md) and
 [notification guide](docs/webhooks.md) and
 [operations/email guide](docs/operations-and-alerts.md). The [parity backlog](docs/competitor-parity-roadmap.md)
