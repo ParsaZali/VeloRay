@@ -132,6 +132,11 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		failLogin()
 		return
 	}
+	s.finishExternalLogin(w, r, ctx, s.Config.OIDCIssuer, idToken.Subject)
+}
+
+func (s *Server) finishExternalLogin(w http.ResponseWriter, r *http.Request, ctx context.Context, issuer, subject string) {
+	failLogin := func() { http.Redirect(w, r, "/?oidc=error", http.StatusSeeOther) }
 	tx, e := s.Store.Pool.Begin(ctx)
 	if e != nil {
 		failLogin()
@@ -139,7 +144,7 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(ctx)
 	var data []byte
-	e = tx.QueryRow(ctx, "SELECT data||jsonb_build_object('id',id) FROM vr_users WHERE data->>'oidc_issuer'=$1 AND data->>'oidc_subject'=$2 FOR UPDATE", s.Config.OIDCIssuer, idToken.Subject).Scan(&data)
+	e = tx.QueryRow(ctx, "SELECT data||jsonb_build_object('id',id) FROM vr_users WHERE data->>'oidc_issuer'=$1 AND data->>'oidc_subject'=$2 FOR UPDATE", issuer, subject).Scan(&data)
 	user, _ := decode(data)
 	if e != nil || !flag(user, "is_active") || !flag(user, "is_staff") {
 		failLogin()

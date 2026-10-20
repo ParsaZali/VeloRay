@@ -14,7 +14,7 @@ func managementRequest(t *testing.T, s *Server, ctx context.Context, a Actor, me
 	t.Helper()
 	raw, _ := json.Marshal(input)
 	r := httptest.NewRequest(method, "/api/"+path, strings.NewReader(string(raw))).WithContext(ctx)
-	return s.api(httptest.NewRecorder(), r, path, a)
+	return s.api(httptest.NewRecorder(), r, strings.SplitN(path, "?", 2)[0], a)
 }
 func TestIntegrationNativeCustomerMultiNodeStableTokenAndQuota(t *testing.T) {
 	s, ctx := integration(t)

@@ -613,6 +613,11 @@ export function AdminPage() {
                   }
                 />
               </Field>
+              <p className="text-xs text-[var(--muted)] sm:col-span-2">
+                {t(
+                  "For GitHub, use issuer https://github.com and the numeric account ID. For Telegram, use https://oauth.telegram.org and the verified OIDC subject. Each user has one SSO binding.",
+                )}
+              </p>
               <Field
                 label={editor.id ? t("New password (optional)") : t("Password")}
                 className="sm:col-span-2"

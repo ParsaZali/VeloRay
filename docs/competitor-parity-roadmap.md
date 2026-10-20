@@ -133,8 +133,8 @@ See [fallbacks and balancing](fallbacks-and-balancing.md) for limits and verific
       from the panel UI's explicitly supported configuration forms.
 - [x] Guided outbound chaining and sing-box selector/URL-test controls, with cycle/dependency validation.
 - [x] Xray fallbacks and outbound balancing within the documented engine/form limits.
-- [ ] Geo asset browsing, transparent proxy,
-      transparent capture, WARP / provider integrations, external-provider
+- [x] Read-only per-node GeoIP/Geosite tag browser, asset fingerprints and guided Xray rule creation.
+- [ ] Transparent proxy, transparent capture, WARP / provider integrations, external-provider
       subscriptions, link-aware DNS and domain fronting controls.
 - [x] Outbound HTTP health probes, latency and periodic watchdog alerts (no automatic production restarts).
 - [ ] Maintain safe privileged-agent boundaries for every protocol addition.
@@ -155,7 +155,9 @@ See [fallbacks and balancing](fallbacks-and-balancing.md) for limits and verific
 - [x] Optional Discord and signed webhook destinations with audit-event routing.
 - [x] SMTP/email notifications, inactive-client and configurable quota-threshold alerts.
 - [x] Optional OIDC code/PKCE login with exact pre-bound subjects and local 2FA.
-- [ ] Direct GitHub/Telegram OAuth and LDAP adapters.
+- [x] Direct GitHub OAuth with PKCE, exact account-ID binding and local second factor.
+- [x] Telegram sign-in through the existing standard OIDC code flow and provider-aware login button (operator registration required; see `external-login-and-proxies.md`).
+- [ ] Direct LDAP adapter.
 
 ## Stage 5 — internationalization and UX
 - [x] Persian Jalali/timezone display preferences for expiry and collection dates.

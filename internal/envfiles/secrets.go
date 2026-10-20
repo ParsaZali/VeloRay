@@ -11,7 +11,7 @@ import (
 // LoadSecrets supports read-only Docker/Kubernetes secret mounts. Only named
 // credential variables participate; content and filenames are never logged.
 func LoadSecrets() error {
-	for _, key := range []string{"POSTGRES_PASSWORD", "DATABASE_URL", "VELORAY_SECRET_KEY", "VELORAY_FIELD_KEY", "VELORAY_ADMIN_PASSWORD", "VELORAY_AGENT_TOKEN", "VELORAY_LOCAL_NODE_TOKEN", "VELORAY_OIDC_CLIENT_SECRET"} {
+	for _, key := range []string{"POSTGRES_PASSWORD", "DATABASE_URL", "VELORAY_SECRET_KEY", "VELORAY_FIELD_KEY", "VELORAY_ADMIN_PASSWORD", "VELORAY_AGENT_TOKEN", "VELORAY_LOCAL_NODE_TOKEN", "VELORAY_OIDC_CLIENT_SECRET","VELORAY_GITHUB_CLIENT_SECRET"} {
 		path := os.Getenv(key + "_FILE")
 		if path == "" {
 			continue

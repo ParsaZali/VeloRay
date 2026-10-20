@@ -25,6 +25,7 @@ type Server struct {
 func (s Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	var coreMu sync.Mutex
+	var geo geoCatalog
 	validate := func(c context.Context, raw []byte) error {
 		x, b, e := splitCore(raw)
 		if e != nil {
@@ -79,6 +80,20 @@ func (s Server) Handler() http.Handler {
 			write(w, 200, out)
 		}
 	}
+	mux.HandleFunc("/xray/geo-assets", wrap(func(c context.Context, v map[string]json.RawMessage) (any, error) {
+		var kind, query string
+		limit := 100
+		if json.Unmarshal(v["kind"], &kind) != nil {
+			return nil, errors.New("asset kind required")
+		}
+		if raw, ok := v["query"]; ok && json.Unmarshal(raw, &query) != nil {
+			return nil, errors.New("invalid search")
+		}
+		if raw, ok := v["limit"]; ok && json.Unmarshal(raw, &limit) != nil {
+			return nil, errors.New("invalid limit")
+		}
+		return geo.browse(c, kind, query, limit)
+	}, "POST"))
 	mux.HandleFunc("/diagnostics", wrap(func(c context.Context, _ map[string]json.RawMessage) (any, error) {
 		result := map[string]any{"xray": s.Manager.Diagnostics(c)}
 		if s.SingBox != nil {

@@ -24,6 +24,7 @@ type Server struct {
 	alertMu      sync.Mutex
 	alertCursor  string
 	OIDCHTTP     *http.Client
+	GitHubHTTP   *http.Client
 	streamMu     sync.Mutex
 	streamCount  int
 	streamUsers  map[string]int
@@ -103,6 +104,7 @@ func (s *Server) Handler() http.Handler {
 		s.Logger = slog.Default()
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = s.withProxyIP(r)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -160,11 +162,15 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		if path == "auth/oidc" && r.Method == "GET" {
-			writeJSON(w, 200, Data{"enabled": s.Config.OIDCIssuer != "" && s.Config.OIDCClientID != ""})
+			writeJSON(w, 200, Data{"enabled": s.Config.OIDCIssuer != "" && s.Config.OIDCClientID != "", "github_enabled": s.githubEnabled(), "telegram": s.Config.OIDCIssuer == "https://oauth.telegram.org"})
 			return
 		}
 		if path == "auth/oidc/callback" && r.Method == "GET" {
 			s.oidcCallback(w, r)
+			return
+		}
+		if path == "auth/github/callback" && r.Method == "GET" {
+			s.githubCallback(w, r)
 			return
 		}
 		if e := s.checkCSRF(r); e != nil {
@@ -173,6 +179,11 @@ func (s *Server) Handler() http.Handler {
 		}
 		if path == "auth/oidc/start" && r.Method == "POST" {
 			out, status, e := s.oidcStart(w, r)
+			s.respond(w, r, out, status, e)
+			return
+		}
+		if path == "auth/github/start" && r.Method == "POST" {
+			out, status, e := s.githubStart(w, r)
 			s.respond(w, r, out, status, e)
 			return
 		}

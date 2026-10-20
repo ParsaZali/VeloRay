@@ -32,9 +32,9 @@ jobs:
       - name: Test with pinned protocol runtimes
         run: |
           mkdir -p "$RUNNER_TEMP/veloray-cores"
-          tar -xJf runtime/linux-amd64.tar.xz --no-same-owner -C "$RUNNER_TEMP/veloray-cores" xray/xray singbox/sing-box
+          tar -xJf runtime/linux-amd64.tar.xz --no-same-owner -C "$RUNNER_TEMP/veloray-cores" xray/xray xray/geoip.dat xray/geosite.dat singbox/sing-box
           sudo setcap cap_net_admin+ep "$RUNNER_TEMP/veloray-cores/xray/xray"
-          VELORAY_TEST_XRAY_BINARY="$RUNNER_TEMP/veloray-cores/xray/xray" VELORAY_TEST_SINGBOX_BINARY="$RUNNER_TEMP/veloray-cores/singbox/sing-box" go test -race ./... -count=1
+          VELORAY_TEST_GEO_ASSETS="$RUNNER_TEMP/veloray-cores/xray" VELORAY_TEST_XRAY_BINARY="$RUNNER_TEMP/veloray-cores/xray/xray" VELORAY_TEST_SINGBOX_BINARY="$RUNNER_TEMP/veloray-cores/singbox/sing-box" go test -race ./... -count=1
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: npm ci && npm run format:check && npm run build && npm audit --audit-level=high
