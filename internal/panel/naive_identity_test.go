@@ -26,7 +26,7 @@ func TestNaiveBasicUsernameAndTelemetryIdentity(t *testing.T) {
 	metric := "user>>>" + username + ">>>traffic>>>uplink"
 	stats := Data{"stat": []any{Data{"name": metric, "value": 10}}, "online_users": []any{username, "user>>>" + username + ">>>online"}, "online_ips": Data{username: Data{"203.0.113.1": time.Now().Unix()}}}
 	normalizeNaiveTelemetry(stats)
-	if str(asData(array(stats, "stat")[0]), "name") != "user>>>veloray:17:alice>>>traffic>>>uplink" || array(stats, "online_users")[0] != "veloray:17:alice" || array(stats, "online_users")[1] != "user>>>veloray:17:alice>>>online" || len(obj(obj(stats, "online_ips"), "veloray:17:alice")) != 1 {
+	if str(asData(array(stats, "stat")[0]), "name") != metric || array(stats, "online_users")[0] != "veloray:17:alice" || array(stats, "online_users")[1] != "veloray:17:alice" || len(obj(obj(stats, "online_ips"), "veloray:17:alice")) != 1 {
 		t.Fatal("identity normalization lost accounting or online state", stats)
 	}
 	for _, bad := range []string{"veloray-naive-invalid", "veloray-naive-", "external-user"} {
@@ -40,6 +40,7 @@ func TestIntegrationNaiveAccountingOnlineAndDevicePolicy(t *testing.T) {
 	s, ctx := integration(t)
 	m := &nodeMock{running: true}
 	n, i, c := fixture(t, s, ctx, m)
+	c["name"] = "مشتری <A> >>> : B"
 	i["protocol"], i["core"], i["security"], i["transport"] = "naive", "singbox", "tls", "raw"
 	if err := save(ctx, s.Store.Pool, "inbounds", i); err != nil {
 		t.Fatal(err)
@@ -50,7 +51,7 @@ func TestIntegrationNaiveAccountingOnlineAndDevicePolicy(t *testing.T) {
 	}
 	username := naiveUsername(c)
 	m.stats = []any{Data{"name": "user>>>" + username + ">>>traffic>>>uplink", "value": 100}, Data{"name": "user>>>" + username + ">>>traffic>>>downlink", "value": 200}}
-	m.statMetadata = Data{"online_users": []any{username}, "online_available": true, "online_ips_available": true, "online_ip_cores": Data{"singbox": true}, "online_ips": Data{username: Data{"203.0.113.1": time.Now().Unix()}}}
+	m.statMetadata = Data{"online_users": []any{"user>>>" + username + ">>>online"}, "online_available": true, "online_ips_available": true, "online_ip_cores": Data{"singbox": true}, "online_ips": Data{username: Data{"203.0.113.1": time.Now().Unix()}}}
 	for range 2 {
 		tx, err := s.Store.Pool.Begin(ctx)
 		if err != nil {

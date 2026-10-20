@@ -115,7 +115,7 @@ func TestIntegrationNativeProtocolsWithPinnedSingBox(t *testing.T) {
 				}
 			}
 			if p == "naive" && os.Getenv("VELORAY_TEST_NO_NETLINK") != "1" {
-				naiveRoundTrip(t, binary, serverFile, cert, outbound, controller, naiveUsername(c))
+				naiveRoundTrip(t, binary, serverFile, cert, outbound, controller, naiveUsername(c), str(obj(obj(server, "experimental"), "v2ray_api"), "listen"))
 			}
 			if p != "naive" && os.Getenv("VELORAY_TEST_NO_NETLINK") != "1" {
 				if tls := obj(outbound, "tls"); len(tls) > 0 {

@@ -23,7 +23,7 @@ func canonicalNaiveUsername(name string) string {
 		return name
 	}
 	parts := strings.SplitN(string(raw), ":", 3)
-	if len(parts) != 3 || parts[0] != "veloray" || parts[2] == "" || strings.ContainsAny(parts[2], "\r\n\x00<>") {
+	if len(parts) != 3 || parts[0] != "veloray" || parts[2] == "" {
 		return name
 	}
 	id, err := strconv.ParseInt(parts[1], 10, 64)
@@ -33,23 +33,14 @@ func canonicalNaiveUsername(name string) string {
 	return string(raw)
 }
 func normalizeNaiveTelemetry(stats Data) {
-	for _, entry := range array(stats, "stat") {
-		value := asData(entry)
-		if value == nil {
-			continue
-		}
-		parts := strings.Split(str(value, "name"), ">>>")
-		if len(parts) == 4 && parts[0] == "user" {
-			parts[1] = canonicalNaiveUsername(parts[1])
-			value["name"] = strings.Join(parts, ">>>")
-		}
-	}
+	// Counter names remain exactly as supplied by the durable agent ledger.
+	// Decode their identity only after splitting the metric envelope in collect;
+	// display names may themselves contain the metric delimiter.
 	for index, name := range array(stats, "online_users") {
 		if text, ok := name.(string); ok {
 			parts := strings.Split(text, ">>>")
 			if len(parts) == 3 && parts[0] == "user" && parts[2] == "online" {
-				parts[1] = canonicalNaiveUsername(parts[1])
-				text = strings.Join(parts, ">>>")
+				text = canonicalNaiveUsername(parts[1])
 			} else {
 				text = canonicalNaiveUsername(text)
 			}

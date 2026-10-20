@@ -3,6 +3,7 @@ package panel
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -15,7 +16,85 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/encoding/protowire"
 )
+
+type naiveStatsCodec struct{}
+
+func (naiveStatsCodec) Name() string                      { return "proto" }
+func (naiveStatsCodec) Marshal(value any) ([]byte, error) { return *value.(*[]byte), nil }
+func (naiveStatsCodec) Unmarshal(raw []byte, value any) error {
+	*value.(*[]byte) = append([]byte{}, raw...)
+	return nil
+}
+
+func naiveTrafficStats(t *testing.T, address, principal string) {
+	t.Helper()
+	client, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	var request, response []byte
+	if err = client.Invoke(ctx, "/v2ray.core.app.stats.command.StatsService/QueryStats", &request, &response, grpc.ForceCodec(naiveStatsCodec{})); err != nil {
+		t.Fatal("Naive native traffic API unavailable", err)
+	}
+	bytesByDirection := map[string]uint64{}
+	for len(response) > 0 {
+		field, typ, n := protowire.ConsumeTag(response)
+		if n < 0 {
+			t.Fatal("invalid stats response")
+		}
+		response = response[n:]
+		if field != 1 || typ != protowire.BytesType {
+			n = protowire.ConsumeFieldValue(field, typ, response)
+			if n < 0 {
+				t.Fatal("invalid stats response")
+			}
+			response = response[n:]
+			continue
+		}
+		body, n := protowire.ConsumeBytes(response)
+		if n < 0 {
+			t.Fatal("invalid stats response")
+		}
+		response = response[n:]
+		name := ""
+		var value uint64
+		for len(body) > 0 {
+			field, typ, n = protowire.ConsumeTag(body)
+			if n < 0 {
+				t.Fatal("invalid stat")
+			}
+			body = body[n:]
+			switch {
+			case field == 1 && typ == protowire.BytesType:
+				name, n = protowire.ConsumeString(body)
+			case field == 2 && typ == protowire.VarintType:
+				value, n = protowire.ConsumeVarint(body)
+			default:
+				n = protowire.ConsumeFieldValue(field, typ, body)
+			}
+			if n < 0 {
+				t.Fatal("invalid stat")
+			}
+			body = body[n:]
+		}
+		for _, direction := range []string{"uplink", "downlink"} {
+			if name == "user>>>"+principal+">>>traffic>>>"+direction {
+				bytesByDirection[direction] = value
+			}
+		}
+	}
+	if bytesByDirection["uplink"] < 10240 || bytesByDirection["downlink"] < 10240 {
+		t.Fatal("Naive payload missing from native per-user counters", bytesByDirection)
+	}
+}
 
 // Independent HTTP/1.1 Naive compatibility fixture: CONNECT + basic proxy
 // authentication + the first eight padded records in each direction. It does
@@ -67,7 +146,7 @@ func (c *naiveTestConn) Read(data []byte) (int, error) {
 	return c.reader.Read(data)
 }
 
-func naiveRoundTrip(t *testing.T, binaryPath, configFile, certificate string, outbound Data, controller int, principal string) {
+func naiveRoundTrip(t *testing.T, binaryPath, configFile, certificate string, outbound Data, controller int, principal, statsAddress string) {
 	t.Helper()
 	nativeRun(t, binaryPath, configFile)
 	cert, err := os.ReadFile(certificate)
@@ -167,6 +246,7 @@ func naiveRoundTrip(t *testing.T, binaryPath, configFile, certificate string, ou
 	if !strings.Contains(string(raw), principal) {
 		t.Fatal("Naive principal missing from live telemetry")
 	}
+	naiveTrafficStats(t, statsAddress, principal)
 	for _, test := range []struct {
 		password string
 		padding  bool

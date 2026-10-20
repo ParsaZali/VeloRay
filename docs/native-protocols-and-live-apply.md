@@ -90,3 +90,28 @@ competitor roadmap. They are not implemented by merely adding a protocol label.
 CI gives `CAP_NET_ADMIN` only to its extracted temporary Xray binary so the existing
 TUN configuration check can open a TUN device. This is runner-only test setup; it
 does not modify bundled binaries or grant privileges to the panel process.
+
+
+## Feasibility of additional engines and capture modes
+
+This assessment uses the shipped Xray v26.3.27 JSON protocol registry and the
+bundled sing-box 1.14.3 source/build tags, rather than a dropdown of protocol names.
+
+| Capability | Bundled engine boundary | Required panel work before support can be advertised |
+| --- | --- | --- |
+| AmneziaWG | No AmneziaWG inbound in either current protocol registry; ordinary WireGuard is a different protocol | Package and supervise a separate compatible engine/module, then implement peer lifecycle, counters, revocation and client exports |
+| MTProto | Absent from both current inbound registries | Separate MTProxy service, secret lifecycle, proven per-principal accounting and supported quota semantics |
+| ShadowTLS | sing-box supplies a TLS wrapper and inner-inbound detour | Manage and validate the paired wrapper/inner graph, both authentication layers, exports, principal attribution and revocation |
+| SSH server | sing-box supplies an SSH outbound, not an SSH server | Separate SSH server lifecycle, authorization/isolation, tunnel-only policy and independently tested traffic accounting |
+| Naive Chromium client | Naive server is bundled; optional cronet outbound is excluded from the CGO-free build | Separate compatible Chromium/cronet client packaging and HTTP/2 interoperability coverage; HTTP/1.1 fixture coverage is shipped |
+| TUN / transparent capture | Engine options exist but require host interfaces, policy routing and privileges | Confined privileged operations, management-path exclusions, rollback and host-level network tests; the default container grants no TUN or NET_ADMIN access |
+
+These are implementation boundaries, not completed integrations. Enabling a new
+protocol must preserve authenticated telemetry, quota/device enforcement and
+crash-safe state restoration. An absent server is not substituted with an outbound
+of the same name. The default agent cannot execute arbitrary shell commands or
+control unrelated host services to approximate these features.
+
+Sources: [pinned Xray protocol registry](https://github.com/XTLS/Xray-core/blob/v26.3.27/infra/conf/xray.go),
+[pinned sing-box source](https://github.com/SagerNet/sing-box/tree/v1.14.3/protocol),
+and this repository's `scripts/build-singbox.sh`.
