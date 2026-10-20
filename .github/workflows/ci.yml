@@ -70,6 +70,10 @@ jobs:
           if bash scripts/verify-runtime.sh amd64; then
             echo 'ready=true' >> "$GITHUB_OUTPUT"
           else
+            if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+              echo 'Main must include runtime bundles matching its source.' >&2
+              exit 1
+            fi
             echo 'Runtime assembly must finish before container verification.'
             echo 'ready=false' >> "$GITHUB_OUTPUT"
           fi

@@ -71,7 +71,9 @@ principal attribution and rejection of invalid passwords/missing padding. This
 does not claim testing of a Chromium/cronet or HTTP/2 client.
 
 Naive Basic-auth usernames use a reversible colon-free encoding of the canonical
-panel principal. Refresh existing Naive subscriptions after upgrading. Previously
+panel principal. After upgrading, use the node's **Deploy** action to apply the
+new server configuration, then refresh existing Naive subscriptions. Upgrades
+preserve core configuration files until an explicit deployment. Previously
 generated colon-containing usernames could pass configuration validation but
 could not authenticate over HTTP Basic. Counter and live-IP normalization retain
 the canonical client ID for quota, online status and device enforcement. Native
