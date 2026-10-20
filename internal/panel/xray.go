@@ -103,8 +103,18 @@ func inboundSettings(i, node Data, clients []Data) (Data, error) {
 	}
 	switch p {
 	case "vless":
-		return Data{"clients": entries, "decryption": "none"}, nil
-	case "vmess", "trojan":
+		v := Data{"clients": entries, "decryption": "none"}
+		if len(array(ps, "fallbacks")) > 0 {
+			v["fallbacks"] = array(ps, "fallbacks")
+		}
+		return v, nil
+	case "trojan":
+		v := Data{"clients": entries}
+		if len(array(ps, "fallbacks")) > 0 {
+			v["fallbacks"] = array(ps, "fallbacks")
+		}
+		return v, nil
+	case "vmess":
 		return Data{"clients": entries}, nil
 	case "hysteria":
 		return Data{"version": 2, "users": entries}, nil

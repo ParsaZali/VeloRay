@@ -1,5 +1,9 @@
 import { Textarea } from "@/components/ui/controls";
 import { SNIScanner } from "@/components/sni-scanner";
+import {
+  InboundFallbacks,
+  type FallbackEntry,
+} from "@/components/inbound-fallbacks";
 import { Select, Input } from "@/components/ui/controls";
 import { t } from "@/lib/i18n";
 import { useLocale, tx } from "@/lib/i18n";
@@ -30,6 +34,7 @@ import { FaIcon } from "@/components/ui/fa-icon";
 import { cn } from "@/lib/cn";
 
 type FormState = {
+  fallbacks: FallbackEntry[];
   core: string;
   node: string;
   name: string;
@@ -71,6 +76,7 @@ type FormState = {
   stream_json: string;
 };
 const fresh = (node = ""): FormState => ({
+  fallbacks: [],
   node,
   core: "xray",
   name: t("Main"),
@@ -413,6 +419,15 @@ export function InboundsPage() {
       protocol_settings: { ...(editing?.protocol_settings || {}) },
       stream_settings: JSON.parse(form.stream_json || "{}"),
     };
+    delete p.protocol_settings.fallbacks;
+    if (
+      form.core === "xray" &&
+      ["vless", "trojan"].includes(form.protocol) &&
+      form.transport === "raw" &&
+      form.security !== "reality" &&
+      form.fallbacks.length
+    )
+      p.protocol_settings.fallbacks = form.fallbacks;
     if (form.protocol === "wireguard")
       p.protocol_settings = {
         secret_key: form.wg_secret_key,
@@ -498,6 +513,9 @@ export function InboundsPage() {
     setEditorOpen(true);
     setEditing(i);
     setForm({
+      fallbacks: structuredClone(
+        Array.isArray(ps.fallbacks) ? (ps.fallbacks as FallbackEntry[]) : [],
+      ),
       core: i.core || "xray",
       node: String(i.node),
       name: i.name,
@@ -1346,6 +1364,15 @@ export function InboundsPage() {
                       </div>
                     </section>
                   )}
+                  {form.core === "xray" &&
+                    ["vless", "trojan"].includes(form.protocol) &&
+                    form.transport === "raw" &&
+                    form.security !== "reality" && (
+                      <InboundFallbacks
+                        value={form.fallbacks}
+                        onChange={(value) => set("fallbacks", value)}
+                      />
+                    )}
                   <details className="rounded-lg border border-[var(--border)] p-3">
                     <summary className="cursor-pointer text-[12px] font-medium">
                       {t("Advanced stream settings")}

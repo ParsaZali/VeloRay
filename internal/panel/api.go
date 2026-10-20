@@ -216,6 +216,9 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 	if e = s.entityAccess(ctx, a, kind, id); e != nil {
 		return nil, 0, e
 	}
+	if kind == "nodes" && len(parts) == 3 && parts[2] == "balancing" {
+		return s.balancingAPI(w, r, id, a)
+	}
 	if kind == "api_keys" && len(parts) > 2 && parts[2] == "reset" {
 		return s.resetAPIKey(w, r, id, a)
 	}

@@ -39,6 +39,7 @@ func featureAPISpec(paths Data) Data {
 	paths["/api/auth/oidc/complete"] = Data{"post": Data{"summary": "CSRF-protected, browser challenge-bound local second-factor completion", "security": []any{}, "requestBody": body(object(Data{"totp_code": text})), "responses": ok("Local session after TOTP/recovery code validation")}}
 	schemas := Data{"SubscriptionPolicyInput": policy, "WebhookDestinationInput": endpoint}
 	operationsAPISpec(paths, schemas)
+	networkPolicyAPISpec(paths, schemas)
 	subscriptionTemplateAPISpec(paths, schemas)
 	return schemas
 }

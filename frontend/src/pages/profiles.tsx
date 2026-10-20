@@ -376,7 +376,7 @@ export function ProfilesPage() {
             )}
             <p className="text-[11px] text-[var(--muted)]">
               {t(
-                "Allowed sections: DNS, routing, outbounds and logging; Xray also supports policy. Managed listeners and telemetry remain controlled by the panel.",
+                "Allowed sections: DNS, routing, outbounds and logging; Xray also supports policy, observatory and burstObservatory. Managed listeners and telemetry remain controlled by the panel.",
               )}
             </p>
             {error && (

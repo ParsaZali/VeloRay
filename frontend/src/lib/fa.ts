@@ -45,7 +45,7 @@ Policy JSON|سیاست به صورت JSON
 Services grant access to their inbounds. Plan defaults apply when selected for a customer.|سرویس دسترسی به ایـنباندهای انتخاب‌شده را می‌دهد. مقادیر پلن هنگام انتخاب برای مشتری اعمال می‌شوند.
 One account shares quota, expiry and subscription across inbounds and nodes.|یک حساب، سهمیه و انقضا و اشتراک مشترک روی چند ایـنباند و نود دارد.
 Share network policy across nodes. Changes deploy together. The last 50 revisions can be restored.|سیاست شبکه را میان نودها مشترک کنید. تغییرات با هم اعمال می‌شوند و ۵۰ نسخه آخر قابل بازگردانی هستند.
-Allowed sections: DNS, routing, outbounds and logging; Xray also supports policy. Managed listeners and telemetry remain controlled by the panel.|بخش‌های مجاز: DNS، مسیریابی، خروجی‌ها و لاگ؛ در Xray بخش policy هم مجاز است. ورودی‌ها و آمار تحت مدیریت پنل باقی می‌مانند.
+Allowed sections: DNS, routing, outbounds and logging; Xray also supports policy, observatory and burstObservatory. Managed listeners and telemetry remain controlled by the panel.|بخش‌های مجاز: DNS، مسیریابی، خروجی‌ها و لاگ؛ در Xray بخش‌های policy، observatory و burstObservatory هم مجازند. ورودی‌ها و آمار تحت مدیریت پنل باقی می‌مانند.
 HWID: 0 inherits the global limit; -1 disables it. Zero quota or IP limit means unlimited.|در HWID، صفر یعنی محدودیت سراسری و منفی یک یعنی غیرفعال. سهمیه یا محدودیت آی‌پی صفر یعنی نامحدود.
 
 Protocol detection|تشخیص پروتکل
@@ -1174,4 +1174,36 @@ Object.assign(fa, {
     "وضعیت هسته و شناسه، وضعیت و هش عملیات اخیر را نشان می‌دهد. اطلاعات ورود و پیکربندی کامل در این گزارش نیست.",
   "Date pickers follow the selected calendar and keep Gregorian API values. Each field keeps its existing timezone behavior. Display preferences are saved for this browser.":
     "انتخابگر تاریخ از تقویم انتخاب‌شده استفاده می‌کند؛ مقدار ارسالی به API میلادی است. رفتار منطقهٔ زمانی هر فیلد حفظ می‌شود. تنظیمات نمایش برای همین مرورگر ذخیره می‌شوند.",
+});
+
+Object.assign(fa, {
+  "Fallback destinations": "مقصدهای جایگزین (Fallback)",
+  Fallback: "مقصد جایگزین",
+  "Add fallback": "افزودن مقصد جایگزین",
+  "Remove fallback": "حذف مقصد جایگزین",
+  "PROXY protocol": "پروتکل PROXY",
+  "Unauthenticated traffic is forwarded by Xray. Configure a web server destination; PROXY protocol requires support at that destination.":
+    "Xray ترافیک احراز هویت‌نشده را به مقصد وب‌سرور می‌فرستد. فعال‌کردن پروتکل PROXY نیازمند پشتیبانی در مقصد است.",
+  "Each SNI/ALPN group needs an empty-path default. Keep one entry with empty SNI, ALPN and path as the overall default.":
+    "هر گروه SNI/ALPN به یک مقصد با مسیر خالی نیاز دارد. یک ردیف با SNI، ALPN و مسیر خالی هم برای مقصد پیش‌فرض کلی نگه دارید.",
+  "Xray load balancing": "توزیع اتصال خروجی‌های Xray",
+  Balancer: "گروه توزیع اتصال",
+  "Balancer tag": "تگ گروه توزیع اتصال",
+  "Balancing strategy": "روش توزیع اتصال",
+  "Selector prefixes": "پیشوند تگ خروجی‌ها",
+  "Fallback outbound": "خروجی جایگزین",
+  "Matching outbounds": "خروجی‌های منطبق",
+  Random: "تصادفی",
+  "Round robin": "نوبتی",
+  "Least ping": "کمترین تأخیر",
+  "Least load": "کمترین بار",
+  "Remove balancer": "حذف گروه توزیع اتصال",
+  "Add balancer": "افزودن گروه توزیع اتصال",
+  "Save balancing & deploy": "ذخیره و اعمال توزیع اتصال",
+  "Reload balancing": "بازخوانی توزیع اتصال",
+  "Balancing saved and deployed.": "تنظیمات توزیع اتصال ذخیره و اعمال شد.",
+  "Selectors match outbound tag prefixes. New matching tags join automatically. Saving deploys this node and overrides inherited balancers.":
+    "انتخاب‌گرها با پیشوند تگ خروجی تطبیق داده می‌شوند. خروجی جدید با پیشوند منطبق خودکار عضو می‌شود. ذخیره، تنظیمات این نود را اعمال کرده و گروه‌های ارث‌رسیده از پروفایل را جایگزین می‌کند.",
+  "Random and round robin distribute connections without checking availability. Least ping and least load require an observatory configured in the node or shared profile.":
+    "روش تصادفی و نوبتی، اتصال‌ها را بدون بررسی دسترس‌پذیری تقسیم می‌کنند. روش کمترین تأخیر و کمترین بار به Observatory در تنظیمات نود یا پروفایل مشترک نیاز دارند.",
 });

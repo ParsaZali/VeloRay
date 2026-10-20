@@ -46,6 +46,7 @@ async function panel(
         dashboard_refresh_seconds: 60,
       };
     else if (resource === "nodes") json = [node];
+    else if (/^nodes\/\d+\/balancing$/.test(resource)) json = { balancers: [], outbound_tags: ["direct", "blocked"], revision: "a".repeat(64), observatory_configured: false };
     else if (resource === "inbounds" || resource.startsWith("admin/"))
       json = [];
     else if (resource === "health")
@@ -282,6 +283,70 @@ test("routing defaults, presets and sing-box block action", async ({
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(390);
 });
+test("Xray balancing deploys groups, keeps conflict drafts and selects a routing destination", async ({ page }) => {
+  await panel(page, "/routing");
+  let state = { balancers: [] as any[], outbound_tags: ["direct", "edge-a", "edge-b"], revision: "b".repeat(64), observatory_configured: false };
+  let conflict = false;
+  await page.route("**/api/nodes/1/balancing", async route => {
+    if (route.request().method() === "PUT") {
+      if (conflict) { await route.fulfill({ status: 409, json: { detail: "balancing configuration changed; reload before saving" } }); return; }
+      const input = route.request().postDataJSON();
+      expect(input.revision).toBe(state.revision);
+      state = { ...state, balancers: input.balancers, revision: "c".repeat(64) };
+    }
+    await route.fulfill({ json: state });
+  });
+  await page.getByText("Xray load balancing", { exact: true }).click();
+  await page.getByRole("button", { name: "Reload balancing", exact: true }).click();
+  await page.getByRole("button", { name: "Add balancer", exact: true }).click();
+  await page.getByLabel("Balancer tag", { exact: true }).fill("pool");
+  await page.getByLabel("Selector prefixes", { exact: true }).fill("edge-");
+  await choose(page, "Balancing strategy", "roundrobin", false);
+  await choose(page, "Fallback outbound", "direct", false);
+  await expect(page.getByText("Matching outbounds: edge-a, edge-b", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Save balancing & deploy", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Balancing saved and deployed.");
+  expect(state.balancers).toEqual([{ tag: "pool", selector: ["edge-"], strategy: { type: "roundrobin" }, fallbackTag: "direct" }]);
+  await page.getByRole("button", { name: "New rule", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name", { exact: true }).fill("Balanced TCP");
+  await choose(page, "Destination", "balancer:pool");
+  await choose(page, "Network", "tcp");
+  const request = page.waitForRequest(r => r.method() === "POST" && r.url().includes("/api/routing_rules/"));
+  await dialog.getByRole("button", { name: "Save & deploy", exact: true }).click();
+  const data = (await request).postDataJSON();
+  expect(data.config).toMatchObject({ balancerTag: "pool", network: "tcp" });
+  expect(data.config.outboundTag).toBeUndefined();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole("cell", { name: "pool", exact: true })).toBeVisible();
+  conflict = true;
+  await page.getByLabel("Balancer tag", { exact: true }).fill("my-draft");
+  await page.getByRole("button", { name: "Save balancing & deploy", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("configuration changed");
+  await expect(page.getByLabel("Balancer tag", { exact: true })).toHaveValue("my-draft");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test("inbound fallback editor preserves fields and hides unsupported transports", async ({ page }) => {
+  await panel(page, "/inbounds");
+  await page.getByRole("button", { name: "New inbound", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await choose(page, "Connection preset", "trojan");
+  await dialog.getByRole("button", { name: "Add fallback", exact: true }).click();
+  await dialog.getByLabel("Destination", { exact: true }).fill("127.0.0.1:8080");
+  await dialog.getByLabel("TLS certificate", { exact: true }).fill("/etc/cert.pem");
+  await dialog.getByLabel("TLS private key", { exact: true }).fill("/etc/key.pem");
+  const request = page.waitForRequest(r => r.method() === "POST" && r.url().includes("/api/inbounds/"));
+  await dialog.getByRole("button", { name: "Create & deploy", exact: true }).click();
+  expect((await request).postDataJSON().protocol_settings.fallbacks).toEqual([{ dest: "127.0.0.1:8080", xver: 0 }]);
+  await expect(dialog).not.toBeVisible();
+  await page.getByRole("button", { name: "New inbound", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Add fallback", exact: true })).toHaveCount(0);
+  await choose(page, "Connection preset", "websocket");
+  await expect(page.getByRole("button", { name: "Add fallback", exact: true })).toHaveCount(0);
+});
+
 test("editing credentials preserves advanced fields and templates remain isolated", () => {
   const config = outboundTemplate("xray", "vless");
   config.streamSettings.sockopt = { tcpFastOpen: true };
