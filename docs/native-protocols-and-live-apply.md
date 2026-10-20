@@ -65,8 +65,18 @@ user twice.
 CI extracts the pinned bundled runtimes, runs the complete PostgreSQL/Go race
 suite, validates the protocol/configuration matrix, exercises real Xray live-user
 addition, and performs loopback TUIC/Snell round trips with authenticated-user
-telemetry. Naive server configuration is validated; a Naive outbound client round
-trip requires a separate Chromium-enabled client and remains unverified here.
+telemetry. An independent Naive HTTP/1.1 CONNECT fixture verifies TLS, ten
+bidirectional transfers across the eight padded-record boundary, authenticated
+principal attribution and rejection of invalid passwords/missing padding. This
+does not claim testing of a Chromium/cronet or HTTP/2 client.
+
+Naive Basic-auth usernames use a reversible colon-free encoding of the canonical
+panel principal. Refresh existing Naive subscriptions after upgrading. Previously
+generated colon-containing usernames could pass configuration validation but
+could not authenticate over HTTP Basic. Counter and live-IP normalization retain
+the canonical client ID for quota, online status and device enforcement. Native
+sing-box auth-user rules use the encoded wire identity. A PostgreSQL integration
+test checks that repeated samples charge usage once and preserve connected IPs.
 
 The restricted development environment denies netlink sockets. Local full test
 runs set `VELORAY_TEST_NO_NETLINK=1` and omit sing-box runtime round trips while

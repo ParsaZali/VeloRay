@@ -123,7 +123,7 @@ func naiveRoundTrip(t *testing.T, binaryPath, configFile, certificate string, ou
 		done <- nil
 		<-hold
 	}()
-	writeConnect := func(c net.Conn, password string, padding bool) *http.Response {
+	writeConnect := func(c net.Conn, password string, padding bool) (*http.Response, error) {
 		t.Helper()
 		auth := base64.StdEncoding.EncodeToString([]byte(str(outbound, "username") + ":" + password))
 		header := ""
@@ -135,12 +135,12 @@ func naiveRoundTrip(t *testing.T, binaryPath, configFile, certificate string, ou
 			t.Fatal("CONNECT write failed", e)
 		}
 		response, e := http.ReadResponse(bufio.NewReader(c), &http.Request{Method: "CONNECT"})
-		if e != nil {
-			t.Fatal("CONNECT response invalid", e)
-		}
-		return response
+		return response, e
 	}
-	response := writeConnect(conn, str(outbound, "password"), true)
+	response, err := writeConnect(conn, str(outbound, "password"), true)
+	if err != nil {
+		t.Fatal("CONNECT response invalid", err)
+	}
 	if response.StatusCode != 200 || response.Header.Get("Padding") == "" {
 		t.Fatal("Naive CONNECT failed", response.StatusCode)
 	}
@@ -177,10 +177,15 @@ func naiveRoundTrip(t *testing.T, binaryPath, configFile, certificate string, ou
 			t.Fatal(e)
 		}
 		_ = bad.SetDeadline(time.Now().Add(3 * time.Second))
-		result := writeConnect(bad, test.password, test.padding)
+		result, readErr := writeConnect(bad, test.password, test.padding)
 		bad.Close()
-		if result.StatusCode != test.status {
+		// HTTP/1 rejection deliberately closes the socket without exposing an
+		// authentication response; HTTP/2 may return an explicit error status.
+		if readErr == nil && result.StatusCode != test.status {
 			t.Fatal("Naive accepted invalid request", result.StatusCode)
+		}
+		if timeout, ok := readErr.(net.Error); ok && timeout.Timeout() {
+			t.Fatal("Naive rejection timed out")
 		}
 	}
 }

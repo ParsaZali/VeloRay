@@ -1,9 +1,70 @@
 package panel
 
 import (
+	"encoding/base64"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 )
+
+// HTTP Basic usernames cannot contain colons. Encode the canonical principal
+// reversibly so subscriptions, telemetry and per-user policy share one identity.
+func naiveUsername(c Data) string {
+	return "veloray-naive-" + base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf("veloray:%d:%s", num(c, "id"), str(c, "name"))))
+}
+func canonicalNaiveUsername(name string) string {
+	const prefix = "veloray-naive-"
+	if !strings.HasPrefix(name, prefix) || len(name) > 1024 {
+		return name
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(name, prefix))
+	if err != nil {
+		return name
+	}
+	parts := strings.SplitN(string(raw), ":", 3)
+	if len(parts) != 3 || parts[0] != "veloray" || parts[2] == "" || strings.ContainsAny(parts[2], "\r\n\x00<>") {
+		return name
+	}
+	id, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || id < 1 || strconv.FormatInt(id, 10) != parts[1] {
+		return name
+	}
+	return string(raw)
+}
+func normalizeNaiveTelemetry(stats Data) {
+	for _, entry := range array(stats, "stat") {
+		value := asData(entry)
+		if value == nil {
+			continue
+		}
+		parts := strings.Split(str(value, "name"), ">>>")
+		if len(parts) == 4 && parts[0] == "user" {
+			parts[1] = canonicalNaiveUsername(parts[1])
+			value["name"] = strings.Join(parts, ">>>")
+		}
+	}
+	for index, name := range array(stats, "online_users") {
+		if text, ok := name.(string); ok {
+			parts := strings.Split(text, ">>>")
+			if len(parts) == 3 && parts[0] == "user" && parts[2] == "online" {
+				parts[1] = canonicalNaiveUsername(parts[1])
+				text = strings.Join(parts, ">>>")
+			} else {
+				text = canonicalNaiveUsername(text)
+			}
+			array(stats, "online_users")[index] = text
+		}
+	}
+	ips := obj(stats, "online_ips")
+	for name, value := range ips {
+		canonical := canonicalNaiveUsername(name)
+		if canonical != name {
+			ips[canonical] = value
+			delete(ips, name)
+		}
+	}
+}
 
 func validateNativeProtocol(d Data) error {
 	p := str(d, "protocol")

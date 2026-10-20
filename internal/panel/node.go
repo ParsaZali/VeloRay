@@ -93,6 +93,7 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 	if e != nil {
 		return e
 	}
+	normalizeNaiveTelemetry(stats)
 	if str(stats, "accounting") != "durable-v1" || str(stats, "ledger_id") == "" {
 		return errors.New("upgrade the node agent before collecting traffic")
 	}

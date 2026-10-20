@@ -210,6 +210,9 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data, fieldKey ...str
 				continue
 			}
 			name := fmt.Sprintf("veloray:%d:%s", num(c, "id"), str(c, "name"))
+			if p == "naive" {
+				name = naiveUsername(c)
+			}
 			users = append(users, name)
 			u := Data{"name": name}
 			switch p {
@@ -318,7 +321,7 @@ func singClientOutbound(c, i, n Data) (Data, error) {
 		v["congestion_control"] = fallback(str(obj(i, "protocol_settings"), "congestion_control"), "bbr")
 		v["udp_relay_mode"] = "native"
 	case "naive":
-		v["username"] = fmt.Sprintf("veloray:%d:%s", num(c, "id"), str(c, "name"))
+		v["username"] = naiveUsername(c)
 	case "snell":
 		delete(v, "password")
 		v["version"] = 6

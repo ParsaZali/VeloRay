@@ -64,6 +64,7 @@ cannot substitute a rate-limit address. Nginx overwrites the header with
 `$remote_addr`; Caddy supplies its default validated chain. An upstream CDN
 requires an explicitly maintained proxy configuration.
 
-Authentication, subscription throttling and request records use the same resolved
-address. `RemoteAddr` retains the socket peer. Loopback trust assumes that local
+Login rate limits and password-login audit records use the resolved address.
+Subscription history continues to omit source IPs. `RemoteAddr` retains the
+socket peer. Loopback trust assumes that local
 processes are trusted to act as reverse proxies.
