@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"github.com/PaarSaAm/VeloRay/internal/envfiles"
 	"net"
 	"net/http"
 	"os"
@@ -215,7 +216,10 @@ func (s Server) Handler() http.Handler {
 	}
 	return mux
 }
-func Serve(ctx context.Context, version string) error {
+func Serve(ctx context.Context, version string) (serveErr error) {
+	if err := envfiles.LoadSecrets(); err != nil {
+		return err
+	}
 	env := func(k, d string) string {
 		if v := os.Getenv(k); v != "" {
 			return v
@@ -239,27 +243,101 @@ func Serve(ctx context.Context, version string) error {
 	if cert == "" && !loopback {
 		return errors.New("remote agent requires TLS")
 	}
-	m, err := NewManager(env("VELORAY_XRAY_BINARY", "/usr/local/bin/xray"), env("VELORAY_XRAY_CONFIG", "/usr/local/etc/xray/config.json"), env("VELORAY_XRAY_SERVICE", "xray.service"), env("VELORAY_AGENT_STATE", "/var/lib/veloray-agent/state.json"), nil)
+	mode := env("VELORAY_CORE_MANAGER", "systemd")
+	if mode != "systemd" && mode != "process" {
+		return errors.New("VELORAY_CORE_MANAGER must be systemd or process")
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var runtime Runtime
+	var processes *ProcessRuntime
+	if mode == "process" {
+		processes = NewProcessRuntime()
+		runtime = processes
+		defer processes.Close()
+	}
+	m, err := NewManager(env("VELORAY_XRAY_BINARY", "/usr/local/bin/xray"), env("VELORAY_XRAY_CONFIG", "/usr/local/etc/xray/config.json"), env("VELORAY_XRAY_SERVICE", "xray.service"), env("VELORAY_AGENT_STATE", "/var/lib/veloray-agent/state.json"), runtime)
 	if err != nil {
 		return err
 	}
-	go m.Poll(ctx)
 	var second *Manager
 	if _, e := os.Stat(env("VELORAY_SINGBOX_BINARY", "/usr/local/bin/sing-box")); e == nil {
-		second, err = NewManager(env("VELORAY_SINGBOX_BINARY", "/usr/local/bin/sing-box"), env("VELORAY_SINGBOX_CONFIG", "/usr/local/etc/sing-box/config.json"), "sing-box.service", "/var/lib/veloray-agent/sing-box-state.json", nil)
+		second, err = NewManager(env("VELORAY_SINGBOX_BINARY", "/usr/local/bin/sing-box"), env("VELORAY_SINGBOX_CONFIG", "/usr/local/etc/sing-box/config.json"), "sing-box.service", env("VELORAY_SINGBOX_STATE", "/var/lib/veloray-agent/sing-box-state.json"), runtime)
 		if err != nil {
 			return err
 		}
 		second.Core = "singbox"
+	}
+	if processes != nil {
+		defer func() {
+			final, stop := context.WithTimeout(context.WithoutCancel(ctx), 6*time.Second)
+			defer stop()
+			for _, manager := range []*Manager{m, second} {
+				if manager != nil {
+					manager.mu.Lock()
+					if manager.status(final).Running {
+						_ = manager.observe(final)
+					}
+					manager.mu.Unlock()
+				}
+			}
+		}()
+		for _, manager := range []*Manager{m, second} {
+			if manager == nil {
+				continue
+			}
+			if err = processes.register(manager); err != nil {
+				return err
+			}
+			if err = initializeProcessCore(manager); err != nil {
+				return err
+			}
+			raw, readErr := os.ReadFile(manager.ConfigPath)
+			if readErr != nil {
+				return readErr
+			}
+			if err = manager.validate(ctx, raw); err != nil {
+				return err
+			}
+			if err = manager.Restart(ctx); err != nil {
+				return err
+			}
+		}
+	}
+	go m.Poll(ctx)
+	if second != nil {
 		go second.Poll(ctx)
 	}
 	s := &http.Server{Addr: listen, Handler: Server{NodeID: env("VELORAY_NODE_ID", "local"), Version: version, Token: token, Manager: m, SingBox: second}.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 55 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
+	shutdown := make(chan struct{})
 	go func() {
+		defer close(shutdown)
 		<-ctx.Done()
 		c, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_ = s.Shutdown(c)
+		if err := s.Shutdown(c); err != nil {
+			_ = s.Close()
+		}
 	}()
+	defer func() { cancel(); <-shutdown }()
+	if processes != nil {
+		fatal := make(chan error, 1)
+		go func() {
+			select {
+			case err := <-processes.failure:
+				fatal <- err
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+		defer func() {
+			select {
+			case err := <-fatal:
+				serveErr = err
+			default:
+			}
+		}()
+	}
 	if cert != "" {
 		s.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS13}
 		if ca := os.Getenv("VELORAY_CA_CERT"); ca != "" {

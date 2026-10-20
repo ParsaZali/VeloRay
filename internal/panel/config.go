@@ -3,6 +3,7 @@ package panel
 import (
 	"errors"
 	"fmt"
+	"github.com/PaarSaAm/VeloRay/internal/envfiles"
 	"net"
 	"net/url"
 	"os"
@@ -29,6 +30,9 @@ func env(k, fallback string) string {
 	return fallback
 }
 func LoadConfig() (Config, error) {
+	if err := envfiles.LoadSecrets(); err != nil {
+		return Config{}, err
+	}
 	c := Config{Listen: env("VELORAY_LISTEN", "127.0.0.1:8610"), PublicURL: strings.TrimRight(env("VELORAY_PUBLIC_URL", ""), "/"), SecretKey: os.Getenv("VELORAY_SECRET_KEY"), FieldKey: os.Getenv("VELORAY_FIELD_KEY"), FrontendDir: env("VELORAY_FRONTEND_DIR", "frontend/dist"), SecureCookies: env("VELORAY_COOKIE_SECURE", "true") != "false", TrustedOrigins: map[string]bool{}}
 	if len(c.SecretKey) < 32 || len(c.FieldKey) < 32 {
 		return c, errors.New("VELORAY_SECRET_KEY and VELORAY_FIELD_KEY must each contain at least 32 characters")

@@ -349,9 +349,12 @@ func (s *Server) authAPI(w http.ResponseWriter, r *http.Request, path string, a 
 	return out, 200, tx.Commit(ctx)
 }
 func (s *Store) Bootstrap(ctx context.Context, c Config, name, password string) error {
-	if e := passwordPolicy(name, password); e != nil {
-		return e
-	}
+	return s.bootstrap(ctx, c, name, password, false)
+}
+func (s *Store) BootstrapIfEmpty(ctx context.Context, c Config, name, password string) error {
+	return s.bootstrap(ctx, c, name, password, true)
+}
+func (s *Store) bootstrap(ctx context.Context, c Config, name, password string, onlyEmpty bool) error {
 	tx, e := s.Pool.Begin(ctx)
 	if e != nil {
 		return e
@@ -359,6 +362,18 @@ func (s *Store) Bootstrap(ctx context.Context, c Config, name, password string) 
 	defer tx.Rollback(ctx)
 	_, e = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(842100,1)`)
 	if e != nil {
+		return e
+	}
+	if onlyEmpty {
+		var exists bool
+		if e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM vr_users)").Scan(&exists); e != nil {
+			return e
+		}
+		if exists {
+			return nil
+		}
+	}
+	if e := passwordPolicy(name, password); e != nil {
 		return e
 	}
 	users, e := list(ctx, tx, "users", "WHERE data->>'username'=$1", name)

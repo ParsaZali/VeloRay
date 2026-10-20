@@ -1,0 +1,135 @@
+name: veloray
+x-app: &app
+  image: veloray:local
+  build:
+    context: ../..
+    target: runtime
+  network_mode: host
+  read_only: true
+  init: true
+  restart: unless-stopped
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: ["/tmp:rw,noexec,nosuid,size=64m,mode=1777"]
+  logging:
+    driver: json-file
+    options: {max-size: 5m, max-file: "2"}
+x-panel-env: &panel-env
+  POSTGRES_HOST: 127.0.0.1
+  POSTGRES_DB: veloray
+  POSTGRES_USER: veloray
+  POSTGRES_PASSWORD_FILE: /run/secrets/database_password
+  VELORAY_SECRET_KEY_FILE: /run/secrets/secret_key
+  VELORAY_FIELD_KEY_FILE: /run/secrets/field_key
+  VELORAY_PUBLIC_HOST: ${VELORAY_DOMAIN:?Generate the Docker environment first}
+  VELORAY_PUBLIC_URL: https://${VELORAY_DOMAIN}
+  VELORAY_PANEL_PORT: "443"
+  VELORAY_COOKIE_SECURE: "true"
+services:
+  db:
+    image: postgres:17
+    user: postgres
+    read_only: true
+    cap_drop: [ALL]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m,mode=1777", "/var/run/postgresql:rw,noexec,nosuid,size=16m,mode=1777"]
+    shm_size: 256m
+    network_mode: host
+    command: [postgres, -c, listen_addresses=127.0.0.1]
+    environment:
+      POSTGRES_USER: veloray
+      POSTGRES_DB: veloray
+      POSTGRES_PASSWORD_FILE: /run/secrets/database_password
+    secrets: [database_password]
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U veloray -d veloray -h 127.0.0.1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  agent:
+    <<: *app
+    user: "10002:10002"
+    command: [agent]
+    cap_add: [NET_BIND_SERVICE]
+    environment:
+      VELORAY_CORE_MANAGER: process
+      VELORAY_AGENT_LISTEN: 127.0.0.1:9191
+      VELORAY_AGENT_TOKEN_FILE: /run/secrets/agent_token
+      VELORAY_XRAY_CONFIG: /var/lib/veloray-agent/xray/config.json
+      VELORAY_SINGBOX_CONFIG: /var/lib/veloray-agent/singbox/config.json
+    secrets: [agent_token]
+    volumes: [agent-data:/var/lib/veloray-agent]
+    healthcheck:
+      test: [CMD, /bin/bash, /usr/local/bin/veloray-container, health-agent]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+  panel:
+    <<: *app
+    user: "10001:10001"
+    command: [panel]
+    environment:
+      <<: *panel-env
+      VELORAY_LISTEN: 127.0.0.1:8610
+      VELORAY_ADMIN_USERNAME: admin
+      VELORAY_ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+      VELORAY_LOCAL_NODE_TOKEN_FILE: /run/secrets/agent_token
+    secrets: [database_password, secret_key, field_key, admin_password, agent_token]
+    volumes: [../../examples/subscription:/etc/veloray/templates:ro]
+    depends_on:
+      db: {condition: service_healthy}
+      agent: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, /bin/bash, /usr/local/bin/veloray-container, health-panel]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+  subscriptions:
+    <<: *app
+    user: "10001:10001"
+    command: [subscriptions]
+    environment:
+      <<: *panel-env
+      VELORAY_LISTEN: 127.0.0.1:8612
+      VELORAY_SUBSCRIPTION_ONLY: "true"
+    secrets: [database_password, secret_key, field_key]
+    volumes: [../../examples/subscription:/etc/veloray/templates:ro]
+    depends_on:
+      panel: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, /bin/bash, /usr/local/bin/veloray-container, health-panel]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  proxy:
+    image: veloray-proxy:local
+    build: {context: ../.., target: proxy}
+    user: "10003:10003"
+    network_mode: host
+    read_only: true
+    restart: unless-stopped
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    environment:
+      VELORAY_DOMAIN: ${VELORAY_DOMAIN}
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m,mode=1777"]
+    volumes: [caddy-data:/data, caddy-config:/config]
+    depends_on:
+      panel: {condition: service_healthy}
+      subscriptions: {condition: service_healthy}
+secrets:
+  database_password: {file: "${VELORAY_SECRET_DIRECTORY:-./secrets}/database_password"}
+  secret_key: {file: "${VELORAY_SECRET_DIRECTORY:-./secrets}/secret_key"}
+  field_key: {file: "${VELORAY_SECRET_DIRECTORY:-./secrets}/field_key"}
+  admin_password: {file: "${VELORAY_SECRET_DIRECTORY:-./secrets}/admin_password"}
+  agent_token: {file: "${VELORAY_SECRET_DIRECTORY:-./secrets}/agent_token"}
+volumes:
+  postgres-data:
+  agent-data:
+  caddy-data:
+  caddy-config:
