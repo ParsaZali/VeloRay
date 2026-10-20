@@ -1,0 +1,20 @@
+{
+	admin off
+	log default {
+		output discard
+	}
+}
+{$VELORAY_DOMAIN} {
+	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+	# No access log: subscription URLs contain private bearer tokens.
+	handle /sub/* {
+		reverse_proxy 127.0.0.1:8612
+	}
+	handle {
+		reverse_proxy 127.0.0.1:8610
+	}
+}

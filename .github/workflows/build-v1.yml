@@ -30,6 +30,8 @@ jobs:
             bash scripts/verify-runtime.sh
           fi
       - run: python3 scripts/package-release.py --output "$RUNNER_TEMP/VeloRay-v1.0-GitHub.zip"
+      - name: Verify complete container deployment
+        run: VELORAY_DOCKER_TEST=1 bash scripts/test-docker.sh
       - uses: actions/upload-artifact@v4
         with:
           name: VeloRay-v1.0-GitHub

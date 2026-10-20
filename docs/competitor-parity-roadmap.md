@@ -140,14 +140,14 @@ See [fallbacks and balancing](fallbacks-and-balancing.md) for limits and verific
 - [ ] Maintain safe privileged-agent boundaries for every protocol addition.
 
 ## Stage 4 — deployment, monitoring and external integrations
-- [ ] Full containerized production deployment with minimal-permission images.
-- [ ] Portable installation on supported Linux distributions and architectures.
-- [ ] Investigate Windows support while accounting for systemd and privileged
-      network agent assumptions.
-- [ ] Evaluate SQLite/MySQL/MariaDB portability as a separate architectural
-      undertaking; PostgreSQL remains the authoritative backend until complete.
-- [ ] Cloud-init unattended install, TLS/Cloudflare automation and supported
-      self-updates with verified checksums.
+- [x] Full container stack, non-root images, process-owned cores, independent subscriptions and persistent accounting; see `container-deployment.md` for CI/staging boundaries.
+- [x] Portable container installation and host CI on Ubuntu 22.04/24.04; amd64/arm64 runtime bundles.
+- [ ] Native distro installer beyond Ubuntu 24.04 and native ARM host smoke coverage.
+- [x] Windows feasibility investigation with actual cross-build failures and required OS/service boundaries; native Windows is not shipped.
+- [x] SQLite/MySQL/MariaDB architectural assessment; PostgreSQL remains the runtime backend. See `platform-and-database-assessment.md`.
+- [ ] Implement and validate alternate runtime database backends as a separate migration project.
+- [x] Cloud-init first boot with main-CI/checksum gates, automatic frontend HTTPS and explicit Cloudflare A/AAAA upsert with secret-file tokens.
+- [ ] Live public ACME/DNS-provider verification on the operator's domain; wildcard DNS-01 automation.
 - [x] Prometheus-compatible metrics and meaningful exporter access controls.
 - [x] Per-node billing budgets, reset dates and encrypted hosting provider metadata.
 - [ ] Online status, web-accessible diagnostic logs, deeper search,

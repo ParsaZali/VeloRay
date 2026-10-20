@@ -51,6 +51,13 @@ policy controls, native engine limits and verified behavior.
 
 ## Installation
 
+For the full Docker/Compose stack, cloud-init first boot and Cloudflare DNS CLI,
+see the [container deployment guide](docs/container-deployment.md). The stack
+includes the panel, both cores, agent, PostgreSQL, independent subscriptions and
+automatic frontend HTTPS; it does not require host systemd or a Docker socket
+inside the application containers. See the [platform/database assessment](docs/platform-and-database-assessment.md)
+for the limits of Windows and alternate-database support.
+
 ### Requirements
 
 - Ubuntu 24.04 with systemd and apt (currently the explicitly supported installation target).

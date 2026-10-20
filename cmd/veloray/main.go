@@ -103,7 +103,7 @@ func run() error {
   veloray auto-update enable|disable|status|check|run
   veloray uninstall                Remove services and program files
 
-Development: serve | migrate | bootstrap | bootstrap-local | reconcile | version
+Development: serve | migrate | bootstrap | bootstrap-if-empty | bootstrap-local | reconcile | version
 Run veloray serve explicitly to start the application in the foreground.`)
 		return nil
 	}
@@ -256,7 +256,7 @@ Run veloray serve explicitly to start the application in the foreground.`)
 			return e
 		}
 		return json.NewEncoder(os.Stdout).Encode(out)
-	case "bootstrap", "reset-password":
+	case "bootstrap", "bootstrap-if-empty", "reset-password":
 		username := os.Getenv("VELORAY_ADMIN_USERNAME")
 		if username == "" {
 			username = "admin"
@@ -269,6 +269,9 @@ Run veloray serve explicitly to start the application in the foreground.`)
 				return e
 			}
 			password = strings.TrimRight(string(raw), "\r\n")
+		}
+		if command == "bootstrap-if-empty" {
+			return store.BootstrapIfEmpty(ctx, c, username, password)
 		}
 		if command == "bootstrap" {
 			return store.Bootstrap(ctx, c, username, password)
