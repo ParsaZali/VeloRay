@@ -130,6 +130,9 @@ func validateNode(c Config, d Data) error {
 	return nil
 }
 func validateInbound(ctx context.Context, q Query, c Config, d Data) error {
+	if err := validateInboundFallbacks(d); err != nil {
+		return err
+	}
 	stream := obj(d, "stream_settings")
 	if err := allowed(stream, "rawSettings tcpSettings wsSettings grpcSettings xhttpSettings httpupgradeSettings kcpSettings hysteriaSettings tlsSettings realitySettings sockopt"); err != nil {
 		return err

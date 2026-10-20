@@ -14,7 +14,7 @@ import (
 // Only network policy is reusable. Managed listeners, API endpoints and accounting
 // are owned by the panel and cannot be replaced through a shared profile.
 func validateProfilePatch(core string, d Data) error {
-	keys := "dns routing outbounds policy log"
+	keys := "dns routing outbounds policy log observatory burstObservatory"
 	if core == "singbox" {
 		keys = "dns route outbounds log"
 	}

@@ -16,10 +16,10 @@ Xray as the primary core. sing-box as the secondary core. One interface for both
 |---|---|
 | Dashboard | Server resources, live client status, actual upload/download counters, dual-series traffic charts, transfer rate and time-range zoom |
 | Clients | Individual and batch creation, quotas, scheduled renewals, expiry, first-use activation, device limits, usage export, bulk actions |
-| Inbounds | Full-width directory, separate creation editor, protocol presets, custom selectors, port inspection, cloning between nodes |
+| Inbounds | Full-width directory, separate creation editor, protocol presets, custom selectors, port inspection, cloning between nodes, Xray VLESS/Trojan fallbacks |
 | Cores | Xray primary; sing-box secondary; configuration validation, durable traffic accounting and deployment recovery |
 | Outbounds | Built-in routes, node/core filters, guided proxy setup, protocol templates, duplicate and enable/disable actions |
-| Routing | Protected defaults, ordered rules, domain/IP/port/source/user matching, routing presets and outbound selectors |
+| Routing | Protected defaults, ordered rules, domain/IP/port/source/user matching, routing presets, sing-box selectors and Xray load balancing |
 | Subscriptions | Portable URI feeds, Base64, Clash/Mihomo, sing-box JSON, account metadata, browser portal and QR codes |
 | Announcements | Subscription announcement and announcement URL; editable in Settings |
 | SNI scanner | Node-side DNS and TLS 1.3 probes, custom domains, suggested domains, latency and certificate checks |
@@ -45,6 +45,9 @@ New management and subscription capabilities are described in the
 [operations/email guide](docs/operations-and-alerts.md). The [parity backlog](docs/competitor-parity-roadmap.md)
 records remaining architectural work; this release does not claim every feature
 of every competing panel.
+
+See the [fallback and balancing guide](docs/fallbacks-and-balancing.md) for network
+policy controls, native engine limits and verified behavior.
 
 ## Installation
 

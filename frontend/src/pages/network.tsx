@@ -22,6 +22,10 @@ import { Input, Select, Textarea } from "@/components/ui/controls";
 import { can, useSession } from "@/lib/session";
 import { OutboundTraffic } from "@/components/outbound-traffic";
 import {
+  XrayBalancing,
+  type BalancingState,
+} from "@/components/xray-balancing";
+import {
   configPath,
   needsProtocolSniff,
   outboundTemplate,
@@ -47,6 +51,11 @@ function NetworkPage({ kind }: { kind: "outbounds" | "routing_rules" }) {
     title = routing ? t("Routing") : t("Outbounds"),
     editable = can(session, `${kind}.write`);
   const [items, setItems] = useState<Entry[]>([]),
+    [balancing, setBalancing] = useState<BalancingState>({
+      node: 0,
+      tags: [],
+      outboundTags: [],
+    }),
     [outbounds, setOutbounds] = useState<Entry[]>([]),
     [nodes, setNodes] = useState<NodeItem[]>([]),
     [nodeFilter, setNodeFilter] = useState(0),
@@ -307,6 +316,7 @@ function NetworkPage({ kind }: { kind: "outbounds" | "routing_rules" }) {
     : [];
   const path = (field: string) => [...serverPath, field];
   const tags = [
+    ...(xray && balancing.node === editor?.node ? balancing.outboundTags : []),
     "direct",
     ...(xray ? ["blocked"] : []),
     ...outbounds
@@ -401,6 +411,13 @@ function NetworkPage({ kind }: { kind: "outbounds" | "routing_rules" }) {
           />
         </label>
       </div>
+      {node && routing && coreFilter === "xray" && session?.is_superuser && (
+        <XrayBalancing
+          key={node.id}
+          node={node.id}
+          onGroupsChange={setBalancing}
+        />
+      )}
       {node && routing && (
         <div className="network-builtins">
           {builtins.map((item, i) => (
@@ -498,6 +515,7 @@ function NetworkPage({ kind }: { kind: "outbounds" | "routing_rules" }) {
                                   "action",
                                   "outbound",
                                   "outboundTag",
+                                  "balancerTag",
                                   "type",
                                 ].includes(key),
                             )
@@ -511,6 +529,7 @@ function NetworkPage({ kind }: { kind: "outbounds" | "routing_rules" }) {
                     <td>
                       {routing
                         ? item.config.outboundTag ||
+                          item.config.balancerTag ||
                           item.config.outbound ||
                           item.config.action
                         : item.config.server ||
@@ -1304,15 +1323,22 @@ function NetworkPage({ kind }: { kind: "outbounds" | "routing_rules" }) {
                       className="input"
                       value={
                         xray
-                          ? config.outboundTag || "direct"
+                          ? config.balancerTag
+                            ? `balancer:${config.balancerTag}`
+                            : config.outboundTag || "direct"
                           : config.action === "reject"
                             ? "__reject"
                             : config.outbound || "direct"
                       }
                       onChange={(e) => {
                         const next = { ...config };
-                        if (xray) next.outboundTag = e.target.value;
-                        else if (e.target.value === "__reject") {
+                        if (xray) {
+                          delete next.outboundTag;
+                          delete next.balancerTag;
+                          if (e.target.value.startsWith("balancer:"))
+                            next.balancerTag = e.target.value.slice(9);
+                          else next.outboundTag = e.target.value;
+                        } else if (e.target.value === "__reject") {
                           next.action = "reject";
                           delete next.outbound;
                         } else {
@@ -1327,6 +1353,26 @@ function NetworkPage({ kind }: { kind: "outbounds" | "routing_rules" }) {
                           {tag}
                         </option>
                       ))}
+                      {xray &&
+                        balancing.node === editor.node &&
+                        balancing.tags.map((tag) => (
+                          <option
+                            key={`balancer:${tag}`}
+                            value={`balancer:${tag}`}
+                          >
+                            {t("Balancer")}: {tag}
+                          </option>
+                        ))}
+                      {xray &&
+                        config.balancerTag &&
+                        !(
+                          balancing.node === editor.node &&
+                          balancing.tags.includes(config.balancerTag)
+                        ) && (
+                          <option value={`balancer:${config.balancerTag}`}>
+                            {t("Balancer")}: {config.balancerTag}
+                          </option>
+                        )}
                       {!xray && <option value="__reject">{t("Block")}</option>}
                     </Select>
                   </label>

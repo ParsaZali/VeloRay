@@ -52,7 +52,15 @@ func nativeRun(t *testing.T, binary, path string) {
 		log.Close()
 		t.Fatal(e)
 	}
-	t.Cleanup(func() { cancel(); _ = cmd.Wait(); _ = log.Close() })
+	t.Cleanup(func() {
+		cancel()
+		_ = cmd.Wait()
+		_ = log.Close()
+		if t.Failed() {
+			raw, _ := os.ReadFile(log.Name())
+			t.Log(string(raw))
+		}
+	})
 }
 func TestIntegrationNativeProtocolsWithPinnedSingBox(t *testing.T) {
 	binary := os.Getenv("VELORAY_TEST_SINGBOX_BINARY")

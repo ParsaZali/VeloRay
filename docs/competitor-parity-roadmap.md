@@ -61,6 +61,14 @@ permissions, retention, scheduling and rollout limits.
 - [x] TLS/STARTTLS SMTP destinations and deduplicated quota/expiry/inactivity events.
 - [x] Jalali date input picker with leap-boundary and keyboard regression coverage.
 
+## Delivered network policy slice
+
+See [fallbacks and balancing](fallbacks-and-balancing.md) for limits and verification.
+
+- [x] Guided Xray VLESS/Trojan RAW fallbacks, default/SNI/ALPN/path routing and PROXY protocol versions.
+- [x] Xray outbound balancing, routing group selection, prefix preview and atomic revision-checked deployment.
+- [x] Final merged routing references, inherited outbounds and dependent-group deletion protection.
+
 ## Stage 0 — safety and baseline
 - [x] Establish reproducible green CI on main (Go tests/race, web build,
       browser smoke tests, dependency scan, install smoke tests).
@@ -117,12 +125,15 @@ permissions, retention, scheduling and rollout limits.
 ## Stage 3 — Xray, sing-box and network functionality
 - [x] Hot addition of users on unchanged Xray VLESS/VMess/Trojan listeners.
 - [ ] Hot removal/update, sing-box changes and structural inbound hot apply.
-- [ ] Native, tested protocol management for TUIC v5, AmneziaWG, MTProto,
-      ShadowTLS, Naive, Snell and optional SSH proxy.
+- [x] Native TUIC v5 and Snell v6 management with real-core round trips.
+- [x] Native Naive TLS management and exports.
+- [ ] Verify a compatible Naive client round trip.
+- [ ] Native, tested AmneziaWG, MTProto, ShadowTLS and optional SSH proxy management.
 - [ ] Validate feasibility per engine and distinguish upstream engine capability
       from the panel UI's explicitly supported configuration forms.
 - [x] Guided outbound chaining and sing-box selector/URL-test controls, with cycle/dependency validation.
-- [ ] Fallbacks, outbound balancing, geo asset browsing, transparent proxy,
+- [x] Xray fallbacks and outbound balancing within the documented engine/form limits.
+- [ ] Geo asset browsing, transparent proxy,
       transparent capture, WARP / provider integrations, external-provider
       subscriptions, link-aware DNS and domain fronting controls.
 - [x] Outbound HTTP health probes, latency and periodic watchdog alerts (no automatic production restarts).

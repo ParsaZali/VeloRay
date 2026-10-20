@@ -55,21 +55,8 @@ func validateNetworkEntity(ctx context.Context, q Query, kind string, d Data) er
 		if str(d, "core") == "singbox" && tag == "blocked" {
 			return errors.New("sing-box blocking rules must use the reject action")
 		}
-		if tag != "" && !oneOf(tag, "direct", "blocked") {
-			outs, e := list(ctx, q, "outbounds", "WHERE node_id=$1", num(d, "node"))
-			if e != nil {
-				return e
-			}
-			valid := false
-			for _, o := range outs {
-				if flag(o, "enabled") && str(o, "core") == str(d, "core") && str(o, "tag") == tag {
-					valid = true
-				}
-			}
-			if !valid {
-				return errors.New("routing outbound does not exist")
-			}
-		}
+		// References are checked against the final merged profile/node/managed
+		// configuration, including balancers, during the same transaction.
 	}
 	return nil
 }
@@ -127,6 +114,19 @@ func applyNetworkEntities(ctx context.Context, q Query, node, cfg Data, core str
 	}
 	route["rules"] = entries
 	cfg[key] = route
+	if core == "xray" {
+		return validateXrayRouting(cfg)
+	}
+	// sing-box has no routing balancerTag; selectors are native outbounds.
+	available := map[string]bool{}
+	for _, raw := range array(cfg, "outbounds") {
+		available[str(asData(raw), "tag")] = true
+	}
+	for _, raw := range entries {
+		if tag := str(asData(raw), "outbound"); tag != "" && !available[tag] {
+			return fmt.Errorf("routing outbound %q does not exist", tag)
+		}
+	}
 	return nil
 }
 func needsProtocolSniff(config Data) bool {
