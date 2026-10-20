@@ -1,4 +1,4 @@
-import { Input } from "@/components/ui/controls";
+import { Input, Select } from "@/components/ui/controls";
 import { useLocale, type Locale } from "@/lib/i18n";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
@@ -63,6 +63,8 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
   );
   const [oidcEnabled, setOidcEnabled] = useState(false);
   const [githubEnabled, setGithubEnabled] = useState(false);
+  const [ldapEnabled, setLdapEnabled] = useState(false);
+  const [provider, setProvider] = useState<"local" | "ldap">("local");
   const [telegram, setTelegram] = useState(false);
   const [need2fa, setNeed2fa] = useState(oidcChallenge);
   useEffect(() => {
@@ -70,12 +72,14 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
     void api<{
       enabled: boolean;
       github_enabled?: boolean;
+      ldap_enabled?: boolean;
       telegram?: boolean;
     }>("/auth/oidc", { signal: c.signal })
       .then((d) => {
         if (!c.signal.aborted) {
           setOidcEnabled(d.enabled);
           setGithubEnabled(d.github_enabled === true);
+          setLdapEnabled(d.ldap_enabled === true);
           setTelegram(d.telegram === true);
         }
       })
@@ -149,7 +153,8 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
           method: "POST",
           body: JSON.stringify({ totp_code: code.trim() }),
         });
-      } else result = await login(username.trim(), password, code.trim());
+      } else
+        result = await login(username.trim(), password, code.trim(), provider);
       if (result.two_factor_required) {
         setNeed2fa(true);
         setCode("");
@@ -228,6 +233,35 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
               >
                 {!need2fa ? (
                   <>
+                    {ldapEnabled && (
+                      <label className="block text-xs text-[var(--muted)]">
+                        {rtl ? "روش ورود" : "Sign-in method"}
+                        <Select
+                          value={provider}
+                          onChange={(e) => {
+                            setProvider(e.target.value as "local" | "ldap");
+                            setPassword("");
+                            setError("");
+                          }}
+                          aria-label={rtl ? "روش ورود" : "Sign-in method"}
+                          disabled={busy}
+                        >
+                          <option value="local">
+                            {rtl ? "حساب محلی" : "Local account"}
+                          </option>
+                          <option value="ldap">
+                            {rtl ? "دایرکتوری LDAP" : "LDAP directory"}
+                          </option>
+                        </Select>
+                      </label>
+                    )}
+                    {provider === "ldap" && (
+                      <p className="text-xs text-[var(--muted)]">
+                        {rtl
+                          ? "نام کاربری پنل و رمز دایرکتوری را وارد کنید."
+                          : "Use your panel username and directory password."}
+                      </p>
+                    )}
                     <label className="block">
                       <span className="sr-only">{t.username}</span>
                       <Input

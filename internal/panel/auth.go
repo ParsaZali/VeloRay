@@ -176,6 +176,13 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) (any, int, error)
 		return nil, 0, e
 	}
 	name, password := str(input, "username"), str(input, "password")
+	provider := str(input, "provider")
+	if provider == "" {
+		provider = "local"
+	}
+	if provider != "local" && provider != "ldap" {
+		return nil, 0, fail(400, "invalid authentication provider")
+	}
 	if len(name) > 150 || len(password) > 1024 {
 		return nil, 0, fail(400, "invalid credentials")
 	}
@@ -185,6 +192,17 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) (any, int, error)
 	if e = rateLimit(r.Context(), s.Store.Pool, "login-user:"+digest(name), 10, 5*time.Minute); e != nil {
 		return nil, 0, e
 	}
+	// Directory I/O must not hold a user row lock. Recheck the binding/version
+	// under lock afterwards so account changes during a bind cannot create a session.
+	var directoryUser Data
+	if provider == "ldap" {
+		var raw []byte
+		e = s.Store.Pool.QueryRow(r.Context(), `SELECT data||jsonb_build_object('id',id) FROM vr_users WHERE data->>'username'=$1`, name).Scan(&raw)
+		directoryUser, _ = decode(raw)
+		if e != nil || !flag(directoryUser, "is_active") || !flag(directoryUser, "is_staff") || s.ldapBind(r.Context(), str(directoryUser, "ldap_dn"), password) != nil {
+			return nil, 0, fail(401, "Username or password is incorrect")
+		}
+	}
 	tx, e := s.Store.Pool.Begin(r.Context())
 	if e != nil {
 		return nil, 0, e
@@ -193,7 +211,13 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) (any, int, error)
 	var raw []byte
 	e = tx.QueryRow(r.Context(), `SELECT data||jsonb_build_object('id',id) FROM vr_users WHERE data->>'username'=$1 FOR UPDATE`, name).Scan(&raw)
 	user, _ := decode(raw)
-	if e != nil || !checkPassword(str(user, "_password"), password) || !flag(user, "is_active") || !flag(user, "is_staff") {
+	validPassword := false
+	if provider == "ldap" {
+		validPassword = num(user, "id") == num(directoryUser, "id") && num(user, "_auth_version") == num(directoryUser, "_auth_version") && str(user, "ldap_dn") == str(directoryUser, "ldap_dn")
+	} else {
+		validPassword = checkPassword(str(user, "_password"), password)
+	}
+	if e != nil || !validPassword || !flag(user, "is_active") || !flag(user, "is_staff") {
 		return nil, 0, fail(401, "Username or password is incorrect")
 	}
 	if flag(user, "_totp_enabled") {
@@ -204,7 +228,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) (any, int, error)
 			return nil, 0, fail(401, "Authentication code is invalid or already used")
 		}
 	}
-	if strings.HasPrefix(str(user, "_password"), "pbkdf2_sha256$") {
+	if provider == "local" && strings.HasPrefix(str(user, "_password"), "pbkdf2_sha256$") {
 		user["_password"], e = hashPassword(password)
 		if e != nil {
 			return nil, 0, e
@@ -220,7 +244,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) (any, int, error)
 	if e != nil {
 		return nil, 0, e
 	}
-	if e = audit(r.Context(), tx, num(user, "id"), "auth.login", name, Data{"ip": clientIP(r)}); e != nil {
+	if e = audit(r.Context(), tx, num(user, "id"), "auth.login", name, Data{"ip": clientIP(r), "provider": provider}); e != nil {
 		return nil, 0, e
 	}
 	if e = tx.Commit(r.Context()); e != nil {

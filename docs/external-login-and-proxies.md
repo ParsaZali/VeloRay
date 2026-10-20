@@ -4,7 +4,8 @@ Local login remains available. External login never creates users or matches
 email addresses. Administrators bind an existing active staff account to one
 exact issuer/subject pair in **Users**. Existing permissions, suspension,
 session revocation and local TOTP/recovery codes continue to apply. Each local
-user currently has one external identity binding.
+user currently has one OIDC/GitHub identity binding and an optional separate
+[LDAP directory DN](ldap-login.md).
 
 ## GitHub OAuth
 
@@ -45,7 +46,8 @@ provider slot may run alongside direct GitHub login.
 
 Contract tests use simulated providers; live sign-in with your app credentials
 must be verified after registration. The implementation does not include the
-legacy Telegram iframe widget or a direct LDAP password adapter.
+legacy Telegram iframe widget. Direct directory sign-in is documented in
+[LDAP directory login](ldap-login.md).
 
 Protocols: [GitHub OAuth](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps),
 [Telegram OIDC](https://core.telegram.org/bots/telegram-login#openid-connect).

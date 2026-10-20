@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"github.com/PaarSaAm/VeloRay/internal/envfiles"
@@ -14,6 +15,8 @@ import (
 )
 
 type Config struct {
+	LDAPAddress                                                      string
+	LDAPTLS                                                          *tls.Config
 	OIDCIssuer, OIDCClientID, OIDCClientSecret                       string
 	GitHubClientID, GitHubClientSecret                               string
 	Listen, DatabaseURL, PublicURL, SecretKey, FieldKey, FrontendDir string
@@ -64,6 +67,9 @@ func LoadConfig() (Config, error) {
 	c.OIDCIssuer, c.OIDCClientID, c.OIDCClientSecret = env("VELORAY_OIDC_ISSUER", ""), env("VELORAY_OIDC_CLIENT_ID", ""), env("VELORAY_OIDC_CLIENT_SECRET", "")
 	if (c.OIDCIssuer != "" || c.OIDCClientID != "" || c.OIDCClientSecret != "") && (!validOIDCURL(c.OIDCIssuer) || c.OIDCClientID == "" || !c.SecureCookies) {
 		return c, errors.New("OIDC requires HTTPS issuer, client ID and secure cookies")
+	}
+	if err := c.configureLDAP(os.Getenv("VELORAY_LDAP_URL"), os.Getenv("VELORAY_LDAP_CA_FILE")); err != nil {
+		return c, err
 	}
 	c.SubscriptionOnly = env("VELORAY_SUBSCRIPTION_ONLY", "false") == "true"
 	c.GitHubClientID, c.GitHubClientSecret = os.Getenv("VELORAY_GITHUB_CLIENT_ID"), os.Getenv("VELORAY_GITHUB_CLIENT_SECRET")

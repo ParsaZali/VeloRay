@@ -157,7 +157,7 @@ See [fallbacks and balancing](fallbacks-and-balancing.md) for limits and verific
 - [x] Optional OIDC code/PKCE login with exact pre-bound subjects and local 2FA.
 - [x] Direct GitHub OAuth with PKCE, exact account-ID binding and local second factor.
 - [x] Telegram sign-in through the existing standard OIDC code flow and provider-aware login button (operator registration required; see `external-login-and-proxies.md`).
-- [ ] Direct LDAP adapter.
+- [x] Direct LDAPS simple-bind adapter with explicit local account DNs, verified TLS and preserved permissions/2FA; actual directory staging remains operator-owned (see `ldap-login.md`).
 
 ## Stage 5 — internationalization and UX
 - [x] Persian Jalali/timezone display preferences for expiry and collection dates.

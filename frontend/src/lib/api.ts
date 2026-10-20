@@ -135,11 +135,12 @@ export async function login(
   username: string,
   password: string,
   totp_code = "",
+  provider: "local" | "ldap" = "local",
 ) {
   await api("/auth/csrf");
   return api<LoginResult>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ username, password, totp_code }),
+    body: JSON.stringify({ username, password, totp_code, provider }),
   });
 }
 export async function logout() {
@@ -312,6 +313,7 @@ export type AppSettings = {
   telegram_alert_cooldown_minutes: number;
 };
 export type AdminUser = {
+  ldap_dn?: string;
   oidc_issuer?: string;
   oidc_subject?: string;
   role: "administrator" | "reseller" | "viewer" | "custom";

@@ -275,6 +275,9 @@ func databaseError(err error) error {
 	if errors.As(err, &pg) {
 		switch pg.Code {
 		case "23505":
+			if pg.ConstraintName == "vr_users_ldap_binding" {
+				return fail(409, "LDAP identity is already linked to another account")
+			}
 			return errors.New("a record with this name, port or credential already exists")
 		case "23503":
 			return errors.New("the selected node, inbound or user no longer exists")

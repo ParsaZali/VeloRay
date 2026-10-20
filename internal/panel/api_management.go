@@ -44,7 +44,7 @@ func (s *Server) resetAPIKey(w http.ResponseWriter, r *http.Request, id int64, a
 }
 func openAPISpec(base string) Data {
 	paths := Data{}
-	for _, kind := range []string{"customers", "services", "profiles", "snippets", "nodes", "inbounds", "clients", "outbounds", "routing_rules", "admin/api-keys"} {
+	for _, kind := range []string{"customers", "services", "profiles", "snippets", "nodes", "inbounds", "clients", "outbounds", "routing_rules", "admin/users", "admin/api-keys"} {
 		path := "/api/" + kind
 		paths[path] = Data{"get": Data{"summary": "List " + kind, "responses": Data{"200": Data{"description": "OK"}}}, "post": Data{"summary": "Create " + kind, "requestBody": Data{"required": true, "content": Data{"application/json": Data{"schema": Data{"type": "object"}}}}, "responses": Data{"201": Data{"description": "Created"}}}}
 		paths[path+"/{id}"] = Data{"parameters": []any{Data{"name": "id", "in": "path", "required": true, "schema": Data{"type": "integer"}}}, "get": Data{"responses": Data{"200": Data{"description": "OK"}}}, "patch": Data{"responses": Data{"200": Data{"description": "Updated"}}}, "delete": Data{"responses": Data{"204": Data{"description": "Deleted"}}}}
@@ -65,5 +65,17 @@ func openAPISpec(base string) Data {
 	paths["/api/clients/{id}/device-action"] = Data{"post": Data{"summary": "Revoke, allow or forget a registered device", "responses": Data{"200": Data{"description": "Device updated"}}}}
 	paths["/api/admin/api-keys/{id}/reset"] = Data{"post": Data{"parameters": []any{Data{"name": "id", "in": "path", "required": true, "schema": Data{"type": "integer"}}}, "responses": Data{"200": Data{"description": "Replacement key returned once; previous key revoked"}}}}
 	schemas := featureAPISpec(paths)
+	schemas["LoginInput"] = Data{"type": "object", "required": []any{"username", "password"}, "properties": Data{
+		"username":  Data{"type": "string", "maxLength": 150},
+		"password":  Data{"type": "string", "maxLength": 1024, "writeOnly": true},
+		"provider":  Data{"type": "string", "enum": []any{"local", "ldap"}, "default": "local"},
+		"totp_code": Data{"type": "string", "writeOnly": true},
+	}}
+	paths["/api/auth/login"] = Data{"post": Data{"security": []any{}, "summary": "Sign in with a local password or an explicitly bound LDAP directory identity", "description": "Same-origin CSRF cookie and X-CSRFToken header required. LDAP uses the panel username and directory password; local account permissions and TOTP/recovery apply. No automatic provisioning or password fallback.", "requestBody": Data{"required": true, "content": Data{"application/json": Data{"schema": Data{"$ref": "#/components/schemas/LoginInput"}}}}, "responses": Data{"200": Data{"description": "Session cookie created"}, "202": Data{"description": "Retry with the same provider, credentials and a local second-factor code"}, "401": Data{"description": "Invalid credentials or second factor"}, "429": Data{"description": "Too many attempts"}}}}
+	paths["/api/auth/oidc"] = Data{"get": Data{"security": []any{}, "summary": "Available login methods", "responses": Data{"200": Data{"description": "Public booleans only; no provider credentials or LDAP address", "content": Data{"application/json": Data{"schema": Data{"type": "object", "properties": Data{"enabled": Data{"type": "boolean"}, "github_enabled": Data{"type": "boolean"}, "ldap_enabled": Data{"type": "boolean"}, "telegram": Data{"type": "boolean"}}}}}}}}}
+	ldapBinding := Data{"type": "object", "description": "Administrator account fields. ldap_dn is optional; empty removes the binding and revokes sessions. Other documented account fields are accepted.", "properties": Data{"ldap_dn": Data{"type": "string", "maxLength": 1024, "description": "Exact full distinguished name bound to one account; requires configured LDAPS. Never a password."}}}
+	obj(paths, "/api/admin/users")["post"].(Data)["requestBody"] = Data{"required": true, "content": Data{"application/json": Data{"schema": ldapBinding}}}
+	obj(paths, "/api/admin/users/{id}")["patch"].(Data)["requestBody"] = Data{"required": true, "content": Data{"application/json": Data{"schema": ldapBinding}}}
+
 	return Data{"openapi": "3.1.0", "info": Data{"title": "VeloRay API", "version": Version}, "servers": []any{Data{"url": base}}, "security": []any{Data{"bearerAuth": []any{}}}, "components": Data{"schemas": schemas, "securitySchemes": Data{"bearerAuth": Data{"type": "http", "scheme": "bearer"}, "cookieAuth": Data{"type": "apiKey", "in": "cookie", "name": "veloray_session"}}}, "paths": paths}
 }

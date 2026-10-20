@@ -1223,3 +1223,9 @@ Object.assign(fa, {
   "For GitHub, use issuer https://github.com and the numeric account ID. For Telegram, use https://oauth.telegram.org and the verified OIDC subject. Each user has one SSO binding.":
     "برای گیت‌هاب، صادرکننده https://github.com و شناسهٔ عددی حساب را وارد کنید. برای تلگرام، https://oauth.telegram.org و مقدار subject تأییدشدهٔ OIDC را وارد کنید. هر کاربر یک اتصال ورود سازمانی دارد.",
 });
+
+Object.assign(fa, {
+  "LDAP distinguished name (optional)": "نام متمایز LDAP (اختیاری)",
+  "Requires LDAPS in server configuration. Sign in with the panel username and directory password; local permissions and 2FA still apply.":
+    "به تنظیم LDAPS در سرور نیاز دارد. با نام کاربری پنل و رمز دایرکتوری وارد شوید؛ سطح دسترسی و تأیید دومرحله‌ای حساب حفظ می‌شوند.",
+});

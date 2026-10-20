@@ -183,3 +183,7 @@ CREATE INDEX IF NOT EXISTS vr_monitors_next ON vr_monitors(next_at);
 CREATE TABLE IF NOT EXISTS vr_monitor_samples(id bigserial PRIMARY KEY,monitor_id bigint NOT NULL REFERENCES vr_monitors(id) ON DELETE CASCADE,at timestamptz NOT NULL DEFAULT now(),result jsonb NOT NULL);
 CREATE INDEX IF NOT EXISTS vr_monitor_history ON vr_monitor_samples(monitor_id,at DESC);
 INSERT INTO vr_schema(version) VALUES(9) ON CONFLICT DO NOTHING;
+
+-- One directory identity can be linked to only one panel account.
+CREATE UNIQUE INDEX IF NOT EXISTS vr_users_ldap_binding ON vr_users (lower(data->>'ldap_dn')) WHERE coalesce(data->>'ldap_dn','') <> '';
+INSERT INTO vr_schema(version) VALUES(10) ON CONFLICT DO NOTHING;

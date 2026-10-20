@@ -24,7 +24,7 @@ Xray as the primary core. sing-box as the secondary core. One interface for both
 | Announcements | Subscription announcement and announcement URL; editable in Settings |
 | SNI scanner | Node-side DNS and TLS 1.3 probes, custom domains, suggested domains, latency and certificate checks |
 | Accounts | Administrator, reseller, viewer and custom roles, inbound assignments, client and traffic budgets |
-| Security | Password policy, encrypted sensitive fields, scoped API keys, CSRF, administrator 2FA, optional pre-bound OIDC login and audit history |
+| Security | Password policy, encrypted sensitive fields, scoped API keys, CSRF, administrator 2FA, optional pre-bound OIDC/GitHub/LDAPS login and audit history |
 | Migration | Bounded SQLite and relational JSON adapters, private preview, selection, port overrides and disabled imports |
 | Automation | Telegram controls, signed event outbox, independent webhook/Discord/email destinations, configurable account alerts, scheduled backups and REST API |
 | Operations | Isolated outbound health probes, failure/recovery alerts, private provider budgets, monthly raw-traffic cycles, structured diagnostics and CSV |
@@ -42,6 +42,7 @@ New management and subscription capabilities are described in the
 [independent service guide](docs/independent-subscriptions.md),
 [External login and proxy guide](docs/external-login-and-proxies.md),
 [Geo asset browser](docs/geo-asset-browser.md),
+[LDAP directory login](docs/ldap-login.md),
 [OIDC/live dashboard guide](docs/oidc-and-live-dashboard.md) and
 [notification guide](docs/webhooks.md) and
 [operations/email guide](docs/operations-and-alerts.md). The [parity backlog](docs/competitor-parity-roadmap.md)
