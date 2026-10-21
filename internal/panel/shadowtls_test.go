@@ -119,7 +119,7 @@ func TestIntegrationShadowTLSWithPinnedSingBox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(array(server, "inbounds")) != 2 || len(array(array(server, "inbounds")[0].(Data), "users")) != 2 {
+	if len(array(server, "inbounds")) != 2 || len(array(asData(array(server, "inbounds")[0]), "users")) != 2 {
 		t.Fatal(server)
 	}
 	controller, stats := nativeTestPort(t), fmt.Sprintf("127.0.0.1:%d", nativeTestPort(t))
