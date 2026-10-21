@@ -235,6 +235,9 @@ func (s *Server) caddySubscriptionApply(ctx context.Context, port, previous int)
 	}
 	defer res.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 4096))
+	if res.StatusCode == 503 {
+		return &endpointUnavailable{errors.New("subscription proxy is not ready")}
+	}
 	if res.StatusCode != 200 {
 		return fmt.Errorf("subscription proxy rejected port %d", port)
 	}

@@ -25,6 +25,8 @@ const controlPath = "/run/veloray-proxy/control.sock"
 const adminPath = "/tmp/veloray-caddy-admin.sock"
 const statePath = "/config/veloray-subscriptions.json"
 
+var errProxyUnavailable = errors.New("proxy configuration API is not ready")
+
 var domainLabel = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
 
 func validDomain(domain string) bool {
@@ -149,24 +151,29 @@ func (c *controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if port != c.port {
-		if err := c.reload(r.Context(), configuration(c.domain, port)); err != nil {
-			http.Error(w, "port could not be applied", 409)
-			return
+
+	// Even an unchanged initial port must be confirmed by the running Caddy
+	// configuration API before it becomes durable or customer-visible.
+	if err := c.reload(r.Context(), configuration(c.domain, port)); err != nil {
+		status := 409
+		if errors.Is(err, errProxyUnavailable) {
+			status = 503
 		}
-		if err := c.persist(port); err != nil {
-			ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
-			rollbackErr := c.reload(ctx, configuration(c.domain, c.port))
-			cancel()
-			// Restart from the saved configuration if in-process compensation fails.
-			if rollbackErr != nil && c.fatal != nil {
-				c.fatal()
-			}
-			http.Error(w, "configuration could not be saved", 500)
-			return
-		}
-		c.port = port
+		http.Error(w, "port could not be applied", status)
+		return
 	}
+	if err := c.persist(port); err != nil {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+		rollbackErr := c.reload(ctx, configuration(c.domain, c.port))
+		cancel()
+		if rollbackErr != nil && c.fatal != nil {
+			c.fatal()
+		}
+		http.Error(w, "configuration could not be saved", 500)
+		return
+	}
+	c.port = port
+
 	_ = json.NewEncoder(w).Encode(map[string]int{"port": c.port})
 }
 func persistPort(port int) error {
@@ -216,9 +223,6 @@ func Run(parent context.Context) error {
 	if !validPort(port) {
 		return errors.New("reserved subscription port")
 	}
-	if err := persistPort(port); err != nil {
-		return err
-	}
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	const configPath = "/tmp/veloray-Caddyfile"
@@ -242,11 +246,14 @@ func Run(parent context.Context) error {
 		req.Header.Set("Content-Type", "text/caddyfile")
 		res, err := client.Do(req)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: %v", errProxyUnavailable, err)
 		}
 		defer res.Body.Close()
-		_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 4096))
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
 		if res.StatusCode != 200 {
+			// This response concerns only our generated domain/port configuration; no
+			// public request, subscription token or application credential is included.
+			fmt.Fprintf(os.Stderr, "VeloRay proxy configuration rejected (HTTP %d): %q\n", res.StatusCode, string(body))
 			return errors.New("Caddy rejected configuration")
 		}
 		return nil

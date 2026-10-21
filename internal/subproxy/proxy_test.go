@@ -67,8 +67,8 @@ func TestControllerValidatesPortAndKeepsPreviousListener(t *testing.T) {
 	if c.port != 9000 || len(persisted) != 1 || persisted[0] != 9000 {
 		t.Fatal("successful port was not saved")
 	}
-	if got := put(`{"port":9000}`, ""); got != 200 || len(persisted) != 1 {
-		t.Fatal("same port reloaded")
+	if got := put(`{"port":9000}`, ""); got != 200 || len(persisted) != 2 {
+		t.Fatal("same port was not confirmed and persisted")
 	}
 	w := httptest.NewRecorder()
 	c.ServeHTTP(w, httptest.NewRequest("GET", "/port", nil))
@@ -99,5 +99,15 @@ func TestUnavailableSubscriptionBackendDoesNotMoveListener(t *testing.T) {
 	c.ServeHTTP(w, httptest.NewRequest("PUT", "/port", strings.NewReader(`{"port":9444}`)))
 	if w.Code != 503 || called || c.port != 8444 {
 		t.Fatal("unhealthy backend moved the live endpoint", w.Code, called, c.port)
+	}
+}
+
+func TestInitialPortWaitsForCaddyBeforePersistence(t *testing.T) {
+	persisted := false
+	c := &controller{domain: "example.com", port: 8444, reload: func(context.Context, string) error { return errProxyUnavailable }, persist: func(int) error { persisted = true; return nil }}
+	w := httptest.NewRecorder()
+	c.ServeHTTP(w, httptest.NewRequest("PUT", "/port", strings.NewReader(`{"port":8444}`)))
+	if w.Code != 503 || persisted {
+		t.Fatal("unconfirmed initial port became durable", w.Code, persisted)
 	}
 }
