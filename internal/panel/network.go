@@ -205,6 +205,7 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data, fieldKey ...str
 			return nil, e
 		}
 		accounts := []any{}
+		activeClients := []Data{}
 		for _, c := range cs {
 			if !active(c, time.Now()) {
 				continue
@@ -238,6 +239,11 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data, fieldKey ...str
 				u["password"] = str(c, "credential")
 			}
 			accounts = append(accounts, u)
+			activeClients = append(activeClients, c)
+		}
+		if p == "shadowtls" {
+			entries = append(entries, shadowTLSInbounds(i, accounts, activeClients)...)
+			continue
 		}
 		if p == "shadowsocks" {
 			meteredInbounds = append(meteredInbounds, v["tag"])
@@ -295,8 +301,12 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data, fieldKey ...str
 }
 func singClientOutbound(c, i, n Data) (Data, error) {
 	p, t := str(i, "protocol"), str(i, "transport")
-	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "tuic", "naive", "snell") || !oneOf(t, "raw", "ws", "grpc", "httpupgrade", "hysteria") {
+	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "tuic", "naive", "snell", "shadowtls") || !oneOf(t, "raw", "ws", "grpc", "httpupgrade", "hysteria") {
 		return nil, fmt.Errorf("sing-box output unavailable for %s/%s", p, t)
+	}
+	if p == "shadowtls" {
+		out, _ := shadowTLSOutbound(c, i, n)
+		return out, nil
 	}
 	kind := p
 	if kind == "hysteria" {

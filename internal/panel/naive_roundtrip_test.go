@@ -31,7 +31,7 @@ func (naiveStatsCodec) Unmarshal(raw []byte, value any) error {
 	return nil
 }
 
-func naiveTrafficStats(t *testing.T, address, principal string) {
+func nativeTrafficStats(t *testing.T, address, principal string) map[string]uint64 {
 	t.Helper()
 	client, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -42,7 +42,7 @@ func naiveTrafficStats(t *testing.T, address, principal string) {
 	defer cancel()
 	var request, response []byte
 	if err = client.Invoke(ctx, "/v2ray.core.app.stats.command.StatsService/QueryStats", &request, &response, grpc.ForceCodec(naiveStatsCodec{})); err != nil {
-		t.Fatal("Naive native traffic API unavailable", err)
+		t.Fatal("Native traffic API unavailable", err)
 	}
 	bytesByDirection := map[string]uint64{}
 	for len(response) > 0 {
@@ -92,8 +92,9 @@ func naiveTrafficStats(t *testing.T, address, principal string) {
 		}
 	}
 	if bytesByDirection["uplink"] < 10240 || bytesByDirection["downlink"] < 10240 {
-		t.Fatal("Naive payload missing from native per-user counters", bytesByDirection)
+		t.Fatal("Native payload missing from native per-user counters", bytesByDirection)
 	}
+	return bytesByDirection
 }
 
 // Independent HTTP/1.1 Naive compatibility fixture: CONNECT + basic proxy
@@ -246,7 +247,7 @@ func naiveRoundTrip(t *testing.T, binaryPath, configFile, certificate string, ou
 	if !strings.Contains(string(raw), principal) {
 		t.Fatal("Naive principal missing from live telemetry")
 	}
-	naiveTrafficStats(t, statsAddress, principal)
+	nativeTrafficStats(t, statsAddress, principal)
 	for _, test := range []struct {
 		password string
 		padding  bool

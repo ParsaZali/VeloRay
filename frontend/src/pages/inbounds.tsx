@@ -61,6 +61,9 @@ type FormState = {
   wg_dns: string;
   socks_udp: boolean;
   ss_method: string;
+  st_handshake: string;
+  st_port: string;
+  st_psk: string;
   hy_udp_idle: string;
   hy_masquerade: string;
   tunnel_network: string;
@@ -103,6 +106,9 @@ const fresh = (node = ""): FormState => ({
   wg_dns: "1.1.1.1",
   socks_udp: true,
   ss_method: "aes-256-gcm",
+  st_handshake: "",
+  st_port: "443",
+  st_psk: "",
   hy_udp_idle: "60",
   hy_masquerade: "",
   tunnel_network: "tcp",
@@ -175,6 +181,7 @@ const protocolOptions = [
   ["tuic", "TUIC v5", "bolt"],
   ["naive", "Naive", "globe"],
   ["snell", "Snell v6", "shield"],
+  ["shadowtls", "ShadowTLS v3", "shield"],
   ["wireguard", "WireGuard", "link"],
   ["http", "HTTP Proxy", "globe"],
   ["socks", "SOCKS5", "socks"],
@@ -311,10 +318,10 @@ export function InboundsPage() {
     setForm((f) => {
       const n: any = { ...f, [k]: v };
       if (k === "protocol") {
-        if (["tuic", "naive", "snell"].includes(v)) {
+        if (["tuic", "naive", "snell", "shadowtls"].includes(v)) {
           n.core = "singbox";
           n.transport = "raw";
-          n.security = v === "snell" ? "none" : "tls";
+          n.security = ["snell", "shadowtls"].includes(v) ? "none" : "tls";
           n.flow = "";
         } else if (v === "shadowsocks" || v === "socks") {
           n.transport = "raw";
@@ -443,6 +450,12 @@ export function InboundsPage() {
       };
     if (form.protocol === "shadowsocks")
       p.protocol_settings = { method: form.ss_method };
+    if (form.protocol === "shadowtls")
+      p.protocol_settings = {
+        handshake_server: form.st_handshake.trim(),
+        handshake_port: Number(form.st_port || 443),
+        psk: form.st_psk.trim(),
+      };
     if (form.protocol === "hysteria")
       p.protocol_settings = {
         udp_idle_timeout: Number(form.hy_udp_idle || 60),
@@ -542,6 +555,9 @@ export function InboundsPage() {
       wg_dns: String(ps.dns || "1.1.1.1"),
       socks_udp: ps.udp !== false,
       ss_method: String(ps.method || "aes-256-gcm"),
+      st_handshake: String(ps.handshake_server || ""),
+      st_port: String(ps.handshake_port || 443),
+      st_psk: String(ps.psk || ""),
       hy_udp_idle: String(ps.udp_idle_timeout || 60),
       hy_masquerade: String(ps.masquerade_url || ""),
       tunnel_network: String(ps.allowed_network || "tcp"),
@@ -838,7 +854,9 @@ export function InboundsPage() {
                         .filter(
                           ([v]) =>
                             (form.core === "xray" &&
-                              !["tuic", "naive", "snell"].includes(v)) ||
+                              !["tuic", "naive", "snell", "shadowtls"].includes(
+                                v,
+                              )) ||
                             (form.core === "singbox" &&
                               [
                                 "vless",
@@ -849,6 +867,7 @@ export function InboundsPage() {
                                 "tuic",
                                 "naive",
                                 "snell",
+                                "shadowtls",
                                 "http",
                                 "socks",
                               ].includes(v)),
@@ -907,6 +926,7 @@ export function InboundsPage() {
                                     "tuic",
                                     "naive",
                                     "snell",
+                                    "shadowtls",
                                   ].includes(form.protocol) && v !== "raw"
                                 }
                               >
@@ -980,7 +1000,9 @@ export function InboundsPage() {
                                 v !== "tls") ||
                               ((form.protocol === "shadowsocks" ||
                                 form.protocol === "socks" ||
-                                form.protocol === "snell") &&
+                                ["snell", "shadowtls"].includes(
+                                  form.protocol,
+                                )) &&
                                 v !== "none") ||
                               (v === "reality" &&
                                 (form.protocol !== "vless" ||
@@ -1211,6 +1233,59 @@ export function InboundsPage() {
                           </option>
                         </Select>
                       </Field>
+                    </section>
+                  )}
+                  {form.protocol === "shadowtls" && (
+                    <section>
+                      <div className="panel-section-title mb-3">
+                        ShadowTLS v3
+                      </div>
+                      <p className="mb-3 text-xs text-[var(--muted)]">
+                        {t(
+                          "TLS 1.3 handshake with authenticated Shadowsocks 2022 inside. TCP only; download sing-box JSON or Mihomo YAML from the subscription page.",
+                        )}
+                      </p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Handshake server">
+                          <Input
+                            className="input"
+                            required
+                            value={form.st_handshake}
+                            onChange={(e) =>
+                              set("st_handshake", e.target.value)
+                            }
+                            placeholder="tls.example.com"
+                          />
+                        </Field>
+                        <Field label="Handshake port">
+                          <Input
+                            className="input"
+                            type="number"
+                            required
+                            min="1"
+                            max="65535"
+                            value={form.st_port}
+                            onChange={(e) => set("st_port", e.target.value)}
+                          />
+                        </Field>
+                        <Field label="Inner server key">
+                          <Input
+                            className="input"
+                            type="password"
+                            autoComplete="new-password"
+                            value={form.st_psk}
+                            onChange={(e) => set("st_psk", e.target.value)}
+                            placeholder={t(
+                              "Generated automatically on creation",
+                            )}
+                          />
+                        </Field>
+                      </div>
+                      <p className="mt-2 text-xs text-[var(--muted)]">
+                        {t(
+                          "Use a hostname with a valid TLS 1.3 certificate. Each client gets separate inner and ShadowTLS credentials automatically.",
+                        )}
+                      </p>
                     </section>
                   )}
                   {form.protocol === "hysteria" && (

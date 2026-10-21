@@ -85,7 +85,7 @@ runs set `VELORAY_TEST_NO_NETLINK=1` and omit sing-box runtime round trips while
 still running configuration checks; CI does not set that escape hatch. No successful
 local network test is claimed for a test omitted under that flag.
 
-AmneziaWG, MTProto, ShadowTLS chaining, SSH, additional client ecosystems, full
+AmneziaWG, MTProto, SSH, additional client ecosystems, full
 hot remove/update and structural hot apply remain tracked individually in the
 competitor roadmap. They are not implemented by merely adding a protocol label.
 
@@ -103,7 +103,7 @@ bundled sing-box 1.14.3 source/build tags, rather than a dropdown of protocol na
 | --- | --- | --- |
 | AmneziaWG | No AmneziaWG inbound in either current protocol registry; ordinary WireGuard is a different protocol | Package and supervise a separate compatible engine/module, then implement peer lifecycle, counters, revocation and client exports |
 | MTProto | Absent from both current inbound registries | Separate MTProxy service, secret lifecycle, proven per-principal accounting and supported quota semantics |
-| ShadowTLS | sing-box supplies a TLS wrapper and inner-inbound detour | Manage and validate the paired wrapper/inner graph, both authentication layers, exports, principal attribution and revocation |
+| ShadowTLS v3 | Managed sing-box wrapper + authenticated Shadowsocks 2022 inner inbound, TCP only | Delivered within the [documented scope](shadowtls.md); independent Mihomo/client-app testing remains separate |
 | SSH server | sing-box supplies an SSH outbound, not an SSH server | Separate SSH server lifecycle, authorization/isolation, tunnel-only policy and independently tested traffic accounting |
 | Naive Chromium client | Naive server is bundled; optional cronet outbound is excluded from the CGO-free build | Separate compatible Chromium/cronet client packaging and HTTP/2 interoperability coverage; HTTP/1.1 fixture coverage is shipped |
 | TUN / transparent capture | Engine options exist but require host interfaces, policy routing and privileges | Confined privileged operations, management-path exclusions, rollback and host-level network tests; the default container grants no TUN or NET_ADMIN access |

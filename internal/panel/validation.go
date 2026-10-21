@@ -162,16 +162,19 @@ func validateInbound(ctx context.Context, q Query, c Config, d Data) error {
 	if !oneOf(core, "xray", "singbox") {
 		return errors.New("invalid core")
 	}
-	if core == "singbox" && (!oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "http", "socks", "tuic", "naive", "snell") || !oneOf(t, "raw", "ws", "grpc", "httpupgrade", "hysteria")) {
+	if core == "singbox" && (!oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "http", "socks", "tuic", "naive", "snell", "shadowtls") || !oneOf(t, "raw", "ws", "grpc", "httpupgrade", "hysteria")) {
 		return errors.New("unsupported sing-box protocol or transport")
 	}
-	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "http", "socks", "tunnel", "tun", "tuic", "naive", "snell") || !oneOf(t, "raw", "ws", "grpc", "xhttp", "httpupgrade", "mkcp", "hysteria") || !oneOf(s, "none", "tls", "reality") {
+	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "http", "socks", "tunnel", "tun", "tuic", "naive", "snell", "shadowtls") || !oneOf(t, "raw", "ws", "grpc", "xhttp", "httpupgrade", "mkcp", "hysteria") || !oneOf(s, "none", "tls", "reality") {
 		return errors.New("unsupported protocol, transport or security")
 	}
-	if core == "xray" && oneOf(p, "tuic", "naive", "snell") {
+	if core == "xray" && oneOf(p, "tuic", "naive", "snell", "shadowtls") {
 		return errors.New("protocol requires sing-box")
 	}
 	if e := validateNativeProtocol(d); e != nil {
+		return e
+	}
+	if e := validateShadowTLS(d); e != nil {
 		return e
 	}
 	port := num(d, "port")
@@ -264,7 +267,7 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 		return errors.New("inbound does not exist")
 	}
 	p := str(i, "protocol")
-	if num(d, "device_limit") > 0 && !oneOf(p, "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell") {
+	if num(d, "device_limit") > 0 && !oneOf(p, "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell", "shadowtls") {
 		return errors.New("device limits require a supported metered protocol")
 	}
 	if !supportsClients(p) {
@@ -293,6 +296,8 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 	if credential == "" {
 		if oneOf(p, "vless", "vmess", "tuic") {
 			d["credential"] = uuid()
+		} else if p == "shadowtls" {
+			d["credential"] = shadowTLSKey()
 		} else {
 			d["credential"] = randomToken(24)
 		}
@@ -310,6 +315,18 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 		return errors.New("subscription token must contain 16–96 URL-safe characters")
 	}
 	ps := obj(d, "protocol_settings")
+	if p == "shadowtls" {
+		if !validShadowTLSKey(str(d, "credential")) {
+			return errors.New("ShadowTLS user key must be a base64-encoded 16-byte key")
+		}
+		if str(ps, "shadowtls_password") == "" {
+			ps["shadowtls_password"] = randomToken(32)
+		}
+		if len(str(ps, "shadowtls_password")) < 16 || len(str(ps, "shadowtls_password")) > 255 || strings.ContainsAny(str(ps, "shadowtls_password"), "\r\n") {
+			return errors.New("ShadowTLS password must contain 16–255 characters")
+		}
+		d["protocol_settings"] = ps
+	}
 	if p == "tuic" {
 		if str(ps, "password") == "" {
 			ps["password"] = randomToken(24)
@@ -370,7 +387,7 @@ func fallback(s, d string) string {
 }
 func supportsClients(p string) bool { return p != "tun" && p != "tunnel" }
 func metered(p string) bool {
-	return oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "tuic", "naive", "snell")
+	return oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "tuic", "naive", "snell", "shadowtls")
 }
 func validateSettings(d Data) error {
 	if e := validateSMTP(d); e != nil {
