@@ -1,4 +1,6 @@
 const entries = `
+Traffic history could not load.|دریافت تاریخچه مصرف ناموفق بود.
+
 Install app|نصب برنامه
 Update app|به‌روزرسانی برنامه
 

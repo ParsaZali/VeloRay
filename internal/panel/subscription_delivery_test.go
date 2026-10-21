@@ -43,9 +43,14 @@ func TestSimplePortalDefaultAndCustomFallback(t *testing.T) {
 			t.Fatal("missing", value)
 		}
 	}
-	if strings.Contains(w.Body.String(), "traffic-chart") {
-		t.Fatal("default page is still the complex dashboard")
+	if !strings.Contains(w.Body.String(), "traffic-chart") || !strings.Contains(w.Body.String(), `data-chart-url="/sub/`) {
+		t.Fatal("default page must include same-origin usage history")
 	}
+	cfg["subscription_show_analytics"] = false
+	if strings.Contains(render("GET").Body.String(), "traffic-chart") {
+		t.Fatal("disabled history surfaced")
+	}
+	cfg["subscription_show_analytics"] = true
 	if file := os.Getenv("VELORAY_TEST_SIMPLE_PORTAL_HTML"); file != "" {
 		if err := os.WriteFile(file, w.Body.Bytes(), 0600); err != nil {
 			t.Fatal(err)

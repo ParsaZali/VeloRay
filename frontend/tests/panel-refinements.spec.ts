@@ -838,7 +838,7 @@ test("theme reveals a circular palette and respects reduced motion", async ({
   await expect(page.locator("html")).not.toHaveAttribute("data-theme-reveal");
 });
 
-test("PasarGuard-inspired portal supports chart, four languages, search, QR and mobile", async ({
+test("subscription dashboard supports chart, four languages, search, QR and mobile", async ({
   page,
 }) => {
   const fixture = process.env.VELORAY_TEST_MODERN_PORTAL_HTML;
@@ -904,6 +904,7 @@ test("PasarGuard-inspired portal supports chart, four languages, search, QR and 
   await page.goto("/portal-modern-preview");
   await expect(page.locator('[data-portal-version="2"]')).toBeVisible();
   await expect(page.getByRole("heading", { name: "Arman" })).toBeVisible();
+  await expect(page.locator(".stat-date")).toHaveText("No expiry");
   await expect(page.locator("#traffic-chart")).toBeVisible();
   await expect(page.locator("#chart-total")).toContainText("MB");
   await page.locator('[data-metric="upload_bytes"]').click();
@@ -923,7 +924,7 @@ test("PasarGuard-inspired portal supports chart, four languages, search, QR and 
   await page.locator('[data-metric="bytes"]').click();
   await expect(page.locator("#download-traffic")).toHaveAttribute(
     "href",
-    /export=csv.*range=7d/,
+    /(?=.*export=csv)(?=.*range=7d)/,
   );
   const copy = page.getByRole("button", { name: "Copy link" });
   await copy.click();
@@ -945,11 +946,17 @@ test("PasarGuard-inspired portal supports chart, four languages, search, QR and 
   await expect(page.locator(".profile-item:visible")).toHaveCount(1);
   await page.locator("#portal-language").selectOption("fa");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
-  await expect(page.getByText("نمودار مصرف ترافیک")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "نمودار مصرف ترافیک", exact: true }),
+  ).toBeVisible();
   await page.locator("#portal-language").selectOption("ru");
-  await expect(page.getByText("Использование трафика")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "История трафика", exact: true }),
+  ).toBeVisible();
   await page.locator("#portal-language").selectOption("zh");
-  await expect(page.getByText("流量概览")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "流量概览", exact: true }),
+  ).toBeVisible();
   await page.locator("#toggle-theme").click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   for (const width of [390, 320]) {
@@ -962,6 +969,19 @@ test("PasarGuard-inspired portal supports chart, four languages, search, QR and 
   }
   await page.screenshot({
     path: "test-results/modern-subscription-mobile.png",
+    fullPage: true,
+  });
+  await page.locator("#portal-language").selectOption("fa");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: "test-results/subscription-dashboard-fa-dark.png",
+    fullPage: true,
+  });
+  await page.locator("#portal-language").selectOption("en");
+  await page.locator("#toggle-theme").click();
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.screenshot({
+    path: "test-results/subscription-dashboard-en-light.png",
     fullPage: true,
   });
   expect(errors).toEqual([]);
@@ -979,9 +999,25 @@ test("simple subscription page has persistent themes, copying, QR and no horizon
     route.fulfill({ contentType: "text/html", body: html }),
   );
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.route("**/sub/**", (route) =>
+    route.fulfill({
+      json: {
+        points: [
+          {
+            at: "2026-10-21T00:00:00Z",
+            bytes: 1048576,
+            upload_bytes: 262144,
+            download_bytes: 786432,
+          },
+        ],
+      },
+    }),
+  );
   await page.goto("/simple-preview");
+  await expect(page.locator("#chart-points circle")).toHaveCount(1);
+  await expect(page.locator("#traffic-chart")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Arman" })).toBeVisible();
-  await expect(page.locator("#traffic-chart")).toHaveCount(0);
+  await expect(page.locator("#traffic-chart")).toHaveCount(1);
   await page.getByLabel("Appearance").selectOption("dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.reload();
@@ -2090,6 +2126,21 @@ for (const legacyName of [
     });
     await page.route("https://panel.example/**", async (route) => {
       const url = new URL(route.request().url());
+      if (url.searchParams.get("format") === "stats") {
+        await route.fulfill({
+          json: {
+            points: [
+              {
+                at: "2026-10-21T00:00:00Z",
+                bytes: 1048576,
+                upload_bytes: 262144,
+                download_bytes: 786432,
+              },
+            ],
+          },
+        });
+        return;
+      }
       if (url.searchParams.get("format") === "info") {
         infoRequests++;
         await route.fulfill({
@@ -2165,6 +2216,8 @@ for (const legacyName of [
       await expect(page.locator("#qrModal")).not.toHaveClass(/active/);
       await expect(page.locator("#daysLeftBadge")).toContainText("روز");
     } else if (legacyName === "sub-dashboard.html") {
+      await expect(page.locator("#chartPointsGroup circle")).toHaveCount(1);
+      await expect(page.locator("#chartPointsGroup title")).toContainText("B");
       await expect(page.locator("#usedStatValue")).toHaveText(
         /^[۱1](?:[٫.][۰0])?$/,
       );
@@ -2575,3 +2628,170 @@ test("subscription port failure retains the applied URL and allows retry", async
     .click();
   expect((await saved).postDataJSON()).not.toHaveProperty("port");
 });
+
+test("dashboard history survives unrelated API failures and retries history independently", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await panel(page, "/dashboard", {
+    "system-info": { json: { detail: "Server info unavailable" }, status: 503 },
+  });
+  const canvas = page.locator('[aria-label="Traffic chart"] canvas');
+  await expect(canvas).toBeVisible();
+  // Check rendered series pixels, not merely a blank canvas element.
+  await expect
+    .poll(() =>
+      canvas.evaluate((el: HTMLCanvasElement) => {
+        const ctx = el.getContext("2d")!;
+        const pixels = ctx.getImageData(0, 0, el.width, el.height).data;
+        let colored = 0;
+        for (let i = 0; i < pixels.length; i += 4)
+          if (
+            pixels[i + 3] > 100 &&
+            (pixels[i + 1] > pixels[i] + 35 || pixels[i + 2] > pixels[i] + 35)
+          )
+            colored++;
+        return colored;
+      }),
+    )
+    .toBeGreaterThan(100);
+  await expect(page.getByText("No traffic recorded yet.")).toHaveCount(0);
+  await page.route("**/api/traffic-history?*", (route) =>
+    route.fulfill({
+      status: 503,
+      json: { detail: "History temporarily unavailable" },
+    }),
+  );
+  await page
+    .getByRole("button", { name: "Refresh", exact: true })
+    .first()
+    .click();
+  await expect(page.getByText("History temporarily unavailable")).toBeVisible();
+  await expect(canvas).toBeVisible();
+  await page.route("**/api/traffic-history?*", (route) =>
+    route.fulfill({
+      json: [
+        {
+          at: new Date().toISOString(),
+          used_traffic_bytes: 1048576,
+          bytes: 1048576,
+          upload_bytes: 0,
+          download_bytes: 0,
+          interval_seconds: 300,
+        },
+      ],
+    }),
+  );
+  await page
+    .getByRole("button", { name: "Refresh", exact: true })
+    .last()
+    .click();
+  await expect(page.getByText("History temporarily unavailable")).toHaveCount(
+    0,
+  );
+  await expect(page.locator('[aria-label="Traffic chart"]')).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({
+    path: "test-results/dashboard-recovered-history.png",
+    fullPage: true,
+  });
+  expect(errors).toEqual([]);
+});
+
+for (const variant of ["simple", "modern"]) {
+  test(`${variant} subscription chart handles one bucket, zero, empty, retry and app formats under CSP`, async ({
+    page,
+  }) => {
+    const file =
+      variant === "simple"
+        ? process.env.VELORAY_TEST_SIMPLE_PORTAL_HTML
+        : process.env.VELORAY_TEST_MODERN_PORTAL_HTML;
+    test.skip(!file, "render fixture required");
+    const html = readFileSync(file!, "utf8");
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    const csp =
+      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+    await page.route("**/subscription-regression", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        headers: { "Content-Security-Policy": csp },
+        body: html,
+      }),
+    );
+    let status = 200,
+      points = [
+        {
+          at: "2026-10-21T00:00:00Z",
+          bytes: 1048576,
+          upload_bytes: 262144,
+          download_bytes: 786432,
+        },
+      ];
+    const addresses: string[] = [];
+    await page.route("**/sub/**", (route) => {
+      addresses.push(route.request().url());
+      return route.fulfill({ status, json: { points } });
+    });
+    await page.goto("/subscription-regression");
+    await expect(page.locator("#traffic-chart")).toBeVisible();
+    await expect(page.locator("#chart-points circle")).toHaveCount(1);
+    await expect(page.locator("#chart-total")).toContainText("MB");
+    expect(new URL(addresses[0]).origin).toBe("http://127.0.0.1:8861");
+    await page.locator("#client-format").selectOption("clash");
+    await expect(page.locator("#subscription")).toHaveValue(/format=clash$/);
+    if (variant === "simple")
+      await expect(page.locator("#subscription-qr")).toHaveAttribute(
+        "src",
+        /format=qr.*data=/,
+      );
+    else
+      await expect(
+        page.locator(".subscription-card .qr-trigger"),
+      ).toHaveAttribute("data-qr", /format=qr.*data=/);
+    points = [
+      {
+        at: "2026-10-21T00:00:00Z",
+        bytes: 0,
+        upload_bytes: 0,
+        download_bytes: 0,
+      },
+    ];
+    await page.locator('[data-range="24h"]').click();
+    await expect(page.locator("#chart-total")).toHaveText(/[0۰] B/);
+    await expect(page.locator(".traffic-grid")).not.toContainText("undefined");
+    await expect(page.locator("#chart-points circle")).toHaveCount(1);
+    points = [];
+    await page.locator('[data-range="1h"]').click();
+    await expect(page.locator("#chart-empty")).toBeVisible();
+    await expect(page.locator("#traffic-chart")).toBeHidden();
+    status = 503;
+    await page.locator('[data-range="12h"]').click();
+    await expect(page.locator("#chart-retry")).toBeVisible();
+    status = 200;
+    points = [
+      {
+        at: "2026-10-21T01:00:00Z",
+        bytes: 2097152,
+        upload_bytes: 1048576,
+        download_bytes: 1048576,
+      },
+    ];
+    await page.locator("#chart-retry").click();
+    await expect(page.locator("#traffic-chart")).toBeVisible();
+    await expect(page.locator("#chart-retry")).toBeHidden();
+    await page.locator(".traffic-table summary").click();
+    await expect(page.locator(".traffic-table tbody tr")).toHaveCount(1);
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    }
+    expect(errors).toEqual([]);
+  });
+}

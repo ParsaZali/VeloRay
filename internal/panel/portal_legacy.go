@@ -48,6 +48,8 @@ func legacyPortalData(c, cfg Data, subscriptionURL string, details []Data) Data 
 	return Data{"sId": id, "enabled": active(c, time.Now()), "isOnline": online, "lastOnline": last, "expire": expiry, "expireUnix": expiry / 1000, "downloadByte": down, "uploadByte": up, "totalByte": limit, "usedByte": used, "rawUsedByte": num(c, "raw_used_traffic_bytes"), "download": fmtBytes(down), "upload": fmtBytes(up), "used": fmtBytes(used), "total": total, "remained": remaining, "subUrl": subscriptionURL, "subJsonUrl": subscriptionURL + "?format=xray", "subClashUrl": subscriptionURL + "?format=clash", "subTitle": str(cfg, "site_name"), "subSupportUrl": str(cfg, "support_url"), "announce": str(cfg, "announcement"), "datepicker": "gregorian", "links": links, "emails": emails}
 }
 
+var legacySparkline = regexp.MustCompile(`(?s)function drawInteractiveSparkline\(\)\s*\{.*?\n\s*function renderStatsAndRing\(\)`)
+
 var legacyVariable = regexp.MustCompile(`\{\{\s*\.(subUrl|subTitle|sId|downloadByte|links)\b`)
 var scriptBody = regexp.MustCompile(`(?is)<script\b[^>]*>.*?</script\s*>`)
 var clickAttribute = regexp.MustCompile(`(?i)([\s<])onclick\s*=`)
@@ -66,6 +68,12 @@ func prepareLegacyPortal(source string) string {
 		script = strings.ReplaceAll(script, `'{{'`, `'\u007b\u007b'`)
 		return script
 	})
+	// This supplied dashboard used fixed daily weights, not measured history.
+	// Adapt existing copies as well as the bundled example without evaluating JS.
+	if strings.Contains(source, "const dailyWeights =") {
+		source = legacySparkline.ReplaceAllString(source, `function drawInteractiveSparkline() { window.VeloRayTemplate.drawHistory(); }
+      function renderStatsAndRing()`)
+	}
 	source = externalScript.ReplaceAllString(source, "")
 	source = remoteStyle.ReplaceAllString(source, "")
 	source = remoteFont.ReplaceAllString(source, "/fonts/Vazirmatn-Variable.woff2")
@@ -92,7 +100,7 @@ func prepareLegacyPortal(source string) string {
 	source = strings.ReplaceAll(source, "}).then(function (info) {", "}).then(function (info) { document.body.dataset.vrUsed = String(info.usedByte);")
 	// Data is rendered by html/template in an attribute context, never trusted JS.
 	bodyTag := regexp.MustCompile(`(?i)<body\b`)
-	source = bodyTag.ReplaceAllString(source, `<body data-vr-used="{{.usedByte}}"`)
+	source = bodyTag.ReplaceAllString(source, `<body data-vr-used="{{.usedByte}}" data-vr-chart-url="{{.ChartURL}}" data-vr-history-enabled="{{.ShowAnalytics}}"`)
 	assets := `<link rel="stylesheet" href="/subscription-template-compat.css"><script src="/subscription-template-compat.js"></script>`
 	headEnd := regexp.MustCompile(`(?i)</head\s*>`)
 	return headEnd.ReplaceAllString(source, assets+"</head>")
@@ -155,7 +163,7 @@ func legacySubscriptionInfo(c, cfg Data) Data {
 // never the administrator SPA or API. Both modes share these exact files.
 func (s *Server) serveSubscriptionAsset(w http.ResponseWriter, r *http.Request) bool {
 	path := r.URL.Path
-	allowed := oneOf(path, "/subscription-portal.js", "/subscription-modern.js", "/subscription-modern.css", "/subscription-simple.js", "/subscription-simple.css", "/subscription-template-compat.js", "/subscription-template-compat.css")
+	allowed := oneOf(path, "/subscription-portal.js", "/subscription-modern.js", "/subscription-modern.css", "/subscription-simple.js", "/subscription-simple.css", "/subscription-traffic.js", "/subscription-traffic.css", "/subscription-connect.js", "/subscription-template-compat.js", "/subscription-template-compat.css")
 	if strings.HasPrefix(path, "/fonts/") || strings.HasPrefix(path, "/subscription-template-assets/") {
 		allowed = oneOf(strings.ToLower(filepath.Ext(path)), ".woff2", ".woff", ".css") && filepath.Clean(path) == path
 	}

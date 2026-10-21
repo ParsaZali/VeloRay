@@ -499,10 +499,14 @@ func (s *Server) portal(w http.ResponseWriter, r *http.Request, c, i, n, cfg Dat
 		d[key] = value
 	}
 	d["ThemeLabel"], d["DarkLabel"], d["LightLabel"], d["SystemLabel"] = "Appearance", "Dark", "Light", "System"
-	d["DetailsLabel"], d["RemainingLabel"] = "Connection details", "Remaining"
+	d["CloseLabel"] = "Close"
+	d["DetailsLabel"], d["RemainingLabel"] = "Connection profiles", "Remaining"
+	d["ClientLabel"], d["AutoLabel"], d["SetupLabel"], d["SetupHelp"], d["DownloadsLabel"], d["SearchLabel"] = "Application", "Auto detect / other", "Connect in a few steps", "Choose your application, copy the subscription link, then import it using Add subscription in the app.", "Download configuration", "Search profiles"
 	if str(cfg, "default_locale") == "fa" {
 		d["ThemeLabel"], d["DarkLabel"], d["LightLabel"], d["SystemLabel"] = "ظاهر", "تیره", "روشن", "دستگاه"
-		d["DetailsLabel"], d["RemainingLabel"] = "جزئیات اتصال", "باقی‌مانده"
+		d["CloseLabel"] = "بستن"
+		d["DetailsLabel"], d["RemainingLabel"] = "کانفیگ‌های اتصال", "باقی‌مانده"
+		d["ClientLabel"], d["AutoLabel"], d["SetupLabel"], d["SetupHelp"], d["DownloadsLabel"], d["SearchLabel"] = "برنامه اتصال", "تشخیص خودکار / سایر", "اتصال در چند قدم", "برنامه را انتخاب کنید، لینک اشتراک را کپی کنید و در بخش افزودن اشتراک برنامه وارد کنید.", "دانلود فایل کانفیگ", "جستجوی کانفیگ"
 		if limit == 0 {
 			d["Remaining"] = "نامحدود"
 		}

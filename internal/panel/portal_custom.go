@@ -138,7 +138,7 @@ func (s *Server) validatePortalAPI(w http.ResponseWriter, r *http.Request, a Act
 }
 func portalSampleData() map[string]any {
 	d := map[string]any{}
-	for _, key := range strings.Fields("Locale Direction Site Name Protocol Host Active UsageLabel ExpiryLabel Used Quota Expiry URL URLLabel CopyLabel CopyDoneLabel CopyFailedLabel Connect QRLabel URILabel AppsLabel SupportLabel Link Profile Support Footer Announcement AnnouncementURL ProxyLabel ActualLabel Actual FactorLabel Factor ChartURL LastUsedISO SubscriptionTheme Accent Remaining ExpiryISO AssetsURL ThemeLabel DarkLabel LightLabel SystemLabel DetailsLabel RemainingLabel Proxy") {
+	for _, key := range strings.Fields("Locale Direction Site Name Protocol Host Active UsageLabel ExpiryLabel Used Quota Expiry URL URLLabel CopyLabel CopyDoneLabel CopyFailedLabel Connect QRLabel URILabel AppsLabel SupportLabel Link Profile Support Footer Announcement AnnouncementURL ProxyLabel ActualLabel Actual FactorLabel Factor ChartURL LastUsedISO SubscriptionTheme Accent Remaining ExpiryISO AssetsURL ThemeLabel DarkLabel LightLabel SystemLabel DetailsLabel RemainingLabel Proxy ClientLabel AutoLabel SetupLabel SetupHelp DownloadsLabel SearchLabel CloseLabel") {
 		d[key] = ""
 	}
 	d["Locale"], d["Direction"], d["URL"], d["AssetsURL"] = "en", "ltr", "https://example.test/sub/example", "https://example.test/sub/example/assets/"
