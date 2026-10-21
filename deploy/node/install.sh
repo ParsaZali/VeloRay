@@ -11,7 +11,7 @@ arch="$(uname -m)";case "$arch" in x86_64) arch=amd64;;aarch64|arm64) arch=arm64
 [[ -x "bin/linux-$arch/veloray-agent" ]]||{ echo 'Build the agent first or use a release archive.' >&2;exit 1; }
 (cd "bin/linux-$arch" && sha256sum -c SHA256SUMS) >>"$VELORAY_INSTALL_LOG" 2>&1
 vr_packages openssl curl jq unzip ca-certificates iproute2
-[[ -x /usr/local/bin/xray ]]||vr_run bash scripts/xray-install.sh
+if [[ -n "${VELORAY_XRAY_DIRECTORY:-}" || ! -x /usr/local/bin/xray ]];then vr_run bash scripts/xray-install.sh;fi
 if [[ -n "${VELORAY_SINGBOX_DIRECTORY:-}" ]];then vr_run bash scripts/singbox-install.sh;elif [[ ! -x /usr/local/bin/sing-box ]];then echo 'Use the complete VeloRay runtime package to install sing-box.' >&2;exit 1;fi
 install -d -m 0750 /etc/veloray-node
 install -d -m 0700 /var/lib/veloray-agent

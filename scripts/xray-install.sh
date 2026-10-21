@@ -15,5 +15,8 @@ else
 fi
 install -m 0755 "$tmp/xray" /usr/local/bin/xray
 install -d -m 0755 /usr/local/share/xray
-install -m 0644 "$tmp/geoip.dat" "$tmp/geosite.dat" /usr/local/share/xray/
+# Existing geo assets can contain operator-managed routing policy.
+for asset in geoip.dat geosite.dat;do
+ [[ -f "/usr/local/share/xray/$asset" ]]||install -m 0644 "$tmp/$asset" "/usr/local/share/xray/$asset"
+done
 /usr/local/bin/xray version

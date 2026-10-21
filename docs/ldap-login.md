@@ -100,3 +100,17 @@ actual directory's certificate, account DN, bind policy and lockout behavior in
 operator staging before enabling production sign-in. Search/service-account
 binds, provisioning, group sync, NTLM, Kerberos and LDAP password changes are not
 implemented.
+
+Release builds pin Go 1.26.10, including the standard-library certificate trust
+fix GO-2026-6809. Both panel binaries and both proxy engines are rebuilt with
+that compiler. Xray stays at v26.3.27; its source archive is SHA-256 pinned and
+shipped alongside the rebuilt engine. The official release archive is used
+only for checksum-verified GeoIP/Geosite data and documentation. A custom
+`VELORAY_XRAY_VERSION` also requires the matching reviewed
+`VELORAY_XRAY_SOURCE_SHA256`; `VELORAY_XRAY_SOURCE` can supply a local archive
+with that exact digest.
+
+Native panel and node upgrades install the verified bundled Xray even when an
+engine executable already exists, so same-version compiler security fixes take
+effect. Existing core configuration, installed GeoIP/Geosite assets, keys and accounting
+state are preserved.

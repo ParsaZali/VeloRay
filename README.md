@@ -329,7 +329,7 @@ Operation logs are stored under `/var/log/veloray`. Uninstall preserves configur
 
 ## Development and verification
 
-Go 1.26.9 and Node.js 22.12+ are used by the build workflow. Copy `.env.example` for local development and generate distinct secret and field keys. Use an isolated PostgreSQL database.
+Go 1.26.10 (including the crypto/x509 security fix) and Node.js 22.12+ are used by the build workflow. Copy `.env.example` for local development and generate distinct secret and field keys. Use an isolated PostgreSQL database.
 
 ```bash
 go run ./cmd/veloray migrate

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+export GOTOOLCHAIN=go1.26.10
 cd "$(dirname "$0")/.."
-command -v go >/dev/null || { echo 'Go 1.26+ is required' >&2; exit 1; }
+command -v go >/dev/null || { echo 'Go 1.26.10+ is required' >&2; exit 1; }
 command -v npm >/dev/null || { echo 'Node.js 22.12+ and npm are required' >&2; exit 1; }
 (cd frontend && npm ci --no-audit --no-fund && npm run build)
 arch="${1:-$(go env GOARCH)}"
