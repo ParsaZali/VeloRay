@@ -2917,7 +2917,7 @@ test("client connection check runs the chosen delivery host and displays measure
     .getByRole("button", { name: "Actions for Alice", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Check subscription", exact: true })
+    .getByRole("menuitem", { name: "Check subscription", exact: true })
     .click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("CDN", { exact: false })).toBeVisible();
