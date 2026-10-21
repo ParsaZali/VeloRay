@@ -163,7 +163,7 @@ export type NodeItem = {
   config_patch: Record<string, unknown>;
 };
 export type InboundItem = {
-  core?: "xray" | "singbox";
+  core?: "xray" | "singbox" | "native";
   id: number;
   node: number;
   node_name: string;

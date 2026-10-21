@@ -61,6 +61,7 @@ type FormState = {
   wg_dns: string;
   socks_udp: boolean;
   ss_method: string;
+  mtproto_host: string;
   st_handshake: string;
   st_port: string;
   st_psk: string;
@@ -106,6 +107,7 @@ const fresh = (node = ""): FormState => ({
   wg_dns: "1.1.1.1",
   socks_udp: true,
   ss_method: "aes-256-gcm",
+  mtproto_host: "www.cloudflare.com",
   st_handshake: "",
   st_port: "443",
   st_psk: "",
@@ -182,6 +184,7 @@ const protocolOptions = [
   ["naive", "Naive", "globe"],
   ["snell", "Snell v6", "shield"],
   ["shadowtls", "ShadowTLS v3", "shield"],
+  ["mtproto", "MTProto · Telegram", "paper-plane"],
   ["wireguard", "WireGuard", "link"],
   ["http", "HTTP Proxy", "globe"],
   ["socks", "SOCKS5", "socks"],
@@ -318,7 +321,12 @@ export function InboundsPage() {
     setForm((f) => {
       const n: any = { ...f, [k]: v };
       if (k === "protocol") {
-        if (["tuic", "naive", "snell", "shadowtls"].includes(v)) {
+        if (v === "mtproto") {
+          n.core = "native";
+          n.transport = "raw";
+          n.security = "none";
+          n.flow = "";
+        } else if (["tuic", "naive", "snell", "shadowtls"].includes(v)) {
           n.core = "singbox";
           n.transport = "raw";
           n.security = ["snell", "shadowtls"].includes(v) ? "none" : "tls";
@@ -442,6 +450,10 @@ export function InboundsPage() {
         mtu: Number(form.wg_mtu || 1420),
         dns: form.wg_dns || "1.1.1.1",
       };
+    if (form.protocol === "mtproto")
+      p.protocol_settings = {
+        fake_tls_host: form.mtproto_host.trim().toLowerCase(),
+      };
     if (form.protocol === "socks")
       p.protocol_settings = {
         udp: form.socks_udp,
@@ -555,6 +567,7 @@ export function InboundsPage() {
       wg_dns: String(ps.dns || "1.1.1.1"),
       socks_udp: ps.udp !== false,
       ss_method: String(ps.method || "aes-256-gcm"),
+      mtproto_host: String(ps.fake_tls_host || "www.cloudflare.com"),
       st_handshake: String(ps.handshake_server || ""),
       st_port: String(ps.handshake_port || 443),
       st_psk: String(ps.psk || ""),
@@ -714,15 +727,21 @@ export function InboundsPage() {
                       value={form.core}
                       onChange={(e) => {
                         set("core", e.target.value);
-                        set("protocol", "vless");
+                        set(
+                          "protocol",
+                          e.target.value === "native" ? "mtproto" : "vless",
+                        );
                         set("transport", "raw");
+                        set("security", "none");
+                        set("flow", "");
                       }}
                     >
                       <option value="xray">Xray · Primary</option>
                       <option value="singbox">sing-box</option>
+                      <option value="native">VeloRay · MTProto</option>
                     </Select>
                   </Field>
-                  {!editing && (
+                  {!editing && form.core !== "native" && (
                     <label className="label">
                       {t("Connection preset")}
                       <Select
@@ -854,9 +873,13 @@ export function InboundsPage() {
                         .filter(
                           ([v]) =>
                             (form.core === "xray" &&
-                              !["tuic", "naive", "snell", "shadowtls"].includes(
-                                v,
-                              )) ||
+                              ![
+                                "tuic",
+                                "naive",
+                                "snell",
+                                "shadowtls",
+                                "mtproto",
+                              ].includes(v)) ||
                             (form.core === "singbox" &&
                               [
                                 "vless",
@@ -870,7 +893,8 @@ export function InboundsPage() {
                                 "shadowtls",
                                 "http",
                                 "socks",
-                              ].includes(v)),
+                              ].includes(v)) ||
+                            (form.core === "native" && v === "mtproto"),
                         )
                         .map(([v, l]) => (
                           <option key={v} value={v}>
@@ -886,7 +910,27 @@ export function InboundsPage() {
                       </div>
                     )}
                   </section>
-                  {!["wireguard", "tunnel", "tun"].includes(form.protocol) && (
+                  {form.protocol === "mtproto" && (
+                    <section className="space-y-3">
+                      <Field label="FakeTLS hostname">
+                        <Input
+                          value={form.mtproto_host}
+                          onChange={(e) => set("mtproto_host", e.target.value)}
+                          placeholder="www.cloudflare.com"
+                          autoComplete="off"
+                          required
+                        />
+                      </Field>
+                      <p className="text-xs leading-6 text-[var(--muted-strong)]">
+                        {t(
+                          "Use a public HTTPS hostname reachable from this node. Each user receives a separate Telegram secret, traffic counter and revocable connection. No local TLS certificate is needed.",
+                        )}
+                      </p>
+                    </section>
+                  )}
+                  {!["wireguard", "tunnel", "tun", "mtproto"].includes(
+                    form.protocol,
+                  ) && (
                     <section>
                       <div className="panel-section-title mb-3">
                         {t("Transport")}
@@ -977,7 +1021,9 @@ export function InboundsPage() {
                       )}
                     </section>
                   )}
-                  {!["wireguard", "tunnel", "tun"].includes(form.protocol) && (
+                  {!["wireguard", "tunnel", "tun", "mtproto"].includes(
+                    form.protocol,
+                  ) && (
                     <section>
                       <div className="panel-section-title mb-3">
                         {t("Security")}

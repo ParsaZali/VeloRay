@@ -155,6 +155,9 @@ func xrayOnlineIPs(ctx context.Context) (map[string]map[string]int64, error) {
 	return out, failure
 }
 func (m *Manager) inspectPorts(ctx context.Context, raw []byte) ([]PortCheck, error) {
+	if m.native != nil {
+		return m.native.ports(ctx, raw)
+	}
 	if m.Core == "singbox" {
 		var cfg map[string]any
 		if e := json.Unmarshal(raw, &cfg); e != nil {
@@ -219,6 +222,7 @@ func splitCore(raw []byte) ([]byte, []byte, error) {
 	}
 	sing := cfg["_singbox"]
 	delete(cfg, "_singbox")
+	delete(cfg, "_native")
 	x, e := json.Marshal(cfg)
 	if len(x) == 0 {
 		return nil, nil, fmt.Errorf("empty configuration")

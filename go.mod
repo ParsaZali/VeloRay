@@ -17,13 +17,19 @@ require (
 )
 
 require (
+	github.com/9seconds/mtg/v2 v2.2.8 // indirect
 	github.com/Azure/go-ntlmssp v0.1.1 // indirect
+	github.com/amnezia-vpn/amneziawg-go v0.2.20-0.20260724121833-457d920a1a7d // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/panjf2000/ants/v2 v2.12.0 // indirect
+	github.com/pires/go-proxyproto v0.11.0 // indirect
+	github.com/sagernet/gvisor v0.0.0-20260727.0-sing-box-mod.1 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
+	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
 )

@@ -144,7 +144,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		}
 		if active(member, time.Now()) && flag(inbound, "enabled") && flag(node, "enabled") {
 			observed, telemetryErr := timestamp(node, "_telemetry_at")
-			if telemetryErr != nil || time.Since(observed) < 0 || time.Since(observed) >= 20*time.Second || !flag(node, "_online_available") || !oneOf(str(inbound, "protocol"), "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell", "shadowtls") {
+			if telemetryErr != nil || time.Since(observed) < 0 || time.Since(observed) >= 20*time.Second || !flag(node, "_online_available") || !oneOf(str(inbound, "protocol"), "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell", "shadowtls", "mtproto") {
 				onlineKnown = false
 			} else if flag(obj(node, "_online_clients"), fmt.Sprint(num(member, "id"))) {
 				onlineConnected = true

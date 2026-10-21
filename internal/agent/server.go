@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +21,7 @@ type Server struct {
 	NodeID, Version, Token string
 	Manager                *Manager
 	SingBox                *Manager
+	Native                 *Manager
 }
 
 func (s Server) Handler() http.Handler {
@@ -33,6 +35,16 @@ func (s Server) Handler() http.Handler {
 		}
 		if e = s.Manager.Validate(c, x); e != nil {
 			return e
+		}
+		if n, err := nativePart(raw); err != nil {
+			return err
+		} else if len(n) > 0 {
+			if s.Native == nil {
+				return errors.New("upgrade the node agent for native protocols")
+			}
+			if err = s.Native.Validate(c, n); err != nil {
+				return err
+			}
 		}
 		if len(b) > 0 {
 			if s.SingBox == nil {
@@ -94,10 +106,19 @@ func (s Server) Handler() http.Handler {
 		}
 		return geo.browse(c, kind, query, limit)
 	}, "POST"))
+	mux.HandleFunc("/native/status", wrap(func(c context.Context, _ map[string]json.RawMessage) (any, error) {
+		if s.Native == nil {
+			return nil, errors.New("native runtime unavailable; upgrade the node agent")
+		}
+		return map[string]any{"version": 1, "protocols": []string{"mtproto"}, "per_user_traffic": true, "hot_users": true}, nil
+	}, "GET"))
 	mux.HandleFunc("/diagnostics", wrap(func(c context.Context, _ map[string]json.RawMessage) (any, error) {
 		result := map[string]any{"xray": s.Manager.Diagnostics(c)}
 		if s.SingBox != nil {
 			result["singbox"] = s.SingBox.Diagnostics(c)
+		}
+		if s.Native != nil {
+			result["native"] = s.Native.Diagnostics(c)
 		}
 		return result, nil
 	}, "GET"))
@@ -151,6 +172,23 @@ func (s Server) Handler() http.Handler {
 				a.OnlineIPs[name] = ips
 			}
 		}
+		if s.Native != nil {
+			b, e := s.Native.Stats(c)
+			if e != nil {
+				return a, e
+			}
+			if a.CoreLedgers == nil {
+				a.CoreLedgers = map[string]string{}
+			}
+			a.CoreLedgers["native"] = b.LedgerID
+			a.Stat = append(a.Stat, b.Stat...)
+			a.OnlineUsers = append(a.OnlineUsers, b.OnlineUsers...)
+			a.OnlineIPCoreAvailable["native"] = b.OnlineIPsAvailable
+			a.OnlineIPsAvailable = a.OnlineIPsAvailable && b.OnlineIPsAvailable
+			for name, ips := range b.OnlineIPs {
+				a.OnlineIPs[name] = ips
+			}
+		}
 		return a, nil
 	}, "GET"))
 	mux.HandleFunc("/xray/ports", wrap(func(c context.Context, v map[string]json.RawMessage) (any, error) {
@@ -163,6 +201,19 @@ func (s Server) Handler() http.Handler {
 			other, e := s.SingBox.Ports(c, b)
 			err = e
 			checks = append(checks, other...)
+		}
+		if err == nil {
+			n, e := nativePart(v["config"])
+			err = e
+			if err == nil && len(n) > 0 {
+				if s.Native == nil {
+					err = errors.New("upgrade the node agent for native protocols")
+				} else {
+					more, e := s.Native.Ports(c, n)
+					err = e
+					checks = append(checks, more...)
+				}
+			}
 		}
 		return map[string]any{"ports": checks}, err
 	}, "POST"))
@@ -192,6 +243,16 @@ func (s Server) Handler() http.Handler {
 				return nil, e
 			}
 		}
+		n, _ := nativePart(v["config"])
+		if len(n) > 0 {
+			if e = s.Native.Apply(c, id, n); e != nil {
+				recovery := s.Native.Rollback(c, id)
+				if s.SingBox != nil && s.SingBox.hasOperation(id) {
+					recovery = errors.Join(recovery, s.SingBox.Rollback(c, id))
+				}
+				return nil, errors.Join(e, recovery, s.Manager.Rollback(c, id))
+			}
+		}
 		return map[string]string{"status": "applied", "operation_id": id}, nil
 	}, "POST"))
 	mux.HandleFunc("/xray/rollback", wrap(func(c context.Context, v map[string]json.RawMessage) (any, error) {
@@ -199,7 +260,11 @@ func (s Server) Handler() http.Handler {
 		_ = json.Unmarshal(v["operation_id"], &id)
 		coreMu.Lock()
 		defer coreMu.Unlock()
-		e := s.Manager.Rollback(c, id)
+		var nativeErr error
+		if s.Native != nil && s.Native.hasOperation(id) {
+			nativeErr = s.Native.Rollback(c, id)
+		}
+		e := errors.Join(nativeErr, s.Manager.Rollback(c, id))
 		if s.SingBox != nil {
 			if s.SingBox.hasOperation(id) {
 				e = errors.Join(e, s.SingBox.Rollback(c, id))
@@ -283,6 +348,21 @@ func Serve(ctx context.Context, version string) (serveErr error) {
 		}
 		second.Core = "singbox"
 	}
+	native, err := newNativeManager(filepath.Dir(m.StatePath))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		final, stop := context.WithTimeout(context.WithoutCancel(ctx), 6*time.Second)
+		defer stop()
+		native.mu.Lock()
+		if native.status(final).Running {
+			_ = native.observe(final)
+		}
+		native.mu.Unlock()
+		native.native.close()
+	}()
+	go native.Poll(ctx)
 	if processes != nil {
 		defer func() {
 			final, stop := context.WithTimeout(context.WithoutCancel(ctx), 6*time.Second)
@@ -323,7 +403,7 @@ func Serve(ctx context.Context, version string) (serveErr error) {
 	if second != nil {
 		go second.Poll(ctx)
 	}
-	s := &http.Server{Addr: listen, Handler: Server{NodeID: env("VELORAY_NODE_ID", "local"), Version: version, Token: token, Manager: m, SingBox: second}.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 55 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
+	s := &http.Server{Addr: listen, Handler: Server{NodeID: env("VELORAY_NODE_ID", "local"), Version: version, Token: token, Manager: m, SingBox: second, Native: native}.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 55 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
 	shutdown := make(chan struct{})
 	go func() {
 		defer close(shutdown)

@@ -172,7 +172,7 @@ func buildConfig(ctx context.Context, q Query, node Data, fieldKey ...string) (D
 	}
 	items := []any{}
 	for _, i := range inbounds {
-		if !flag(i, "enabled") || !flag(node, "enabled") || str(i, "core") == "singbox" {
+		if !flag(i, "enabled") || !flag(node, "enabled") || oneOf(str(i, "core"), "singbox", "native") {
 			continue
 		}
 		all, e := list(ctx, q, "clients", "WHERE inbound_id=$1", num(i, "id"))
@@ -263,6 +263,11 @@ func buildConfig(ctx context.Context, q Query, node Data, fieldKey ...string) (D
 	if sing != nil {
 		cfg["_singbox"] = sing
 	}
+	native, e := buildNativeConfig(ctx, q, node)
+	if e != nil {
+		return nil, e
+	}
+	cfg["_native"] = native
 	return cfg, nil
 }
 func shareLink(c, i, node Data) string {
@@ -297,6 +302,8 @@ func shareLink(c, i, node Data) string {
 	fragment := url.QueryEscape(name)
 	fragment = strings.ReplaceAll(fragment, "+", "%20")
 	switch p {
+	case "mtproto":
+		return "tg://proxy?" + (url.Values{"server": {host}, "port": {strconv.FormatInt(num(i, "port"), 10)}, "secret": {mtprotoSecret(c, i)}}).Encode()
 	case "vless", "trojan":
 		if p == "vless" {
 			params.Set("encryption", "none")
