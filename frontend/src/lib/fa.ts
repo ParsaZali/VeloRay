@@ -697,6 +697,15 @@ export const fa: Record<string, string> = Object.fromEntries(
     .map((line) => line.split("|")),
 );
 Object.assign(fa, {
+  "Handshake server": "سرور دست‌دهی",
+  "Handshake port": "پورت دست‌دهی",
+  "Inner server key": "کلید داخلی سرور",
+  "Generated automatically on creation": "هنگام ساخت خودکار تولید می‌شود",
+  "TLS 1.3 handshake with authenticated Shadowsocks 2022 inside. TCP only; download sing-box JSON or Mihomo YAML from the subscription page.":
+    "دست‌دهی TLS 1.3 با شادوساکس ۲۰۲۲ و احراز هویت داخلی. فقط TCP؛ فایل sing-box یا Mihomo را از صفحهٔ اشتراک دریافت کنید.",
+  "Use a hostname with a valid TLS 1.3 certificate. Each client gets separate inner and ShadowTLS credentials automatically.":
+    "نام دامنه‌ای با گواهی معتبر TLS 1.3 وارد کنید. کلید داخلی و رمز ShadowTLS جداگانه برای هر کاربر خودکار ساخته می‌شود.",
+
   "Checking…": "در حال بررسی…",
   Unavailable: "در دسترس نیست",
   Connected: "متصل",

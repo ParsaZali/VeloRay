@@ -14,7 +14,7 @@ import (
 
 func clashConfig(c, i, n Data) (Data, error) {
 	p, t := str(i, "protocol"), str(i, "transport")
-	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "tuic") {
+	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "tuic", "shadowtls") {
 		return nil, fmt.Errorf("Clash output is unavailable for %s", p)
 	}
 	if !oneOf(t, "raw", "ws", "grpc", "xhttp", "hysteria") {
@@ -40,6 +40,12 @@ func clashConfig(c, i, n Data) (Data, error) {
 		v["type"] = "ss"
 		v["cipher"] = fallback(str(obj(i, "protocol_settings"), "method"), "aes-256-gcm")
 		v["password"] = str(c, "credential")
+	case "shadowtls":
+		v["type"], v["cipher"], v["udp"] = "ss", shadowTLSMethod, false
+		v["password"] = str(obj(i, "protocol_settings"), "psk") + ":" + str(c, "credential")
+		v["plugin"] = "shadow-tls"
+		v["client-fingerprint"] = "chrome"
+		v["plugin-opts"] = Data{"host": str(obj(i, "protocol_settings"), "handshake_server"), "password": str(obj(c, "protocol_settings"), "shadowtls_password"), "version": 3}
 	case "tuic":
 		v["type"] = p
 		v["uuid"] = str(c, "credential")
@@ -138,7 +144,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		}
 		if active(member, time.Now()) && flag(inbound, "enabled") && flag(node, "enabled") {
 			observed, telemetryErr := timestamp(node, "_telemetry_at")
-			if telemetryErr != nil || time.Since(observed) < 0 || time.Since(observed) >= 20*time.Second || !flag(node, "_online_available") || !oneOf(str(inbound, "protocol"), "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell") {
+			if telemetryErr != nil || time.Since(observed) < 0 || time.Since(observed) >= 20*time.Second || !flag(node, "_online_available") || !oneOf(str(inbound, "protocol"), "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell", "shadowtls") {
 				onlineKnown = false
 			} else if flag(obj(node, "_online_clients"), fmt.Sprint(num(member, "id"))) {
 				onlineConnected = true
@@ -250,13 +256,13 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		outbounds := []any{}
 		names := []any{}
 		for _, item := range connections {
-			out, err := singClientOutbound(item.client, item.inbound, item.node)
+			graph, err := singClientOutbounds(item.client, item.inbound, item.node)
 			if err != nil {
 				writeJSON(w, 400, Data{"detail": err.Error()})
 				return
 			}
-			outbounds = append(outbounds, out)
-			names = append(names, str(out, "tag"))
+			outbounds = append(outbounds, graph...)
+			names = append(names, str(graph[0].(Data), "tag"))
 		}
 		all := []any{Data{"type": "selector", "tag": "VeloRay", "outbounds": names}, Data{"type": "direct", "tag": "direct"}}
 		all = append(all, outbounds...)

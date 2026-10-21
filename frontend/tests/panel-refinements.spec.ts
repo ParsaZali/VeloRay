@@ -2177,3 +2177,27 @@ test("administrator edits LDAP binding while preserving local role and SSO field
   expect(saves[0]).toMatchObject({ ldap_dn: "uid=alice,ou=people,dc=example,dc=com", oidc_issuer: "https://github.com", oidc_subject: "42", role: "viewer" });
   expect(saves[0].password).toBeUndefined();
 });
+
+
+test("ShadowTLS form sends a paired TCP configuration and preserves its keys on edit", async ({ page }) => {
+  const inbound = { id: 4, node: 1, name: "Wrapped", core: "singbox", protocol: "shadowtls", transport: "raw", security: "none", listen: "0.0.0.0", port: 443, enabled: true, protocol_settings: { handshake_server: "tls.example", handshake_port: 8443, psk: "MDEyMzQ1Njc4OWFiY2RlZg==" } };
+  await panel(page, "/inbounds", { inbounds: { json: [inbound] } });
+  await page.getByRole("button", { name: "New inbound", exact: true }).click();
+  await choose(page, "Core", "singbox");
+  await choose(page, "Protocol", "shadowtls");
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("TCP only", { exact: false })).toBeVisible();
+  await expect(dialog.getByLabel("TLS certificate", { exact: true })).toHaveCount(0);
+  await dialog.getByLabel("Handshake server", { exact: true }).fill("tls.example");
+  await dialog.getByLabel("Handshake port", { exact: true }).fill("8443");
+  const created = page.waitForRequest(r => r.method() === "POST" && r.url().includes("/api/inbounds/"));
+  await dialog.getByRole("button", { name: "Create & deploy", exact: true }).click();
+  expect((await created).postDataJSON()).toMatchObject({ core: "singbox", protocol: "shadowtls", transport: "raw", security: "none", protocol_settings: { handshake_server: "tls.example", handshake_port: 8443, psk: "" } });
+  await expect(dialog).not.toBeVisible();
+  await page.getByRole("button", { name: "Edit", exact: true }).first().click();
+  await expect(dialog.getByLabel("Handshake port", { exact: true })).toHaveValue("8443");
+  await expect(dialog.getByLabel("Inner server key", { exact: true })).toHaveValue(inbound.protocol_settings.psk);
+  const patched = page.waitForRequest(r => r.method() === "PATCH" && r.url().includes("/api/inbounds/4/"));
+  await dialog.getByRole("button", { name: "Save & deploy", exact: true }).click();
+  expect((await patched).postDataJSON().protocol_settings).toEqual(inbound.protocol_settings);
+});
