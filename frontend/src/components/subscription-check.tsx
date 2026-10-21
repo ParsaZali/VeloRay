@@ -3,6 +3,8 @@ import { api, type ClientItem } from "@/lib/api";
 import { t } from "@/lib/i18n";
 import { Dialog } from "@/components/common/dialog";
 import { Button } from "@/components/ui/button";
+import { can, useSession } from "@/lib/session";
+import { Input } from "@/components/ui/controls";
 import { X } from "lucide-react";
 
 type Check = {
@@ -11,6 +13,8 @@ type Check = {
   template_available: boolean;
   checks: {
     inbound: number;
+    host_index?: number;
+    probe_available?: boolean;
     name: string;
     protocol: string;
     eligible: boolean;
@@ -25,6 +29,44 @@ export function SubscriptionCheck({
   client: ClientItem;
   onClose: () => void;
 }) {
+  const session = useSession();
+  const [probeBusy, setProbeBusy] = useState("");
+  const [target, setTarget] = useState("https://www.gstatic.com/generate_204");
+  const [probes, setProbes] = useState<
+    Record<
+      string,
+      { ok: boolean; latency_ms?: number; status_code?: number; error?: string }
+    >
+  >({});
+  async function probe(inbound: number, hostIndex: number) {
+    const key = `${inbound}:${hostIndex}`;
+    setProbeBusy(key);
+    try {
+      const value = await api<{
+        ok: boolean;
+        latency_ms?: number;
+        status_code?: number;
+        error?: string;
+      }>(`/clients/${client.id}/connection-test/`, {
+        method: "POST",
+        body: JSON.stringify({ inbound, host_index: hostIndex, url: target }),
+      });
+      setProbes((old) => ({ ...old, [key]: value }));
+    } catch (error) {
+      setProbes((old) => ({
+        ...old,
+        [key]: {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : t("Connection test failed"),
+        },
+      }));
+    } finally {
+      setProbeBusy("");
+    }
+  }
   const [result, setResult] = useState<Check | null>(null);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<
@@ -32,6 +74,10 @@ export function SubscriptionCheck({
   >([]);
   useEffect(() => {
     const controller = new AbortController();
+    setResult(null);
+    setError("");
+    setHistory([]);
+    setProbes({});
     void api<Check>(`/clients/${client.id}/delivery-check/`, {
       signal: controller.signal,
     })
@@ -106,6 +152,25 @@ export function SubscriptionCheck({
               {history.length === 0 && <li>{t("No records yet")}</li>}
             </ul>
           </details>
+          {result.checks.some((check) => check.probe_available) &&
+            can(session, "clients.write") && (
+              <div className="space-y-2 text-xs">
+                <p className="leading-6 text-[var(--muted)]">
+                  {t(
+                    "Connection tests use the selected node and the real client credentials. Test traffic counts toward quota and can start the first-use duration.",
+                  )}
+                </p>
+                <label className="label">
+                  {t("Test destination")}
+                  <Input
+                    type="url"
+                    value={target}
+                    onChange={(e) => setTarget(e.target.value)}
+                    dir="ltr"
+                  />
+                </label>
+              </div>
+            )}
           {result.checks.map((check, index) => (
             <article
               key={`${check.inbound}-${index}`}
@@ -122,6 +187,42 @@ export function SubscriptionCheck({
                   {t(reason)}
                 </p>
               ))}
+              {check.probe_available && can(session, "clients.write") && (
+                <div className="mt-3 space-y-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!!probeBusy || !check.eligible}
+                    onClick={() => probe(check.inbound, check.host_index ?? 0)}
+                  >
+                    {probeBusy === `${check.inbound}:${check.host_index ?? 0}`
+                      ? t("Testing connection…")
+                      : t("Test connection")}
+                  </Button>
+                  {probes[`${check.inbound}:${check.host_index ?? 0}`] && (
+                    <p role="status" className="text-xs">
+                      {probes[`${check.inbound}:${check.host_index ?? 0}`].ok
+                        ? t("Connection successful")
+                        : t("Connection failed")}{" "}
+                      ·{" "}
+                      {probes[`${check.inbound}:${check.host_index ?? 0}`]
+                        .latency_ms ?? "—"}{" "}
+                      ms{" "}
+                      {probes[`${check.inbound}:${check.host_index ?? 0}`]
+                        .status_code || ""}{" "}
+                      {probes[`${check.inbound}:${check.host_index ?? 0}`]
+                        .error || ""}
+                    </p>
+                  )}
+                </div>
+              )}
+              {check.probe_available && check.protocol === "amneziawg" && (
+                <p className="mt-2 text-xs leading-6 text-[var(--muted)]">
+                  {t(
+                    "AmneziaWG testing can interrupt this peer's active connections. Use a separate test account.",
+                  )}
+                </p>
+              )}
               <dl className="mt-3 space-y-2">
                 {Object.entries(check.formats).map(([format, value]) => (
                   <div

@@ -2795,3 +2795,143 @@ for (const variant of ["simple", "modern"]) {
     expect(errors).toEqual([]);
   });
 }
+
+for (const protocol of ["mtproto", "amneziawg"]) {
+  test(`native ${protocol} form sends protocol settings without TLS certificate fields`, async ({
+    page,
+  }) => {
+    await panel(page, "/inbounds", {
+      "nodes/1/wireguard-keypair": {
+        json: {
+          private_key: "private-test-key",
+          public_key: "public-test-key",
+        },
+      },
+    });
+    await page
+      .getByRole("button", { name: "New inbound", exact: true })
+      .click();
+    await choose(page, "Core", "native");
+    if (protocol === "amneziawg") await choose(page, "Protocol", protocol);
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.getByLabel("TLS certificate", { exact: true }),
+    ).toHaveCount(0);
+    if (protocol === "mtproto")
+      await dialog.getByLabel("FakeTLS hostname").fill("www.example.com");
+    else {
+      await dialog
+        .getByRole("button", { name: "Generate", exact: true })
+        .click();
+      await expect(
+        dialog.getByLabel("Private key", { exact: true }),
+      ).toHaveValue("private-test-key");
+      await dialog.getByLabel("H1", { exact: true }).fill("912345678");
+      await expect(dialog.getByLabel("MTU", { exact: true })).toHaveValue(
+        "1280",
+      );
+    }
+    const request = page.waitForRequest(
+      (r) => r.method() === "POST" && r.url().includes("/api/inbounds/"),
+    );
+    await dialog
+      .getByRole("button", { name: "Create & deploy", exact: true })
+      .click();
+    const body = (await request).postDataJSON();
+    expect(body).toMatchObject({
+      core: "native",
+      protocol,
+      transport: "raw",
+      security: "none",
+      flow: "",
+    });
+    if (protocol === "mtproto")
+      expect(body.protocol_settings.fake_tls_host).toBe("www.example.com");
+    else
+      expect(body.protocol_settings).toMatchObject({
+        secret_key: "private-test-key",
+        public_key: "public-test-key",
+        h1: "912345678",
+        jc: 4,
+        s4: 16,
+        mtu: 1280,
+      });
+    await expect(dialog).not.toBeVisible();
+  });
+}
+
+test("client connection check runs the chosen delivery host and displays measured latency", async ({
+  page,
+}) => {
+  await panel(page, "/clients", {
+    clients: {
+      json: [
+        {
+          id: 1,
+          name: "Alice",
+          inbound: 1,
+          inbound_name: "Main",
+          node_name: "Local",
+          enabled: true,
+          traffic_limit_bytes: 0,
+          used_traffic_bytes: 0,
+          raw_used_traffic_bytes: 0,
+          traffic_multiplier: 1,
+          subscription_url: "/sub/test",
+          credential: "test",
+          protocol_settings: {},
+        },
+      ],
+    },
+    "clients/1/delivery-check": {
+      json: {
+        hwid_required: false,
+        hwid_limit: 0,
+        template_available: true,
+        checks: [
+          {
+            inbound: 1,
+            host_index: 2,
+            name: "CDN",
+            protocol: "vless",
+            eligible: true,
+            reasons: [],
+            probe_available: true,
+            formats: { raw: { available: true } },
+          },
+        ],
+      },
+    },
+    "clients/1/subscription-history": { json: [] },
+    "clients/1/connection-test": {
+      json: {
+        ok: true,
+        network_tested: true,
+        vantage: "node",
+        latency_ms: 81,
+        status_code: 204,
+      },
+    },
+  });
+  await page
+    .getByRole("button", { name: "Actions for Alice", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Check subscription", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("CDN", { exact: false })).toBeVisible();
+  const request = page.waitForRequest((r) =>
+    r.url().includes("/clients/1/connection-test/"),
+  );
+  await dialog
+    .getByRole("button", { name: "Test connection", exact: true })
+    .click();
+  expect((await request).postDataJSON()).toMatchObject({
+    inbound: 1,
+    host_index: 2,
+  });
+  await expect(dialog.getByRole("status")).toContainText(
+    "Connection successful · 81 ms 204",
+  );
+});

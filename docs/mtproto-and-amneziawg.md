@@ -34,7 +34,7 @@ Telegram itself does not send the panel an HWID.
 Create a native AmneziaWG inbound, generate the server X25519 keypair and choose
 its UDP port. Client keypairs and unique private addresses are generated through
 the existing client/customer flow. The implementation embeds MIT-licensed
-amneziawg-go at `v0.2.20-0.20260724121833-457d920a1a7d`, with an Apache-2.0 gVisor
+amneziawg-go at `v0.2.20-0.20260724121833-457d920a1a7d` (MIT source included under `third_party` with a timer-lock race fix; see its upstream note), with an Apache-2.0 gVisor
 userspace TCP/UDP stack. Peer source addresses are authenticated by the engine's
 AllowedIPs. Public TCP and UDP destinations are relayed through scoped sockets;
 private/local management destinations are blocked. This implementation provides
@@ -77,5 +77,14 @@ isolated per-user accounting and hot revocation; two actual AmneziaWG peers
 perform encrypted TCP and UDP round trips, with unchanged-peer continuity after
 revocation. Agent tests cover idempotency, stable epochs, rollback and recovery.
 PostgreSQL integration tests verify schema/exports, delimiter-safe principals,
-online attribution and repeated-sample billing. These fixtures do not claim a
-live public Telegram DC or a particular mobile app has been tested.
+online attribution and repeated-sample billing. [Client connection tests](client-connection-tests.md) additionally support Telegram resPQ and AmneziaWG tunnel probes. CI fixtures do not claim a live public Telegram DC or a particular mobile app has been tested.
+
+## Mixed accounts and app feeds
+
+An account may combine these protocols with Xray/sing-box connections. Structured
+app feeds now include the members that the requested format supports, instead of
+letting one Telegram/AmneziaWG member disable the account's whole Clash/Xray feed.
+Responses expose `X-VeloRay-Included-Connections` and `X-VeloRay-Omitted-Connections`.
+`&strict=1` retains all-or-error validation. A feed with no compatible members
+still returns an explicit 400. The compatibility report and portal retain every
+eligible connection, with Telegram actions and separate AmneziaWG downloads.

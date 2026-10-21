@@ -200,3 +200,38 @@ func TestAmneziaWGRealTCPUDPAndHotPeerRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAmneziaWGDiagnosticClientCrossesAuthenticatedPeer(t *testing.T) {
+	e := New()
+	e.network = wireEcho(t)
+	defer e.Close()
+	serverPrivate, serverPublic := wireKey(t)
+	clientPrivate, clientPublic := wireKey(t)
+	port := testPort(t)
+	in := Inbound{Tag: "awg-probe", Listen: "127.0.0.1", Port: port, Protocol: "amneziawg", AWG: wireSettings(serverPrivate), Users: []User{{Name: "veloray:100:probe", PublicKey: clientPublic, Address: "10.66.4.2/32"}}}
+	raw, _ := json.Marshal(Config{Inbounds: []Inbound{in}})
+	if err := e.Apply(raw); err != nil {
+		t.Fatal(err)
+	}
+	settings := *in.AWG
+	settings.PrivateKey = clientPrivate
+	client, err := NewAWGClient(AWGClientConfig{Settings: settings, PublicKey: serverPublic, Address: "10.66.4.2/32"}, netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(port)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	connection, err := client.DialContext(ctx, "tcp", "203.0.113.1:443")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	if err = wireRoundtrip(connection, "real diagnostic tunnel"); err != nil {
+		t.Fatal(err)
+	}
+	_, online := e.Snapshot()
+	if len(online["veloray:100:probe"]) != 1 {
+		t.Fatal("diagnostic bypassed the real inbound")
+	}
+}

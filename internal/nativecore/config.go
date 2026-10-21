@@ -70,6 +70,9 @@ func Decode(raw []byte) (Config, error) {
 	if decoder.Decode(new(any)) != io.EOF {
 		return cfg, errors.New("unexpected trailing configuration")
 	}
+	if cfg.Inbounds == nil {
+		return cfg, errors.New("native configuration requires an inbounds array")
+	}
 	if len(cfg.Inbounds) > 512 {
 		return cfg, errors.New("too many native listeners")
 	}

@@ -32,6 +32,18 @@ func (s *Server) nodeCall(ctx context.Context, node Data, path string, payload a
 			if err != nil || num(status, "version") < 1 {
 				return nil, errors.New("upgrade this node agent before deploying native protocols")
 			}
+			supported := map[string]bool{}
+			for _, value := range array(status, "protocols") {
+				if name, ok := value.(string); ok {
+					supported[name] = true
+				}
+			}
+			for _, value := range array(obj(obj(body, "config"), "_native"), "inbounds") {
+				if !supported[str(asData(value), "protocol")] {
+					return nil, errors.New("this native protocol requires a newer node agent")
+				}
+			}
+
 		}
 	}
 

@@ -24,12 +24,20 @@ type nodeMock struct {
 	portConflict         bool
 	stats                []any
 	statMetadata         Data
+	probeCalls           int
+	probeConfig          Data
 }
 
 func (m *nodeMock) handler(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/health":
 		writeJSON(w, 200, Data{"status": "ok", "xray": Data{"running": m.running, "version": "test"}})
+	case "/native/status":
+		writeJSON(w, 200, Data{"version": 1, "protocols": []any{"mtproto", "amneziawg"}})
+	case "/clients/probe":
+		m.probeCalls++
+		_ = json.NewDecoder(r.Body).Decode(&m.probeConfig)
+		writeJSON(w, 200, Data{"ok": true, "network_tested": true, "vantage": "node", "latency_ms": 12, "status_code": 204})
 	case "/xray/status":
 		writeJSON(w, 200, Data{"running": m.running})
 	case "/xray/stats":

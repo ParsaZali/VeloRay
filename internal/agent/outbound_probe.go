@@ -165,6 +165,9 @@ func (m *Manager) probeOutboundAt(ctx context.Context, tag string, target *url.U
 	if e != nil {
 		return nil, e
 	}
+	return m.probeGraphAt(ctx, tag, outbounds, dns, target, hostname)
+}
+func (m *Manager) probeGraphAt(ctx context.Context, tag string, outbounds []any, dns any, target *url.URL, hostname string) (map[string]any, error) {
 	listener, e := net.Listen("tcp", "127.0.0.1:0")
 	if e != nil {
 		return nil, e
@@ -234,6 +237,9 @@ func (m *Manager) probeOutboundAt(ctx context.Context, tag string, target *url.U
 	proxy, _ := url.Parse("http://" + address)
 	proxy.User = url.UserPassword("vr-probe", password)
 	transport := &http.Transport{Proxy: http.ProxyURL(proxy), TLSClientConfig: &tls.Config{ServerName: hostname, MinVersion: tls.VersionTLS12}, DisableKeepAlives: true}
+	return performProbeRequest(ctx, target, hostname, transport)
+}
+func performProbeRequest(ctx context.Context, target *url.URL, hostname string, transport *http.Transport) (map[string]any, error) {
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	req, e := http.NewRequestWithContext(ctx, "GET", target.String(), nil)

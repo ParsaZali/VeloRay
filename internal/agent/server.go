@@ -110,7 +110,7 @@ func (s Server) Handler() http.Handler {
 		if s.Native == nil {
 			return nil, errors.New("native runtime unavailable; upgrade the node agent")
 		}
-		return map[string]any{"version": 1, "protocols": []string{"mtproto", "amneziawg"}, "per_user_traffic": true, "hot_users": true}, nil
+		return map[string]any{"version": 1, "protocols": []string{"mtproto", "amneziawg"}, "per_user_traffic": true, "hot_users": true, "client_probes": true}, nil
 	}, "GET"))
 	mux.HandleFunc("/diagnostics", wrap(func(c context.Context, _ map[string]json.RawMessage) (any, error) {
 		result := map[string]any{"xray": s.Manager.Diagnostics(c)}
@@ -122,6 +122,28 @@ func (s Server) Handler() http.Handler {
 		}
 		return result, nil
 	}, "GET"))
+	mux.HandleFunc("/clients/probe", wrap(func(c context.Context, v map[string]json.RawMessage) (any, error) {
+		var core, target string
+		if json.Unmarshal(v["core"], &core) != nil || json.Unmarshal(v["url"], &target) != nil {
+			return nil, errors.New("client core and target URL required")
+		}
+		if core == "native" {
+			if s.Native == nil {
+				return nil, errors.New("native diagnostic runtime unavailable; upgrade this agent")
+			}
+			return s.Native.ProbeNativeClient(c, v["config"], target)
+		}
+		manager := s.Manager
+		if core == "singbox" {
+			manager = s.SingBox
+		} else if core != "xray" {
+			return nil, errors.New("unsupported client probe core")
+		}
+		if manager == nil {
+			return nil, errors.New("client probe core unavailable")
+		}
+		return manager.ProbeClient(c, v["config"], target)
+	}, "POST"))
 	mux.HandleFunc("/outbounds/probe", wrap(func(c context.Context, v map[string]json.RawMessage) (any, error) {
 		var core, tag, target string
 		_ = json.Unmarshal(v["core"], &core)

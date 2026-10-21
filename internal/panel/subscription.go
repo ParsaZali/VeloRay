@@ -225,6 +225,17 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	if oneOf(format, "xray", "singbox", "sing-box", "clash", "yaml", "stash", "mihomo") {
+		compatible, firstErr := compatibleFeedConnections(connections, format)
+		if len(compatible) == 0 || firstErr != nil && r.URL.Query().Get("strict") == "1" {
+			writeJSON(w, 400, Data{"detail": firstErr.Error()})
+			return
+		}
+		w.Header().Set("X-VeloRay-Included-Connections", strconv.Itoa(len(compatible)))
+		w.Header().Set("X-VeloRay-Omitted-Connections", strconv.Itoa(len(connections)-len(compatible)))
+		connections = compatible
+	}
 	link := shareLink(c, i, n)
 	links := []string{}
 	details := []Data{}
@@ -366,16 +377,16 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", `attachment; filename="veloray.conf"`)
 	case "portal", "html":
 		portalCfg := clone(cfg)
-		formats := Data{"singbox": true, "xray": true, "clash": true}
+		formats := Data{"singbox": false, "xray": false, "clash": false}
 		for _, item := range connections {
-			if _, err := singClientOutbound(item.client, item.inbound, item.node); err != nil {
-				formats["singbox"] = false
+			if _, err := singClientOutbound(item.client, item.inbound, item.node); err == nil {
+				formats["singbox"] = true
 			}
-			if _, err := xrayClientConfig(item.client, item.inbound, item.node); err != nil {
-				formats["xray"] = false
+			if _, err := xrayClientConfig(item.client, item.inbound, item.node); err == nil {
+				formats["xray"] = true
 			}
-			if _, err := clashConfig(item.client, item.inbound, item.node); err != nil {
-				formats["clash"] = false
+			if _, err := clashConfig(item.client, item.inbound, item.node); err == nil {
+				formats["clash"] = true
 			}
 		}
 		portalCfg["_feed_formats"] = formats

@@ -5,6 +5,7 @@ manifest() {
  {
   printf '%s\n' go.mod go.sum VERSION scripts/build.sh scripts/build-runtime.sh scripts/build-singbox.sh scripts/build-xray.sh scripts/verify-runtime-toolchain.sh
   # Python bytecode is local build state, never an input to the Go binaries.
+  [[ ! -d third_party ]]||find third_party -type f ! -name '*_test.go'
   find cmd internal -type f ! -name '*_test.go' ! -name '*.pyc' ! -path '*/__pycache__/*'
   find frontend -maxdepth 1 -type f ! -name '*.tsbuildinfo'
   find frontend/src -type f
@@ -23,7 +24,7 @@ cp "$(go env GOROOT)/LICENSE" "$temporary/licenses/Go-LICENSE"
 go list -m -json all | jq -sr '.[]|select(.Dir!=null)|[.Path,.Dir]|@tsv' >"$temporary/modules"
 while IFS=$'\t' read -r module directory;do
  name="${module//\//_}";mkdir -p "$temporary/licenses/go/$name"
- for file in "$directory"/LICENSE* "$directory"/COPYING*;do [[ ! -f "$file" ]]||cp "$file" "$temporary/licenses/go/$name/";done
+ for file in "$directory"/LICENSE* "$directory"/COPYING* "$directory"/NOTICE* "$directory"/VELORAY-UPSTREAM.md;do [[ ! -f "$file" ]]||cp "$file" "$temporary/licenses/go/$name/";done
 done <"$temporary/modules"
 xray_version="${VELORAY_XRAY_VERSION:-v26.3.27}"
 [[ "$xray_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]||{ echo 'Invalid Xray version' >&2;exit 2; }

@@ -36,3 +36,5 @@ require (
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
 )
+
+replace github.com/amnezia-vpn/amneziawg-go => ./third_party/amneziawg-go

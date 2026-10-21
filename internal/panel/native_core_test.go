@@ -127,3 +127,38 @@ func panelTestWirePair() (Data, error) {
 	}
 	return Data{"private_key": base64.StdEncoding.EncodeToString(key.Bytes()), "public_key": base64.StdEncoding.EncodeToString(key.PublicKey().Bytes())}, nil
 }
+
+func TestIntegrationMixedNativeAccountKeepsCompatibleAppFeeds(t *testing.T) {
+	s, ctx := integration(t)
+	_, vless, _ := fixture(t, s, ctx, &nodeMock{running: true, stats: []any{}})
+	_, telegram, _ := fixture(t, s, ctx, &nodeMock{running: true, stats: []any{}})
+	telegram["core"], telegram["protocol"], telegram["transport"], telegram["security"], telegram["flow"] = "native", "mtproto", "raw", "none", ""
+	telegram["protocol_settings"] = Data{"fake_tls_host": "www.example.com"}
+	if err := save(ctx, s.Store.Pool, "inbounds", telegram); err != nil {
+		t.Fatal(err)
+	}
+	out, status, err := managementRequest(t, s, ctx, Actor{}, "POST", "customers", Data{"name": "mixed-native", "inbound_ids": []any{num(vless, "id"), num(telegram, "id")}})
+	if err != nil || status != 201 {
+		t.Fatal(out, status, err)
+	}
+	token := str(asData(out), "subscription_token")
+	for _, format := range []string{"xray", "singbox", "clash"} {
+		response := httptest.NewRecorder()
+		s.subscription(response, httptest.NewRequest("GET", "/sub/"+token+"?format="+format, nil).WithContext(ctx))
+		if response.Code != 200 || response.Header().Get("X-VeloRay-Included-Connections") != "1" || response.Header().Get("X-VeloRay-Omitted-Connections") != "1" {
+			t.Fatal(format, response.Code, response.Body.String())
+		}
+		strict := httptest.NewRecorder()
+		s.subscription(strict, httptest.NewRequest("GET", "/sub/"+token+"?format="+format+"&strict=1", nil).WithContext(ctx))
+		if strict.Code != 400 {
+			t.Fatal("strict mode accepted unsupported member")
+		}
+	}
+	portal := httptest.NewRecorder()
+	s.subscription(portal, httptest.NewRequest("GET", "/sub/"+token+"?format=portal", nil).WithContext(ctx))
+	for _, required := range []string{"?format=clash", "?format=singbox", "?format=xray", "https://t.me/proxy?"} {
+		if !strings.Contains(portal.Body.String(), required) {
+			t.Fatal("mixed native account lost portal action", required)
+		}
+	}
+}

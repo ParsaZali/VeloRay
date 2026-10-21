@@ -243,16 +243,31 @@ func TestMTProtoWireHotRevocationAndAccounting(t *testing.T) {
 	if err := b.echo("bob payload"); err != nil {
 		t.Fatal(err)
 	}
-	counters, online := e.Snapshot()
-	counts := map[string]int64{}
-	for _, c := range counters {
-		counts[c.Name] = c.Value
-	}
-	for _, user := range []string{alice.Name, bob.Name} {
-		if counts["user>>>"+user+">>>traffic>>>uplink"] == 0 || counts["user>>>"+user+">>>traffic>>>downlink"] == 0 || len(online[user]) != 1 {
+
+	var counters []Counter
+	deadline := time.Now().Add(time.Second)
+	for {
+		var online map[string]map[string]int64
+		counters, online = e.Snapshot()
+		counts := map[string]int64{}
+		for _, c := range counters {
+			counts[c.Name] = c.Value
+		}
+		ready := true
+		for _, user := range []string{alice.Name, bob.Name} {
+			if counts["user>>>"+user+">>>traffic>>>uplink"] == 0 || counts["user>>>"+user+">>>traffic>>>downlink"] == 0 || len(online[user]) != 1 {
+				ready = false
+			}
+		}
+		if ready {
+			break
+		}
+		if time.Now().After(deadline) {
 			t.Fatalf("missing isolated accounting/online state: %v %v", counts, online)
 		}
+		time.Sleep(time.Millisecond)
 	}
+
 	if err := e.Apply(testConfig(t, port, bob)); err != nil {
 		t.Fatal(err)
 	}
@@ -290,5 +305,92 @@ func TestNativeConfigRejectsMalformedSecrets(t *testing.T) {
 		if _, err := Decode(testConfig(t, 14443, User{Name: "veloray:1:test", Secret: secret})); err == nil {
 			t.Fatal("accepted invalid FakeTLS secret")
 		}
+	}
+}
+
+func TestMTProtoDiagnosticResPQAndNonceValidation(t *testing.T) {
+	for _, valid := range []bool{true, false} {
+		t.Run(map[bool]string{true: "response", false: "wrong-nonce"}[valid], func(t *testing.T) {
+			dc, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dc.Close()
+			serve := func(conn net.Conn) {
+				var err error
+				defer conn.Close()
+				conn.SetDeadline(time.Now().Add(4 * time.Second))
+				nonce := make([]byte, 64)
+				if _, err = io.ReadFull(conn, nonce); err != nil {
+					return
+				}
+				recv, send := obfsCipher(nonce, nil, false), obfsCipher(nonce, nil, true)
+				recv.XORKeyStream(nonce, nonce)
+				input := &cipher.StreamReader{S: recv, R: conn}
+				head := make([]byte, 4)
+				if _, err = io.ReadFull(input, head); err != nil {
+					return
+				}
+				size := binary.LittleEndian.Uint32(head)
+				if size != 47 {
+					return
+				}
+				request := make([]byte, int(size))
+				if _, err = io.ReadFull(input, request); err != nil {
+					return
+				}
+				if binary.LittleEndian.Uint32(request[20:24]) != 0xbe7e8ef1 {
+					return
+				}
+				response := make([]byte, 4+80)
+				binary.LittleEndian.PutUint32(response, 80)
+				binary.LittleEndian.PutUint32(response[20:24], 60)
+				binary.LittleEndian.PutUint32(response[24:28], 0x05162463)
+				copy(response[28:44], request[24:40])
+				if !valid {
+					response[28] ^= 1
+				}
+				send.XORKeyStream(response, response)
+				conn.Write(response)
+				_, _ = io.Copy(io.Discard, input) // Telegram keeps the transport open after resPQ.
+			}
+			go func() {
+				for {
+					conn, err := dc.Accept()
+					if err != nil {
+						return
+					}
+					go serve(conn)
+				}
+			}()
+			e := New()
+			e.network = echoNetwork{dc.Addr().String()}
+			defer e.Close()
+			port := testPort(t)
+			secret := testSecret(5)
+			if err = e.Apply(testConfig(t, port, User{Name: "veloray:50:probe", Secret: secret})); err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+			defer cancel()
+			err = ProbeMTProto(ctx, net.JoinHostPort("127.0.0.1", fmtPort(port)), secret)
+			if valid && err != nil {
+				t.Fatal(err)
+			}
+			if !valid && err == nil {
+				t.Fatal("accepted a different request nonce")
+			}
+		})
+	}
+}
+
+func TestNativeConfigurationRequiresExplicitEmptyArray(t *testing.T) {
+	for _, raw := range []string{"null", "{}", `{"inbounds":null}`} {
+		if _, err := Decode([]byte(raw)); err == nil {
+			t.Fatal("ambiguous empty configuration accepted", raw)
+		}
+	}
+	if _, err := Decode([]byte(`{"inbounds":[]}`)); err != nil {
+		t.Fatal(err)
 	}
 }

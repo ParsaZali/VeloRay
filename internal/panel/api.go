@@ -242,6 +242,9 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 		out, e := s.subscriptionHistory(ctx, c)
 		return out, 200, e
 	}
+	if kind == "clients" && len(parts) == 3 && parts[2] == "connection-test" {
+		return s.clientProbe(w, r, id, a)
+	}
 	if kind == "clients" && len(parts) == 3 && parts[2] == "delivery-check" {
 		if r.Method != "GET" {
 			return nil, 0, fail(405, "method not allowed")

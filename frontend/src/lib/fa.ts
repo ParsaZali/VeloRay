@@ -1,4 +1,14 @@
 const entries = `
+AmneziaWG testing can interrupt this peer's active connections. Use a separate test account.|تست AmneziaWG ممکن است اتصال‌های فعال همین کاربر را قطع کند. بهتر است از حساب جداگانه برای تست استفاده کنید.
+
+Test connection|تست اتصال
+Testing connection…|در حال تست اتصال…
+Connection successful|اتصال موفق بود
+Connection failed|اتصال ناموفق بود
+Connection test failed|تست اتصال ناموفق بود
+Test destination|مقصد تست
+Connection tests use the selected node and the real client credentials. Test traffic counts toward quota and can start the first-use duration.|تست از نود انتخاب‌شده و با اطلاعات واقعی همین کاربر انجام می‌شود. ترافیک تست از سهمیه کم می‌شود و ممکن است مدت زمان حساب را از اولین استفاده آغاز کند.
+
 FakeTLS hostname|دامنه پوششی FakeTLS
 Use a public HTTPS hostname reachable from this node. Each user receives a separate Telegram secret, traffic counter and revocable connection. No local TLS certificate is needed.|دامنه HTTPS عمومی و قابل دسترس از نود وارد کنید. هر کاربر، سکرت تلگرام و آمار مصرف مستقل دارد و دسترسی او جداگانه قطع می‌شود. نیازی به گواهی TLS محلی نیست.
 AmneziaWG obfuscation|تنظیمات استتار AmneziaWG

@@ -30,7 +30,7 @@ exported as older Snell v3/v4 or advertised as broadly Mihomo-compatible.
 `/sub/TOKEN?format=xray` returns an array of named Xray client configurations,
 one per eligible delivery host/connection. Supported protocols: VLESS, VMess,
 Trojan and Shadowsocks; supported transports: RAW, WS, gRPC, XHTTP, HTTPUpgrade,
-MKCP. Unsupported combinations return an explicit error. Server certificate paths,
+MKCP. Mixed-account feeds include compatible members and report omitted counts in response headers; `strict=1` retains all-or-error behavior. A feed with no compatible members returns an explicit error. Server certificate paths,
 private REALITY keys, server handshake targets and socket options are omitted.
 The exporter supplies only public client TLS/REALITY settings. This endpoint uses
 the same HWID admission, quota checks and no-store headers as other feeds.
