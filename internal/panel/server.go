@@ -118,6 +118,21 @@ func (s *Server) Handler() http.Handler {
 			}
 		}()
 		if strings.HasPrefix(r.URL.Path, "/sub/") {
+			if !s.Config.SubscriptionOnly && s.Store != nil {
+				cfg, err := settings(r.Context(), s.Store.Pool)
+				if err != nil {
+					s.respond(w, r, nil, 0, err)
+					return
+				}
+				if origin := subscriptionOrigin(s.Config, cfg); origin != strings.TrimRight(s.Config.PublicURL, "/") {
+					if r.Method != "GET" && r.Method != "HEAD" {
+						writeJSON(w, 405, Data{"detail": "method not allowed"})
+						return
+					}
+					http.Redirect(w, r, origin+r.URL.RequestURI(), http.StatusTemporaryRedirect)
+					return
+				}
+			}
 			s.subscription(w, r)
 			return
 		}
@@ -266,6 +281,14 @@ func Serve(ctx context.Context, c Config) error {
 	}
 	s := &Server{Config: c, Store: store, Logger: slog.Default()}
 	workerCtx, stopWorker := context.WithCancel(ctx)
+	endpointDone := make(chan struct{})
+	go func() {
+		defer close(endpointDone)
+		if !c.SubscriptionOnly {
+			s.subscriptionEndpointWorker(workerCtx)
+		}
+	}()
+	defer func() { stopWorker(); <-endpointDone }()
 	workerDone := make(chan struct{})
 	go func() {
 		defer close(workerDone)

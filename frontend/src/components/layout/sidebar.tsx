@@ -114,7 +114,7 @@ export function Sidebar({
         {groups.map((g) => (
           <div key={g.label} className="mb-5">
             {!compact && (
-              <div className="mb-1.5 px-2 text-[9px] font-medium text-[var(--muted)]">
+              <div className="mb-1.5 px-2 text-[10px] font-medium text-[var(--muted)]">
                 {t(g.label)}
               </div>
             )}
@@ -145,10 +145,10 @@ export function Sidebar({
                         setMobileOpen(false);
                       }}
                       className={cn(
-                        "group flex h-9 w-full min-w-0 items-center rounded-md text-[12px] font-medium transition",
+                        "group flex h-9 w-full min-w-0 items-center rounded-md text-[13px] font-medium transition",
                         compact ? "justify-center px-0" : "gap-2.5 px-2.5",
                         active
-                          ? "bg-[var(--surface-2)] text-[var(--fg)]"
+                          ? "sidebar-current bg-[var(--surface-2)] text-[var(--fg)]"
                           : "text-[var(--muted-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--fg)]",
                       )}
                     >

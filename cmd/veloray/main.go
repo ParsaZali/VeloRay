@@ -8,6 +8,7 @@ import (
 	"fmt"
 	hostpkg "github.com/PaarSaAm/VeloRay/internal/host"
 	"github.com/PaarSaAm/VeloRay/internal/panel"
+	"github.com/PaarSaAm/VeloRay/internal/subproxy"
 	"io"
 	"net"
 	"net/http"
@@ -107,6 +108,11 @@ Development: serve | migrate | bootstrap | bootstrap-if-empty | bootstrap-local 
 Run veloray serve explicitly to start the application in the foreground.`)
 		return nil
 	}
+	if command == "proxy-serve" {
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		return subproxy.Run(ctx)
+	}
 	env := os.Getenv("VELORAY_ENV_FILE")
 	if env == "" {
 		env = "/etc/veloray/veloray.env"
@@ -154,17 +160,23 @@ Run veloray serve explicitly to start the application in the foreground.`)
 		}
 		return hostpkg.SetEnv(env, args[1], args[2])
 	case "render-nginx":
-		return hostpkg.RenderNginx(ctx, c.PublicURL, "/etc/nginx/sites-available/veloray")
+		if c.SubscriptionDriver != "native" {
+			return hostpkg.RenderNginx(ctx, c.PublicURL, "/etc/nginx/sites-available/veloray")
+		}
 	}
 	store, e := panel.OpenStore(ctx, c.DatabaseURL)
 	if e != nil {
 		return e
 	}
 	defer store.Pool.Close()
-	if e = store.Migrate(ctx); e != nil {
-		return e
+	if command != "sync-subscription-endpoint" {
+		if e = store.Migrate(ctx); e != nil {
+			return e
+		}
 	}
 	switch command {
+	case "render-nginx", "sync-subscription-endpoint":
+		return (&panel.Server{Config: c, Store: store}).SyncNativeSubscriptionEndpoint(ctx, command == "render-nginx")
 	case "host-audit":
 		if os.Geteuid() != 0 {
 			return errors.New("audit requires root access")
@@ -239,6 +251,22 @@ Run veloray serve explicitly to start the application in the foreground.`)
 		}
 		if used {
 			return errors.New("panel port is already used by a local inbound")
+		}
+		var endpoint []byte
+		if e = store.Pool.QueryRow(ctx, `SELECT data->'_subscription_endpoint' FROM vr_settings WHERE id=1`).Scan(&endpoint); e != nil {
+			return e
+		}
+		var subscription struct {
+			Port        int `json:"port"`
+			AppliedPort int `json:"applied_port"`
+		}
+		if len(endpoint) > 0 && string(endpoint) != "null" {
+			if e = json.Unmarshal(endpoint, &subscription); e != nil {
+				return e
+			}
+		}
+		if n == subscription.Port || n == subscription.AppliedPort || n == 8611 || n == 8612 {
+			return errors.New("panel port is reserved by the subscription service")
 		}
 		for k, v := range map[string]string{"VELORAY_PUBLIC_HOST": host, "VELORAY_PANEL_PORT": port, "VELORAY_PUBLIC_URL": "https://" + net.JoinHostPort(host, port)} {
 			if e = hostpkg.SetEnv(env, k, v); e != nil {

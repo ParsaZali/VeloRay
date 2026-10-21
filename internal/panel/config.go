@@ -15,6 +15,8 @@ import (
 )
 
 type Config struct {
+	SubscriptionDriver, SubscriptionControl                          string
+	SubscriptionPort                                                 int
 	LDAPAddress                                                      string
 	LDAPTLS                                                          *tls.Config
 	OIDCIssuer, OIDCClientID, OIDCClientSecret                       string
@@ -70,6 +72,15 @@ func LoadConfig() (Config, error) {
 	}
 	if err := c.configureLDAP(os.Getenv("VELORAY_LDAP_URL"), os.Getenv("VELORAY_LDAP_CA_FILE")); err != nil {
 		return c, err
+	}
+	c.SubscriptionDriver = env("VELORAY_SUBSCRIPTION_DRIVER", "manual")
+	if !oneOf(c.SubscriptionDriver, "manual", "native", "caddy") {
+		return c, errors.New("invalid subscription endpoint driver")
+	}
+	c.SubscriptionControl = env("VELORAY_SUBSCRIPTION_CONTROL", "/run/veloray-proxy/control.sock")
+	c.SubscriptionPort, err = strconv.Atoi(env("VELORAY_SUBSCRIPTION_PORT", "8444"))
+	if err != nil || c.SubscriptionPort < 1 || c.SubscriptionPort > 65535 {
+		return c, errors.New("invalid subscription port")
 	}
 	c.SubscriptionOnly = env("VELORAY_SUBSCRIPTION_ONLY", "false") == "true"
 	c.GitHubClientID, c.GitHubClientSecret = os.Getenv("VELORAY_GITHUB_CLIENT_ID"), os.Getenv("VELORAY_GITHUB_CLIENT_SECRET")

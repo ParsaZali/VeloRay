@@ -123,10 +123,16 @@ func (s *Server) customerView(ctx context.Context, q Query, d Data) (Data, error
 		connections = append(connections, v)
 	}
 	out["connections"] = connections
-	out["subscription_url"] = strings.TrimRight(s.Config.PublicURL, "/") + "/sub/" + str(d, "subscription_token")
+	out["subscription_url"], e = s.subscriptionURL(ctx, q, str(d, "subscription_token"))
+	if e != nil {
+		return nil, e
+	}
 	// Imported accounts keep every historical token and can be managed here as well.
 	if str(d, "subscription_token") == "" && len(members) > 0 {
-		out["subscription_url"] = strings.TrimRight(s.Config.PublicURL, "/") + "/sub/" + str(members[0], "subscription_token")
+		out["subscription_url"], e = s.subscriptionURL(ctx, q, str(members[0], "subscription_token"))
+		if e != nil {
+			return nil, e
+		}
 	}
 	return out, nil
 }

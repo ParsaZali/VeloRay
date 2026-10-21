@@ -186,6 +186,16 @@ func validateInbound(ctx context.Context, q Query, c Config, d Data) error {
 	if port == 10085 || port == 10086 || port == 10087 || port == 9191 || flag(node, "is_local") && (port == 8610 || port == int64(c.PanelPort)) {
 		return errors.New("port is reserved by the panel, agent or Xray API")
 	}
+	if flag(node, "is_local") && port > 0 {
+		cfg, err := settings(ctx, q)
+		if err != nil {
+			return err
+		}
+		endpoint := obj(cfg, "_subscription_endpoint")
+		if port == 8611 || port == 8612 || port == num(endpoint, "port") || port == num(endpoint, "applied_port") {
+			return errors.New("port is reserved by the subscription service")
+		}
+	}
 	if net.ParseIP(str(d, "listen")) == nil {
 		return errors.New("listen must be an IP address")
 	}

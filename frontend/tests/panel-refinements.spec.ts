@@ -46,7 +46,13 @@ async function panel(
         dashboard_refresh_seconds: 60,
       };
     else if (resource === "nodes") json = [node];
-    else if (/^nodes\/\d+\/balancing$/.test(resource)) json = { balancers: [], outbound_tags: ["direct", "blocked"], revision: "a".repeat(64), observatory_configured: false };
+    else if (/^nodes\/\d+\/balancing$/.test(resource))
+      json = {
+        balancers: [],
+        outbound_tags: ["direct", "blocked"],
+        revision: "a".repeat(64),
+        observatory_configured: false,
+      };
     else if (resource === "inbounds" || resource.startsWith("admin/"))
       json = [];
     else if (resource === "health")
@@ -145,28 +151,56 @@ async function choose(page: Page, label: string, value: string, dialog = true) {
   await page.locator(`.select-menu [data-value="${value}"]`).click();
 }
 
-test("installed geo assets load on demand, filter and create a rule", async ({ page }) => {
+test("installed geo assets load on demand, filter and create a rule", async ({
+  page,
+}) => {
   const requests: URL[] = [];
   await panel(page, "/routing");
   await page.route("**/api/nodes/1/geo-assets?*", async (route) => {
-    const url = new URL(route.request().url());requests.push(url);
-    await route.fulfill({ json: { kind: "geosite", sha256: "a".repeat(64), size: 1048576, modified: "2026-10-20T12:00:00Z", total: 200, matched: url.searchParams.get("q") === "none" ? 0 : 1, entries: url.searchParams.get("q") === "none" ? [] : [{ tag: "ir", reference: "geosite:ir", count: 45 }] } });
+    const url = new URL(route.request().url());
+    requests.push(url);
+    await route.fulfill({
+      json: {
+        kind: "geosite",
+        sha256: "a".repeat(64),
+        size: 1048576,
+        modified: "2026-10-20T12:00:00Z",
+        total: 200,
+        matched: url.searchParams.get("q") === "none" ? 0 : 1,
+        entries:
+          url.searchParams.get("q") === "none"
+            ? []
+            : [{ tag: "ir", reference: "geosite:ir", count: 45 }],
+      },
+    });
   });
   expect(requests).toHaveLength(0);
-  await page.getByText("Installed GeoIP and Geosite lists", { exact: true }).click();
+  await page
+    .getByText("Installed GeoIP and Geosite lists", { exact: true })
+    .click();
   await expect(page.getByText("geosite:ir", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Create rule geosite:ir", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create rule geosite:ir", exact: true })
+    .click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Save & deploy", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Save & deploy", exact: true })
+    .click();
   await expect(dialog).not.toBeVisible();
   await expect(page.locator("#main-content")).toContainText("geosite:ir");
   await page.getByLabel("Search tags", { exact: true }).fill("none");
   await page.getByRole("button", { name: "Search", exact: true }).click();
-  await expect(page.getByText("No matching tags.", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("No matching tags.", { exact: true }),
+  ).toBeVisible();
   expect(requests.at(-1)?.searchParams.get("q")).toBe("none");
   await page.setViewportSize({ width: 390, height: 844 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
 });
 
 test("original dark and light palette, raw upload and download", async ({
@@ -307,68 +341,134 @@ test("routing defaults, presets and sing-box block action", async ({
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(390);
 });
-test("Xray balancing deploys groups, keeps conflict drafts and selects a routing destination", async ({ page }) => {
+test("Xray balancing deploys groups, keeps conflict drafts and selects a routing destination", async ({
+  page,
+}) => {
   await panel(page, "/routing");
-  let state = { balancers: [] as any[], outbound_tags: ["direct", "edge-a", "edge-b"], revision: "b".repeat(64), observatory_configured: false };
+  let state = {
+    balancers: [] as any[],
+    outbound_tags: ["direct", "edge-a", "edge-b"],
+    revision: "b".repeat(64),
+    observatory_configured: false,
+  };
   let conflict = false;
-  await page.route("**/api/nodes/1/balancing", async route => {
+  await page.route("**/api/nodes/1/balancing", async (route) => {
     if (route.request().method() === "PUT") {
-      if (conflict) { await route.fulfill({ status: 409, json: { detail: "balancing configuration changed; reload before saving" } }); return; }
+      if (conflict) {
+        await route.fulfill({
+          status: 409,
+          json: {
+            detail: "balancing configuration changed; reload before saving",
+          },
+        });
+        return;
+      }
       const input = route.request().postDataJSON();
       expect(input.revision).toBe(state.revision);
-      state = { ...state, balancers: input.balancers, revision: "c".repeat(64) };
+      state = {
+        ...state,
+        balancers: input.balancers,
+        revision: "c".repeat(64),
+      };
     }
     await route.fulfill({ json: state });
   });
   await page.getByText("Xray load balancing", { exact: true }).click();
-  await page.getByRole("button", { name: "Reload balancing", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Reload balancing", exact: true })
+    .click();
   await page.getByRole("button", { name: "Add balancer", exact: true }).click();
   await page.getByLabel("Balancer tag", { exact: true }).fill("pool");
   await page.getByLabel("Selector prefixes", { exact: true }).fill("edge-");
   await choose(page, "Balancing strategy", "roundrobin", false);
   await choose(page, "Fallback outbound", "direct", false);
-  await expect(page.getByText("Matching outbounds: edge-a, edge-b", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Save balancing & deploy", exact: true }).click();
-  await expect(page.getByRole("status")).toHaveText("Balancing saved and deployed.");
-  expect(state.balancers).toEqual([{ tag: "pool", selector: ["edge-"], strategy: { type: "roundrobin" }, fallbackTag: "direct" }]);
+  await expect(
+    page.getByText("Matching outbounds: edge-a, edge-b", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Save balancing & deploy", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Balancing saved and deployed.",
+  );
+  expect(state.balancers).toEqual([
+    {
+      tag: "pool",
+      selector: ["edge-"],
+      strategy: { type: "roundrobin" },
+      fallbackTag: "direct",
+    },
+  ]);
   await page.getByRole("button", { name: "New rule", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Name", { exact: true }).fill("Balanced TCP");
   await choose(page, "Destination", "balancer:pool");
   await choose(page, "Network", "tcp");
-  const request = page.waitForRequest(r => r.method() === "POST" && r.url().includes("/api/routing_rules/"));
-  await dialog.getByRole("button", { name: "Save & deploy", exact: true }).click();
+  const request = page.waitForRequest(
+    (r) => r.method() === "POST" && r.url().includes("/api/routing_rules/"),
+  );
+  await dialog
+    .getByRole("button", { name: "Save & deploy", exact: true })
+    .click();
   const data = (await request).postDataJSON();
   expect(data.config).toMatchObject({ balancerTag: "pool", network: "tcp" });
   expect(data.config.outboundTag).toBeUndefined();
   await expect(dialog).not.toBeVisible();
-  await expect(page.getByRole("cell", { name: "pool", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "pool", exact: true }),
+  ).toBeVisible();
   conflict = true;
   await page.getByLabel("Balancer tag", { exact: true }).fill("my-draft");
-  await page.getByRole("button", { name: "Save balancing & deploy", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Save balancing & deploy", exact: true })
+    .click();
   await expect(page.getByRole("alert")).toContainText("configuration changed");
-  await expect(page.getByLabel("Balancer tag", { exact: true })).toHaveValue("my-draft");
+  await expect(page.getByLabel("Balancer tag", { exact: true })).toHaveValue(
+    "my-draft",
+  );
   await page.setViewportSize({ width: 390, height: 844 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
 });
 
-test("inbound fallback editor preserves fields and hides unsupported transports", async ({ page }) => {
+test("inbound fallback editor preserves fields and hides unsupported transports", async ({
+  page,
+}) => {
   await panel(page, "/inbounds");
   await page.getByRole("button", { name: "New inbound", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await choose(page, "Connection preset", "trojan");
-  await dialog.getByRole("button", { name: "Add fallback", exact: true }).click();
-  await dialog.getByLabel("Destination", { exact: true }).fill("127.0.0.1:8080");
-  await dialog.getByLabel("TLS certificate", { exact: true }).fill("/etc/cert.pem");
-  await dialog.getByLabel("TLS private key", { exact: true }).fill("/etc/key.pem");
-  const request = page.waitForRequest(r => r.method() === "POST" && r.url().includes("/api/inbounds/"));
-  await dialog.getByRole("button", { name: "Create & deploy", exact: true }).click();
-  expect((await request).postDataJSON().protocol_settings.fallbacks).toEqual([{ dest: "127.0.0.1:8080", xver: 0 }]);
+  await dialog
+    .getByRole("button", { name: "Add fallback", exact: true })
+    .click();
+  await dialog
+    .getByLabel("Destination", { exact: true })
+    .fill("127.0.0.1:8080");
+  await dialog
+    .getByLabel("TLS certificate", { exact: true })
+    .fill("/etc/cert.pem");
+  await dialog
+    .getByLabel("TLS private key", { exact: true })
+    .fill("/etc/key.pem");
+  const request = page.waitForRequest(
+    (r) => r.method() === "POST" && r.url().includes("/api/inbounds/"),
+  );
+  await dialog
+    .getByRole("button", { name: "Create & deploy", exact: true })
+    .click();
+  expect((await request).postDataJSON().protocol_settings.fallbacks).toEqual([
+    { dest: "127.0.0.1:8080", xver: 0 },
+  ]);
   await expect(dialog).not.toBeVisible();
   await page.getByRole("button", { name: "New inbound", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Add fallback", exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Add fallback", exact: true }),
+  ).toHaveCount(0);
   await choose(page, "Connection preset", "websocket");
-  await expect(page.getByRole("button", { name: "Add fallback", exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Add fallback", exact: true }),
+  ).toHaveCount(0);
 });
 
 test("editing credentials preserves advanced fields and templates remain isolated", () => {
@@ -1507,28 +1607,54 @@ test("notification destinations support independent event routing and do not sub
   ).toHaveCount(0);
 });
 
-test("GitHub and Telegram login availability preserves password login and handles provider failure", async ({ page }) => {
+test("GitHub and Telegram login availability preserves password login and handles provider failure", async ({
+  page,
+}) => {
   let enabled = true;
   let starts = 0;
-  await page.addInitScript(() => { localStorage.setItem("veloray-locale", "en"); localStorage.setItem("veloray-login-locale", "en"); });
+  await page.addInitScript(() => {
+    localStorage.setItem("veloray-locale", "en");
+    localStorage.setItem("veloray-login-locale", "en");
+  });
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path === "/api/auth/me") await route.fulfill({status:401,json:{detail:"Authentication required"}});
-    else if (path === "/api/auth/oidc") await route.fulfill({json:{enabled,telegram:enabled,github_enabled:enabled}});
-    else if (path === "/api/auth/github/start") { starts++;expect(route.request().method()).toBe("POST");await route.fulfill({status:502,json:{detail:"Provider unavailable"}}); }
-    else await route.fulfill({json:{}});
+    if (path === "/api/auth/me")
+      await route.fulfill({
+        status: 401,
+        json: { detail: "Authentication required" },
+      });
+    else if (path === "/api/auth/oidc")
+      await route.fulfill({
+        json: { enabled, telegram: enabled, github_enabled: enabled },
+      });
+    else if (path === "/api/auth/github/start") {
+      starts++;
+      expect(route.request().method()).toBe("POST");
+      await route.fulfill({
+        status: 502,
+        json: { detail: "Provider unavailable" },
+      });
+    } else await route.fulfill({ json: {} });
   });
   await page.goto("/");
-  await expect(page.getByRole("button",{name:"Sign in with Telegram",exact:true})).toBeVisible();
-  await page.getByRole("button",{name:"Sign in with GitHub",exact:true}).click();
+  await expect(
+    page.getByRole("button", { name: "Sign in with Telegram", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Sign in with GitHub", exact: true })
+    .click();
   await expect(page.getByRole("alert")).toContainText("Provider unavailable");
   expect(starts).toBe(1);
-  await expect(page.getByLabel("Password",{exact:true})).toBeVisible();
-  enabled=false;
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+  enabled = false;
   await page.reload();
-  await expect(page.getByRole("button",{name:"Sign in with GitHub",exact:true})).toHaveCount(0);
-  await expect(page.getByRole("button",{name:"Sign in with Telegram",exact:true})).toHaveCount(0);
-  await expect(page.getByLabel("Password",{exact:true})).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Sign in with GitHub", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Sign in with Telegram", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
 });
 
 test("OIDC login keeps the local second factor and password fallback", async ({
@@ -2111,7 +2237,9 @@ for (const legacyName of [
   });
 }
 
-test("LDAP login keeps its provider through second factor and offers local fallback", async ({ page }) => {
+test("LDAP login keeps its provider through second factor and offers local fallback", async ({
+  page,
+}) => {
   let enabled = true;
   const attempts: any[] = [];
   await page.addInitScript(() => {
@@ -2120,84 +2248,316 @@ test("LDAP login keeps its provider through second factor and offers local fallb
   });
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path === "/api/auth/me") await route.fulfill({ status: 401, json: { detail: "Authentication required" } });
-    else if (path === "/api/auth/oidc") await route.fulfill({ json: { enabled: false, ldap_enabled: enabled } });
+    if (path === "/api/auth/me")
+      await route.fulfill({
+        status: 401,
+        json: { detail: "Authentication required" },
+      });
+    else if (path === "/api/auth/oidc")
+      await route.fulfill({ json: { enabled: false, ldap_enabled: enabled } });
     else if (path === "/api/auth/login") {
-      const body = route.request().postDataJSON(); attempts.push(body);
-      if (!body.totp_code && body.provider === "ldap") await route.fulfill({ status: 202, json: { two_factor_required: true } });
-      else await route.fulfill({ status: 401, json: { detail: "Test rejected credentials" } });
+      const body = route.request().postDataJSON();
+      attempts.push(body);
+      if (!body.totp_code && body.provider === "ldap")
+        await route.fulfill({
+          status: 202,
+          json: { two_factor_required: true },
+        });
+      else
+        await route.fulfill({
+          status: 401,
+          json: { detail: "Test rejected credentials" },
+        });
     } else await route.fulfill({ json: {} });
   });
   await page.goto("/");
   const method = page.getByRole("combobox", { name: "Sign-in method" });
   await expect(method).toBeVisible();
   await method.click();
-  await page.getByRole("option", { name: "LDAP directory", exact: true }).click();
+  await page
+    .getByRole("option", { name: "LDAP directory", exact: true })
+    .click();
   await page.getByLabel("Username", { exact: true }).fill("alice");
   await page.getByLabel("Password", { exact: true }).fill("directory-secret");
   await page.getByRole("button", { name: "Login", exact: true }).click();
   await expect(page.getByLabel("Authenticator / recovery code")).toBeVisible();
   await page.getByLabel("Authenticator / recovery code").fill("RECOVERY-ONCE");
-  await page.getByRole("button", { name: "Verify and continue", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Test rejected credentials");
+  await page
+    .getByRole("button", { name: "Verify and continue", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Test rejected credentials",
+  );
   expect(attempts.map((x) => x.provider)).toEqual(["ldap", "ldap"]);
-  expect(attempts[1]).toMatchObject({ username: "alice", password: "directory-secret", totp_code: "RECOVERY-ONCE" });
-  await page.getByRole("button", { name: "Back to login", exact: true }).click();
+  expect(attempts[1]).toMatchObject({
+    username: "alice",
+    password: "directory-secret",
+    totp_code: "RECOVERY-ONCE",
+  });
+  await page
+    .getByRole("button", { name: "Back to login", exact: true })
+    .click();
   await method.click();
-  await page.getByRole("option", { name: "Local account", exact: true }).click();
+  await page
+    .getByRole("option", { name: "Local account", exact: true })
+    .click();
   await expect(page.getByLabel("Password", { exact: true })).toHaveValue("");
   await page.getByLabel("Password", { exact: true }).fill("local-secret");
   await page.getByRole("button", { name: "Login", exact: true }).click();
   await expect.poll(() => attempts.length).toBe(3);
   expect(attempts[2].provider).toBe("local");
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    )
+    .toBe(true);
   enabled = false;
   await page.reload();
   await expect(method).toHaveCount(0);
   await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
 });
 
-test("administrator edits LDAP binding while preserving local role and SSO fields", async ({ page }) => {
-  const user = { id: 2, username: "alice", email: "", is_active: true, is_staff: true, is_superuser: false, role: "viewer", ldap_dn: "uid=old,dc=example,dc=com", oidc_issuer: "https://github.com", oidc_subject: "42" };
+test("administrator edits LDAP binding while preserving local role and SSO fields", async ({
+  page,
+}) => {
+  const user = {
+    id: 2,
+    username: "alice",
+    email: "",
+    is_active: true,
+    is_staff: true,
+    is_superuser: false,
+    role: "viewer",
+    ldap_dn: "uid=old,dc=example,dc=com",
+    oidc_issuer: "https://github.com",
+    oidc_subject: "42",
+  };
   const saves: any[] = [];
   await panel(page, "/admin", { "admin/users": { json: [user] } });
   await page.route("**/api/admin/users/2/", async (route) => {
     saves.push(route.request().postDataJSON());
     await route.fulfill({ json: { ...user, ...saves.at(-1) } });
   });
-  await page.getByRole("row").filter({ hasText: "alice" }).getByTitle("Edit", { exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Administrator", exact: true });
-  const dn = dialog.getByRole("textbox", { name: "LDAP distinguished name (optional)", exact: true });
+  await page
+    .getByRole("row")
+    .filter({ hasText: "alice" })
+    .getByTitle("Edit", { exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Administrator",
+    exact: true,
+  });
+  const dn = dialog.getByRole("textbox", {
+    name: "LDAP distinguished name (optional)",
+    exact: true,
+  });
   await expect(dn).toHaveValue(user.ldap_dn);
   await dn.fill("uid=alice,ou=people,dc=example,dc=com");
-  await dialog.getByRole("button", { name: "Save account", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Save account", exact: true })
+    .click();
   await expect(dialog).toHaveCount(0);
   expect(saves).toHaveLength(1);
-  expect(saves[0]).toMatchObject({ ldap_dn: "uid=alice,ou=people,dc=example,dc=com", oidc_issuer: "https://github.com", oidc_subject: "42", role: "viewer" });
+  expect(saves[0]).toMatchObject({
+    ldap_dn: "uid=alice,ou=people,dc=example,dc=com",
+    oidc_issuer: "https://github.com",
+    oidc_subject: "42",
+    role: "viewer",
+  });
   expect(saves[0].password).toBeUndefined();
 });
 
-
-test("ShadowTLS form sends a paired TCP configuration and preserves its keys on edit", async ({ page }) => {
-  const inbound = { id: 4, node: 1, name: "Wrapped", core: "singbox", protocol: "shadowtls", transport: "raw", security: "none", listen: "0.0.0.0", port: 443, enabled: true, protocol_settings: { handshake_server: "tls.example", handshake_port: 8443, psk: "MDEyMzQ1Njc4OWFiY2RlZg==" } };
+test("ShadowTLS form sends a paired TCP configuration and preserves its keys on edit", async ({
+  page,
+}) => {
+  const inbound = {
+    id: 4,
+    node: 1,
+    name: "Wrapped",
+    core: "singbox",
+    protocol: "shadowtls",
+    transport: "raw",
+    security: "none",
+    listen: "0.0.0.0",
+    port: 443,
+    enabled: true,
+    protocol_settings: {
+      handshake_server: "tls.example",
+      handshake_port: 8443,
+      psk: "MDEyMzQ1Njc4OWFiY2RlZg==",
+    },
+  };
   await panel(page, "/inbounds", { inbounds: { json: [inbound] } });
   await page.getByRole("button", { name: "New inbound", exact: true }).click();
   await choose(page, "Core", "singbox");
   await choose(page, "Protocol", "shadowtls");
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("TCP only", { exact: false })).toBeVisible();
-  await expect(dialog.getByLabel("TLS certificate", { exact: true })).toHaveCount(0);
-  await dialog.getByLabel("Handshake server", { exact: true }).fill("tls.example");
+  await expect(
+    dialog.getByLabel("TLS certificate", { exact: true }),
+  ).toHaveCount(0);
+  await dialog
+    .getByLabel("Handshake server", { exact: true })
+    .fill("tls.example");
   await dialog.getByLabel("Handshake port", { exact: true }).fill("8443");
-  const created = page.waitForRequest(r => r.method() === "POST" && r.url().includes("/api/inbounds/"));
-  await dialog.getByRole("button", { name: "Create & deploy", exact: true }).click();
-  expect((await created).postDataJSON()).toMatchObject({ core: "singbox", protocol: "shadowtls", transport: "raw", security: "none", protocol_settings: { handshake_server: "tls.example", handshake_port: 8443, psk: "" } });
+  const created = page.waitForRequest(
+    (r) => r.method() === "POST" && r.url().includes("/api/inbounds/"),
+  );
+  await dialog
+    .getByRole("button", { name: "Create & deploy", exact: true })
+    .click();
+  expect((await created).postDataJSON()).toMatchObject({
+    core: "singbox",
+    protocol: "shadowtls",
+    transport: "raw",
+    security: "none",
+    protocol_settings: {
+      handshake_server: "tls.example",
+      handshake_port: 8443,
+      psk: "",
+    },
+  });
   await expect(dialog).not.toBeVisible();
   await page.getByRole("button", { name: "Edit", exact: true }).first().click();
-  await expect(dialog.getByLabel("Handshake port", { exact: true })).toHaveValue("8443");
-  await expect(dialog.getByLabel("Inner server key", { exact: true })).toHaveValue(inbound.protocol_settings.psk);
-  const patched = page.waitForRequest(r => r.method() === "PATCH" && r.url().includes("/api/inbounds/4/"));
-  await dialog.getByRole("button", { name: "Save & deploy", exact: true }).click();
-  expect((await patched).postDataJSON().protocol_settings).toEqual(inbound.protocol_settings);
+  await expect(
+    dialog.getByLabel("Handshake port", { exact: true }),
+  ).toHaveValue("8443");
+  await expect(
+    dialog.getByLabel("Inner server key", { exact: true }),
+  ).toHaveValue(inbound.protocol_settings.psk);
+  const patched = page.waitForRequest(
+    (r) => r.method() === "PATCH" && r.url().includes("/api/inbounds/4/"),
+  );
+  await dialog
+    .getByRole("button", { name: "Save & deploy", exact: true })
+    .click();
+  expect((await patched).postDataJSON().protocol_settings).toEqual(
+    inbound.protocol_settings,
+  );
+});
+
+test("separate subscription port applies independently and preserves the previous address while pending", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await panel(page, "/settings");
+  let endpoint = {
+    managed: true,
+    panel_origin: "https://panel.example:8443",
+    subscription_origin: "https://panel.example:8444",
+    port: 8444,
+    applied_port: 8444,
+    revision: "revision-one",
+    status: "ready",
+    error: "",
+  };
+  let complete = false;
+  let received: unknown;
+  await page.route("**/api/subscription-endpoint", async (route) => {
+    if (route.request().method() === "PUT") {
+      received = route.request().postDataJSON();
+      endpoint = {
+        ...endpoint,
+        port: 9444,
+        revision: "revision-two",
+        status: "pending",
+      };
+      await route.fulfill({ status: 202, json: endpoint });
+      return;
+    }
+    if (complete)
+      endpoint = {
+        ...endpoint,
+        applied_port: 9444,
+        subscription_origin: "https://panel.example:9444",
+        status: "ready",
+      };
+    await route.fulfill({ json: endpoint });
+  });
+  await page.getByRole("button", { name: "Subscription", exact: true }).click();
+  const section = page.getByRole("region", {
+    name: "Separate subscription port",
+  });
+  await expect(
+    section.getByText("https://panel.example:8444", { exact: true }),
+  ).toBeVisible();
+  await section.getByLabel("Subscription port", { exact: true }).fill("9444");
+  await section
+    .getByRole("button", { name: "Apply port", exact: true })
+    .click();
+  await expect(section.getByRole("status")).toHaveText("Applying");
+  expect(received).toEqual({ port: 9444, revision: "revision-one" });
+  await expect(
+    section.getByText("https://panel.example:8444", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    section.getByLabel("Subscription port", { exact: true }),
+  ).toBeDisabled();
+  complete = true;
+  await expect(
+    section.getByText("https://panel.example:9444", { exact: true }),
+  ).toBeVisible();
+  await expect(section.getByRole("status")).toHaveText("Active");
+  await expect(
+    section.getByRole("link", { name: "Check subscription service" }),
+  ).toHaveAttribute("href", "https://panel.example:9444/api/health");
+  await page.screenshot({
+    path: "test-results/settings-subscription-dark-desktop.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Theme: dark", exact: true }).click();
+  await page.screenshot({
+    path: "test-results/settings-subscription-light-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Change language" }).click();
+  await expect(
+    page.getByRole("heading", { name: "پورت جداگانهٔ اشتراک" }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/settings-subscription-fa-mobile.png",
+    fullPage: true,
+  });
+  expect(errors).toEqual([]);
+});
+
+test("subscription port failure retains the applied URL and allows retry", async ({
+  page,
+}) => {
+  await panel(page, "/settings", {
+    "subscription-endpoint": {
+      json: {
+        managed: true,
+        panel_origin: "https://panel.example:8443",
+        subscription_origin: "https://panel.example:8444",
+        port: 9444,
+        applied_port: 8444,
+        revision: "revision-failed",
+        status: "error",
+        error:
+          "The subscription listener could not be applied. The previous endpoint remains active. Check that the port is free and the subscription service is running.",
+      },
+    },
+  });
+  await page.getByRole("button", { name: "Subscription", exact: true }).click();
+  const section = page.getByRole("region", {
+    name: "Separate subscription port",
+  });
+  await expect(section.getByRole("alert")).toContainText(
+    "previous endpoint remains active",
+  );
+  await expect(
+    section.getByText("https://panel.example:8444", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    section.getByRole("button", { name: "Apply port", exact: true }),
+  ).toBeEnabled();
 });

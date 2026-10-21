@@ -93,6 +93,14 @@ for health and `docker compose ... restart agent panel subscriptions` for an
 explicit restart. The independent subscription process serves `/sub/*`; its
 administration API is unavailable. The panel/agent API remains authenticated.
 
+Compose starts subscription HTTPS on `8444`, separately from panel port `443`.
+For a different initial port, set `VELORAY_SUBSCRIPTION_PORT` in the generated
+Compose `.env` before first start. Afterwards, change it in **Settings →
+Subscription**; the proxy config volume preserves it across restarts. The panel
+can access only a constrained Unix control socket. The Caddy configuration
+socket remains private inside the proxy container. Open the chosen TCP port in
+the host and provider firewalls. Old `/sub/` links on `443` redirect to it.
+
 A recovery set must include the PostgreSQL dump, agent-data volume, generated
 secrets and Caddy data/config volumes. Stop proxy, panel, subscriptions and agent
 before taking a coordinated snapshot; keep the database running for `pg_dump`.

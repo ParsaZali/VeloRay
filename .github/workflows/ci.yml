@@ -46,10 +46,11 @@ jobs:
           npx playwright test --config playwright.pwa.config.ts
         working-directory: frontend
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: panel-test-results
           path: frontend/test-results
+          retention-days: 7
       - run: for script in install.sh scripts/*.sh scripts/velorayctl deploy/node/install.sh; do bash -n "$script"; done
       - run: bash scripts/test-auto-update.sh
       - run: python3 scripts/test-deployment.py

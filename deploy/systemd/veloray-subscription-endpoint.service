@@ -1,0 +1,16 @@
+[Unit]
+Description=Apply the VeloRay subscription HTTPS listener
+After=network-online.target nginx.service veloray-subscriptions.service
+Requires=nginx.service veloray-subscriptions.service
+ConditionPathExists=/etc/veloray/veloray.env
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/veloray/veloray.env
+ExecStart=/usr/local/bin/veloray sync-subscription-endpoint
+TimeoutStartSec=30
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/etc/nginx/sites-available /etc/nginx/sites-enabled /etc/veloray/tls /var/lib/veloray-acme /var/log/nginx

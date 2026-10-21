@@ -1,3 +1,4 @@
+import { SubscriptionEndpoint } from "@/components/subscription-endpoint";
 import { SMTPSettings } from "@/components/smtp-settings";
 import { DatePreferences } from "@/components/date-preferences";
 import { NotificationEndpoints } from "@/components/notification-endpoints";
@@ -369,7 +370,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
       : []),
   ];
   return (
-    <div className="space-y-6">
+    <div className="settings-page space-y-6">
       <PageHeader
         title={t("Settings")}
         description={t(
@@ -443,21 +444,25 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
           )}
         </div>
       )}
-      <div className="grid gap-4 xl:grid-cols-[220px_1fr]">
-        <Card>
-          <CardContent className="p-2">
+      <div className="settings-layout">
+        <nav
+          className="settings-nav"
+          aria-label={t("Settings sections", "بخش‌های تنظیمات")}
+        >
+          <div className="settings-nav-inner">
             {nav.map(([k, l, i]) => (
               <button
                 key={k}
                 onClick={() => setTab(k)}
+                aria-pressed={tab === k}
                 className={`flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-[11px] font-medium transition ${tab === k ? "bg-[var(--surface-2)] text-[var(--fg)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-2)]"}`}
               >
                 <FaIcon icon={i} />
                 {l}
               </button>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </nav>
         {tab === "imports" ? (
           <ImportsPage embedded />
         ) : (
@@ -573,6 +578,16 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                     </div>
                   </CardHeader>
                   <CardContent className="grid gap-4 sm:grid-cols-2">
+                    <SubscriptionEndpoint enabled={canEdit && !loading} />
+                    <div className="settings-section-title sm:col-span-2">
+                      <h3>{t("Subscription page", "صفحهٔ اشتراک")}</h3>
+                      <p>
+                        {t(
+                          "Choose the page customers see when they open their subscription link.",
+                          "صفحه‌ای را انتخاب کنید که مشتری با باز کردن لینک اشتراک می‌بیند.",
+                        )}
+                      </p>
+                    </div>
                     <Field label={t("Template")}>
                       <Select
                         className="input"
@@ -1414,7 +1429,10 @@ function Toggle({
   return (
     <label className="group flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3.5 transition hover:border-[var(--border-strong)]">
       <div>
-        <div className="text-[11px] font-semibold">{label}</div>
+        <div className="text-[13px] font-semibold">{label}</div>
+        <p className="mt-1 text-[12px] leading-relaxed text-[var(--muted)]">
+          {text}
+        </p>
       </div>
       <span
         className={`relative h-6 w-11 shrink-0 rounded-full border transition ${checked ? "border-[var(--brand)] bg-[var(--brand)]" : "border-[var(--border-strong)] bg-[var(--surface-3)]"}`}
@@ -1422,6 +1440,7 @@ function Toggle({
         <Input
           className="sr-only"
           type="checkbox"
+          aria-label={label}
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
         />
@@ -1444,9 +1463,15 @@ function Read({ label, value }: { label: string; value: string }) {
 function Actions({ busy }: { busy: boolean }) {
   useLocale();
   return (
-    <div className="sm:col-span-2 flex justify-end pt-2">
+    <div className="settings-save-bar sm:col-span-2">
+      <span>
+        {t(
+          "Changes apply after saving.",
+          "تغییرات فرم با ذخیره اعمال می‌شوند.",
+        )}
+      </span>
       <Button type="submit" disabled={busy}>
-        {busy ? "Saving…" : t("Save settings")}
+        {busy ? t("Saving…") : t("Save settings")}
       </Button>
     </div>
   );

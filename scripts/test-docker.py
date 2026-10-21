@@ -21,8 +21,8 @@ def command(*args, data=None):
     return subprocess.check_output(compose + list(args), input=data, stderr=subprocess.STDOUT).decode()
 
 
-def request(method, path, body=None, authenticated=True, status=200):
-    connection = http.client.HTTPSConnection("localhost", 443, timeout=10, context=ssl._create_unverified_context())
+def request(method, path, body=None, authenticated=True, status=200, port=443):
+    connection = http.client.HTTPSConnection("localhost", port, timeout=10, context=ssl._create_unverified_context())
     headers = {"Origin": "https://localhost", "Sec-Fetch-Site": "same-origin"}
     if authenticated:
         headers["Cookie"] = "; ".join(f"{key}={item.value}" for key, item in cookies.items())
@@ -58,10 +58,41 @@ request("GET", "/api/auth/csrf")
 password = (Path(os.environ["VELORAY_SECRET_DIRECTORY"]) / "admin_password").read_text().strip()
 request("POST", "/api/auth/login", {"username": "admin", "password": password})
 assert request("GET", "/api/auth/me")["is_superuser"]
+deadline = time.monotonic() + 90
+while True:
+    endpoint = request("GET", "/api/subscription-endpoint")
+    if endpoint["status"] == "ready":
+        assert endpoint["applied_port"] == 8444
+        break
+    assert time.monotonic() < deadline, endpoint
+    time.sleep(1)
 node = next(row for row in request("GET", "/api/nodes") if row["is_local"])
 inbound = request("POST", "/api/inbounds", {"name": "docker-test", "node": node["id"], "core": "xray", "protocol": "vless", "transport": "raw", "security": "none", "flow": "", "listen": "127.0.0.1", "port": 18443, "enabled": True}, status=201)
 client = request("POST", "/api/clients", {"name": "docker-test", "inbound": inbound["id"], "traffic_limit_bytes": 1048576, "enabled": True}, status=201)
-assert b"vless://" in request("GET", urlsplit(client["subscription_url"]).path + "?format=raw", authenticated=False)
+assert urlsplit(client["subscription_url"]).port == 8444
+path = urlsplit(client["subscription_url"]).path
+assert b"vless://" in request("GET", path + "?format=raw", authenticated=False, port=8444)
+connection = http.client.HTTPSConnection("localhost", 443, timeout=10, context=ssl._create_unverified_context())
+connection.request("GET", path + "?format=raw")
+redirect = connection.getresponse()
+assert redirect.status == 307 and redirect.getheader("Location") == client["subscription_url"] + "?format=raw"
+redirect.read()
+connection.close()
+request("GET", "/api/settings", authenticated=False, status=404, port=8444)
+request("PUT", "/api/subscription-endpoint", {"port": 8612, "revision": endpoint["revision"]}, status=400)
+request("PUT", "/api/subscription-endpoint", {"port": 18443, "revision": endpoint["revision"]}, status=400)
+request("PUT", "/api/subscription-endpoint", {"port": 19444, "revision": endpoint["revision"]}, status=202)
+deadline = time.monotonic() + 90
+while True:
+    endpoint = request("GET", "/api/subscription-endpoint")
+    if endpoint["status"] == "ready" and endpoint["applied_port"] == 19444:
+        break
+    assert time.monotonic() < deadline, endpoint
+    time.sleep(1)
+client = request("GET", f"/api/clients/{client['id']}")
+assert urlsplit(client["subscription_url"]).port == 19444
+assert b"vless://" in request("GET", path + "?format=raw", authenticated=False, port=19444)
+request("GET", "/api/settings", authenticated=False, status=404, port=19444)
 # The independent subscription process must not expose administration endpoints.
 connection = http.client.HTTPConnection("127.0.0.1", 8612, timeout=3)
 connection.request("GET", "/api/nodes")
@@ -107,7 +138,7 @@ while True:
     assert time.monotonic() < deadline, "native traffic was not accounted"
     time.sleep(1)
 ledger = command("exec", "-T", "agent", "jq", "-r", ".id", "/var/lib/veloray-agent/state.json").strip()
-command("restart", "agent", "panel", "subscriptions")
+command("restart", "agent", "panel", "subscriptions", "proxy")
 deadline = time.monotonic() + 60
 while True:
     try:
@@ -115,6 +146,9 @@ while True:
         assert after["used_traffic_bytes"] >= before["used_traffic_bytes"]
         assert after["traffic_limit_bytes"] == before["traffic_limit_bytes"]
         assert after["subscription_token"] == before["subscription_token"]
+        assert urlsplit(after["subscription_url"]).port == 19444
+        assert request("GET", "/api/subscription-endpoint")["applied_port"] == 19444
+        assert b"vless://" in request("GET", path + "?format=raw", authenticated=False, port=19444)
         assert request("GET", "/api/auth/me")["username"] == "admin"
         assert command("exec", "-T", "agent", "jq", "-r", ".id", "/var/lib/veloray-agent/state.json").strip() == ledger
         break

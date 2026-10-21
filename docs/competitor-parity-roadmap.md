@@ -115,7 +115,7 @@ See [fallbacks and balancing](fallbacks-and-balancing.md) for limits and verific
 - [x] Customer/service-assigned presentation rules with client-app hints (never authorization).
 - [x] Custom HTML subscription page templates and safe variables.
 - [x] External portable URI aggregation and connection links; raw/Base64 input.
-- [x] Optional independent subscription-only systemd service and manual domain setup.
+- [x] Independent subscription-only systemd/Docker service with managed HTTPS port, customer links and listener rollover.
 - [x] Subscription request history with bounded retention, no URL-token logging.
 - [x] HWID enrollment, device revocation and cap enforcement for supporting apps.
 - [x] Calendar-aware renewals: hourly, daily, weekly, monthly date and rolling.

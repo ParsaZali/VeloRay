@@ -440,8 +440,12 @@ done
 pass legacy-templates-installed-privately
 printf 'operator-owned template' >"$HOST_ROOT/etc/veloray/templates/legacy/modernX.html"
 test -f "$HOST_ROOT/etc/systemd/system/veloray-subscriptions.service"
-if grep -Eq '^(enable|restart) .*veloray-subscriptions.service' "$HOST_ROOT/service-calls";then echo 'Fresh install activated optional subscription service' >&2;exit 1;fi
-pass independent-subscriptions-installed-disabled
+test -f "$HOST_ROOT/etc/systemd/system/veloray-subscription-endpoint.service"
+test -f "$HOST_ROOT/etc/systemd/system/veloray-subscription-endpoint.timer"
+grep -Fxq 'enable veloray-subscriptions.service' "$HOST_ROOT/service-calls"
+grep -Fxq 'restart veloray-subscriptions.service' "$HOST_ROOT/service-calls"
+grep -Fxq 'enable --now veloray-subscription-endpoint.timer' "$HOST_ROOT/service-calls"
+pass independent-subscriptions-and-port-manager-enabled
 : >"$HOST_ROOT/app-calls"
 host_install
 [[ "$(sha256sum "$HOST_ROOT/etc/veloray/veloray.env")" == "$original_env" ]]
@@ -459,6 +463,8 @@ pass independent-subscriptions-preserved-on-update
 : >"$HOST_ROOT/service-calls"
 bash "$HOST_ROOT/usr/local/bin/velorayctl" restart >"$TEST_ROOT/host-result" 2>&1
 grep -Eq '^restart .*veloray-subscriptions.service' "$HOST_ROOT/service-calls"
+grep -Fxq 'stop veloray-subscription-endpoint.timer veloray-subscription-endpoint.service' "$HOST_ROOT/service-calls"
+grep -Fxq 'start veloray-subscription-endpoint.timer' "$HOST_ROOT/service-calls"
 bash "$HOST_ROOT/usr/local/bin/velorayctl" stop >"$TEST_ROOT/host-result" 2>&1
 grep -Eq '^stop .*veloray-subscriptions.service' "$HOST_ROOT/service-calls"
 unset TEST_SUBSCRIPTIONS_ACTIVE
@@ -468,6 +474,7 @@ export TEST_SUBSCRIPTIONS_ACTIVE=1
 printf 'RESTORE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" restore "$HOST_ROOT/recovery.tar.gz" >"$TEST_ROOT/host-result" 2>&1
 grep -Fxq 'stop veloray-subscriptions.service' "$HOST_ROOT/service-calls"
 grep -Fxq 'start veloray-subscriptions.service' "$HOST_ROOT/service-calls"
+grep -Fxq 'start veloray-subscription-endpoint.timer' "$HOST_ROOT/service-calls"
 unset TEST_SUBSCRIPTIONS_ACTIVE
 pass independent-subscriptions-paused-during-restore
 reset_host
@@ -487,6 +494,8 @@ test -d "$HOST_ROOT/opt/veloray";pass uninstall-cancel
 printf 'REMOVE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall >"$TEST_ROOT/host-result" 2>&1
 test ! -d "$HOST_ROOT/opt/veloray"
 test ! -f "$HOST_ROOT/etc/systemd/system/veloray-subscriptions.service"
+test ! -f "$HOST_ROOT/etc/systemd/system/veloray-subscription-endpoint.timer"
+grep -Eq '^disable --now .*veloray-subscription-endpoint.timer' "$HOST_ROOT/service-calls"
 grep -Eq '^disable --now .*veloray-auto-update.timer' "$HOST_ROOT/service-calls"
 grep -Eq '^disable --now .*veloray-subscriptions.service' "$HOST_ROOT/service-calls"
 pass uninstall-stops-subscriptions-and-updater
