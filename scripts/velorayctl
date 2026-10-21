@@ -33,6 +33,7 @@ vr_log_init
 WEB=veloray-web.service
 AGENT=veloray-agent.service
 SUBSCRIPTIONS=veloray-subscriptions.service
+ENDPOINT_TIMER=veloray-subscription-endpoint.timer
 subscription_wanted() {
  [[ -f /etc/systemd/system/veloray-subscriptions.service ]] && { systemctl is-enabled --quiet "$SUBSCRIPTIONS" 2>/dev/null || systemctl is-active --quiet "$SUBSCRIPTIONS" 2>/dev/null; }
 }
@@ -143,12 +144,14 @@ case "$command" in
  subscription_units=()
  if subscription_wanted;then subscription_units+=("$SUBSCRIPTIONS");fi
  vr_step "${command^} services" 'مدیریت سرویس‌های پنل و Xray'
+ if [[ -f /etc/systemd/system/$ENDPOINT_TIMER ]];then vr_run systemctl stop "$ENDPOINT_TIMER" veloray-subscription-endpoint.service;fi
  if [[ "$command" == stop ]];then vr_run systemctl stop "$WEB" "$AGENT" xray.service sing-box.service "${subscription_units[@]}";else
   vr_ports_check
   vr_run systemctl reset-failed xray.service
   vr_run systemctl "$command" xray.service sing-box.service "$AGENT" "$WEB" "${subscription_units[@]}"
   vr_wait http://127.0.0.1:8610/api/health
   vr_wait http://127.0.0.1:9191/health "$VELORAY_LOCAL_NODE_TOKEN"
+  if [[ -f /etc/systemd/system/$ENDPOINT_TIMER ]];then vr_run systemctl start "$ENDPOINT_TIMER";fi
   doctor
  fi
  summary;;
@@ -164,6 +167,7 @@ case "$command" in
  [[ "$confirmation" == RESTORE ]]||{ vr_say 'Cancelled.' 'لغو شد.';exit 0; }
  # Always create a recovery point before replacing data and secrets.
  "$0" backup
+ systemctl stop "$ENDPOINT_TIMER" veloray-subscription-endpoint.service 2>/dev/null||true
  subscriptions_active=false
  if systemctl is-active --quiet "$SUBSCRIPTIONS";then subscriptions_active=true;systemctl stop "$SUBSCRIPTIONS";fi
  systemctl stop "$WEB" "$AGENT" xray.service sing-box.service
@@ -182,10 +186,11 @@ case "$command" in
  if [[ -d /etc/letsencrypt/archive ]]; then
   for d in /etc/letsencrypt/archive/*;do [[ -d "$d" ]]||continue;live="/etc/letsencrypt/live/$(basename "$d")";mkdir -p "$live";for part in cert chain fullchain privkey;do last="$(find "$d" -maxdepth 1 -name "${part}[0-9]*.pem" | sort -V | tail -1)";[[ -n "$last" ]]&&ln -sfn "$last" "$live/$part.pem";done;done
  fi
- veloray render-nginx
  systemctl daemon-reload
- systemctl start xray.service sing-box.service "$AGENT" "$WEB"
  if $subscriptions_active;then systemctl start "$SUBSCRIPTIONS";fi
+ veloray render-nginx
+ systemctl start xray.service sing-box.service "$AGENT" "$WEB"
+ if [[ -f /etc/systemd/system/$ENDPOINT_TIMER ]];then systemctl start "$ENDPOINT_TIMER";fi
  "$0" doctor
  ;;
  reset|admin-reset)
@@ -206,6 +211,7 @@ case "$command" in
  set -a;source "$ENV_FILE";set +a;export VELORAY_LANGUAGE="${VELORAY_LANGUAGE:-en}"
  if ! veloray render-nginx;then veloray set-env VELORAY_PUBLIC_URL "$old_origin";veloray set-env VELORAY_PUBLIC_HOST "$old_host";veloray set-env VELORAY_PANEL_PORT "$old_port";echo 'Nginx rejected the change. Environment origin restored.' >&2;exit 1;fi
  systemctl restart "$WEB"
+ if subscription_wanted;then systemctl restart "$SUBSCRIPTIONS";vr_wait http://127.0.0.1:8611/api/health;fi
  ;;
  ssl) [[ $# -eq 1 && -n "${VELORAY_PUBLIC_HOST:-}" ]]||exit 2
  [[ "$VELORAY_PUBLIC_HOST" =~ ^[A-Za-z0-9.-]+$ && ! "$VELORAY_PUBLIC_HOST" =~ ^[0-9.]+$ && "$VELORAY_PANEL_PORT" != 80 ]]||{ vr_say 'Configure a public domain and use an HTTPS port other than 80 first.' 'ابتدا یک دامنهٔ عمومی و پورت HTTPS غیر از ۸۰ تنظیم کنید.' >&2;exit 2; }
@@ -260,9 +266,9 @@ TIMER
   vr_say 'Remove services and program files. Configuration, database and backups are preserved.' 'سرویس‌ها و فایل‌های برنامه حذف می‌شوند؛ تنظیمات، پایگاه داده و پشتیبان‌ها حفظ می‌شوند.'
   read -rp "$(vr_text 'Type REMOVE to continue: ' 'برای ادامه REMOVE را وارد کنید: ')" confirmation
   [[ "$confirmation" == REMOVE ]]||{ vr_say 'Cancelled.' 'لغو شد.';exit 0; }
-  systemctl disable --now veloray-web.service veloray-agent.service veloray-subscriptions.service veloray-reconcile.timer veloray-backup.timer veloray-auto-update.timer xray.service sing-box.service 2>/dev/null||true
+  systemctl disable --now veloray-subscription-endpoint.timer veloray-subscription-endpoint.service veloray-web.service veloray-agent.service veloray-subscriptions.service veloray-reconcile.timer veloray-backup.timer veloray-auto-update.timer xray.service sing-box.service 2>/dev/null||true
   systemctl stop veloray-reconcile.service 2>/dev/null||true
-  rm -f /etc/systemd/system/{veloray-web,veloray-agent,veloray-subscriptions,veloray-reconcile,xray,sing-box}.service /etc/systemd/system/veloray-reconcile.timer /etc/systemd/system/veloray-backup.{service,timer} /etc/systemd/system/veloray-auto-update.{service,timer}
+  rm -f /etc/systemd/system/veloray-subscription-endpoint.{service,timer} /etc/systemd/system/{veloray-web,veloray-agent,veloray-subscriptions,veloray-reconcile,xray,sing-box}.service /etc/systemd/system/veloray-reconcile.timer /etc/systemd/system/veloray-backup.{service,timer} /etc/systemd/system/veloray-auto-update.{service,timer}
   rm -f /etc/nginx/sites-enabled/veloray /etc/nginx/sites-available/veloray /etc/letsencrypt/renewal-hooks/deploy/veloray-nginx
   systemctl daemon-reload
   if vr_run nginx -t;then vr_run systemctl reload nginx||true;fi

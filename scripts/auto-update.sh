@@ -53,6 +53,8 @@ vr_auto_restore() {
   echo 'Unable to automatically restore: previous release binaries unavailable. Manual recovery required.' >&2
   return 1
  fi
+ systemctl disable --now veloray-subscription-endpoint.timer 2>/dev/null || true
+ systemctl stop veloray-subscription-endpoint.service 2>/dev/null || true
  ln -sfn "$previous" /opt/veloray/current
  install -m 0755 "$previous/bin/linux-$architecture/veloray" /usr/local/bin/veloray
  install -m 0755 "$previous/bin/linux-$architecture/veloray-agent" /usr/local/bin/veloray-agent
@@ -60,12 +62,20 @@ vr_auto_restore() {
  install -m 0644 "$original_env" /etc/veloray/veloray.env
  chown root:veloray /etc/veloray/veloray.env
  chmod 0640 /etc/veloray/veloray.env
- for unit in veloray-web veloray-agent veloray-subscriptions xray sing-box;do
+ for unit in veloray-web veloray-agent veloray-subscriptions veloray-subscription-endpoint xray sing-box;do
   [[ ! -f "$previous/deploy/systemd/$unit.service" ]] || install -m 0644 "$previous/deploy/systemd/$unit.service" "/etc/systemd/system/$unit.service"
  done
+ if [[ -f "$previous/deploy/systemd/veloray-subscription-endpoint.timer" ]];then
+  install -m 0644 "$previous/deploy/systemd/veloray-subscription-endpoint.timer" /etc/systemd/system/
+ else
+  rm -f /etc/systemd/system/veloray-subscription-endpoint.{service,timer}
+ fi
  systemctl daemon-reload
  systemctl restart veloray-agent.service veloray-web.service xray.service sing-box.service
- if [[ "$subscriptions_active" == true ]];then systemctl restart veloray-subscriptions.service;fi
+ if [[ "$subscriptions_active" == true ]];then systemctl restart veloray-subscriptions.service;else systemctl disable --now veloray-subscriptions.service;fi
+ # Restore the previous proxy layout as well as the binaries.
+ /usr/local/bin/veloray render-nginx
+ if [[ -f "$previous/deploy/systemd/veloray-subscription-endpoint.timer" ]];then systemctl enable --now veloray-subscription-endpoint.timer;fi
  /usr/local/bin/velorayctl doctor
 }
 

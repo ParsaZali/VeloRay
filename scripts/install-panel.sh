@@ -80,6 +80,7 @@ if [[ -f /etc/veloray/veloray.env ]];then
   PGHOST="${POSTGRES_HOST:-127.0.0.1}" PGPORT="${POSTGRES_PORT:-5432}" PGUSER="${POSTGRES_USER:-veloray}" PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -Fc --no-owner --no-acl "${POSTGRES_DB:-veloray}" >"$backup/database.dump"
   cp -a /etc/veloray "$backup/";[[ ! -d /etc/veloray-node ]]||cp -a /etc/veloray-node "$backup/";cp -a /usr/local/etc/xray "$backup/";chmod -R go-rwx "$backup"
  fi
+ systemctl stop veloray-subscription-endpoint.timer veloray-subscription-endpoint.service 2>/dev/null||true
  if $subscriptions_active;then vr_run systemctl stop veloray-subscriptions.service;fi
  systemctl stop veloray-web.service veloray-reconcile.timer veloray-reconcile.service 2>/dev/null||true
 else
@@ -136,6 +137,7 @@ veloray set-env VELORAY_FRONTEND_DIR /opt/veloray/current/frontend/dist
 veloray set-env VELORAY_LOCAL_NODE_TOKEN "$VELORAY_LOCAL_NODE_TOKEN"
 veloray set-env VELORAY_LISTEN 127.0.0.1:8610
 veloray set-env VELORAY_COOKIE_SECURE true
+veloray set-env VELORAY_SUBSCRIPTION_DRIVER native
 veloray set-env POSTGRES_HOST "${POSTGRES_HOST:-127.0.0.1}"
 vr_run veloray migrate
 if $existing;then
@@ -174,7 +176,8 @@ VELORAY_XRAY_SERVICE=xray.service
 VELORAY_AGENT_STATE=/var/lib/veloray-agent/state.json
 ENV
 chmod 0600 /etc/veloray-node/agent.env
-install -m 0644 deploy/systemd/{veloray-web,veloray-agent,veloray-subscriptions,xray}.service /etc/systemd/system/
+install -m 0644 deploy/systemd/{veloray-web,veloray-agent,veloray-subscriptions,veloray-subscription-endpoint,xray}.service /etc/systemd/system/
+install -m 0644 deploy/systemd/veloray-subscription-endpoint.timer /etc/systemd/system/
 ln -sfn "$release" /opt/veloray/current
 systemctl disable --now veloray-reconcile.timer 2>/dev/null||true
 vr_step 'Start HTTPS and panel services' 'راه‌اندازی HTTPS و سرویس‌های پنل'
@@ -183,13 +186,13 @@ vr_run systemctl enable sing-box.service
 vr_run systemctl restart sing-box.service
 vr_run systemctl enable xray.service veloray-agent.service veloray-web.service
 vr_run systemctl restart veloray-agent.service
+vr_run systemctl enable veloray-subscriptions.service
+vr_run systemctl restart veloray-subscriptions.service
+vr_wait http://127.0.0.1:8611/api/health
 vr_run veloray render-nginx
 vr_run systemctl restart veloray-web.service
 vr_wait http://127.0.0.1:8610/api/health
-if $subscriptions_active;then
- vr_run systemctl restart veloray-subscriptions.service
- vr_wait http://127.0.0.1:8611/api/health
-fi
+vr_run systemctl enable --now veloray-subscription-endpoint.timer
 vr_step 'Check VPN ports and resolve conflicts' 'بررسی پورت‌های VPN و رفع تداخل'
 if ! vr_resolve_ports;then
  # Stop an already failing Xray loop; never stop the process occupying its port.

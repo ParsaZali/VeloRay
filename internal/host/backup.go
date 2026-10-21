@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-var Roots = []string{"etc/veloray", "etc/veloray-node", "usr/local/etc/xray", "usr/local/etc/sing-box", "var/lib/veloray-agent", "etc/nginx/sites-available/veloray", "etc/systemd/system/veloray-web.service", "etc/systemd/system/veloray-agent.service", "etc/systemd/system/xray.service", "etc/systemd/system/sing-box.service", "etc/letsencrypt"}
+var Roots = []string{"etc/veloray", "etc/veloray-node", "usr/local/etc/xray", "usr/local/etc/sing-box", "var/lib/veloray-agent", "etc/nginx/sites-available/veloray", "etc/systemd/system/veloray-subscriptions.service", "etc/systemd/system/veloray-subscription-endpoint.service", "etc/systemd/system/veloray-subscription-endpoint.timer", "etc/systemd/system/veloray-web.service", "etc/systemd/system/veloray-agent.service", "etc/systemd/system/xray.service", "etc/systemd/system/sing-box.service", "etc/letsencrypt"}
 
 type Entry struct {
 	SHA256 string `json:"sha256"`

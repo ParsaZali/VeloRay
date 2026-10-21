@@ -1,20 +1,5 @@
-{
-	admin off
-	log default {
-		output discard
-	}
-}
-{$VELORAY_DOMAIN} {
-	encode zstd gzip
-	header {
-		X-Content-Type-Options nosniff
-		Referrer-Policy no-referrer
-	}
-	# No access log: subscription URLs contain private bearer tokens.
-	handle /sub/* {
-		reverse_proxy 127.0.0.1:8612
-	}
-	handle {
-		reverse_proxy 127.0.0.1:8610
-	}
-}
+# Reference only: the proxy-serve supervisor generates its fixed Caddyfile.
+# See internal/subproxy/proxy.go for the private Unix admin socket, panel HTTPS
+# listener, /sub/* redirect and independent subscription HTTPS listener.
+# Compose persists the applied subscription port under /config; this file is
+# not mounted into the production proxy container.

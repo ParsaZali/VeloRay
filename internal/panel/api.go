@@ -105,7 +105,10 @@ func (s *Server) view(ctx context.Context, q Query, kind string, d Data) (Data, 
 		out["effective_traffic_multiplier"] = rate
 		out["share_link"] = shareLink(d, i, n)
 		out["profile_text"] = profile(d, i, n)
-		out["subscription_url"] = strings.TrimRight(s.Config.PublicURL, "/") + "/sub/" + str(out, "subscription_token")
+		out["subscription_url"], e = s.subscriptionURL(ctx, q, str(out, "subscription_token"))
+		if e != nil {
+			return nil, e
+		}
 		out["subscription_portal_url"] = out["subscription_url"]
 	}
 	return out, nil
@@ -154,6 +157,9 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 	}
 	if path == "clients/bulk" {
 		return s.bulkClients(w, r, a)
+	}
+	if path == "subscription-endpoint" {
+		return s.subscriptionEndpointAPI(w, r, a)
 	}
 	if path == "settings" {
 		return s.settingsAPI(w, r, a)

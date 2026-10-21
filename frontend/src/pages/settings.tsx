@@ -1,3 +1,4 @@
+import { SubscriptionEndpoint } from "@/components/subscription-endpoint";
 import { SMTPSettings } from "@/components/smtp-settings";
 import { DatePreferences } from "@/components/date-preferences";
 import { NotificationEndpoints } from "@/components/notification-endpoints";
@@ -369,7 +370,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
       : []),
   ];
   return (
-    <div className="space-y-6">
+    <div className="settings-page space-y-6">
       <PageHeader
         title={t("Settings")}
         description={t(
@@ -443,914 +444,951 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
           )}
         </div>
       )}
-      <div className="grid gap-4 xl:grid-cols-[220px_1fr]">
-        <Card>
-          <CardContent className="p-2">
+      <div className="settings-layout">
+        <nav
+          className="settings-nav"
+          aria-label={t("Settings sections", "بخش‌های تنظیمات")}
+        >
+          <div className="settings-nav-inner">
             {nav.map(([k, l, i]) => (
               <button
                 key={k}
                 onClick={() => setTab(k)}
+                aria-pressed={tab === k}
                 className={`flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-[11px] font-medium transition ${tab === k ? "bg-[var(--surface-2)] text-[var(--fg)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-2)]"}`}
               >
                 <FaIcon icon={i} />
                 {l}
               </button>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </nav>
         {tab === "imports" ? (
           <ImportsPage embedded />
         ) : (
-          <form onSubmit={save}>
-            <fieldset disabled={!canEdit} className="contents">
-              {tab === "general" && (
-                <Card>
-                  <CardHeader>
-                    <div>
-                      <CardTitle>{t("General")}</CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="grid gap-4 sm:grid-cols-2">
-                    <Field label={t("Panel name")}>
-                      <Input
-                        className="input"
-                        value={cfg.site_name}
-                        onChange={(e) => set("site_name", e.target.value)}
-                      />
-                    </Field>
-                    <Field label={t("Default locale")}>
-                      <Select
-                        className="input"
-                        value={cfg.default_locale}
-                        onChange={(e) => set("default_locale", e.target.value)}
-                      >
-                        <option value="en">{t("English")}</option>
-                        <option value="fa">{t("Persian")}</option>
-                      </Select>
-                    </Field>
-                    <Field label={t("Support URL")} className="sm:col-span-2">
-                      <Input
-                        className="input"
-                        value={cfg.support_url}
-                        onChange={(e) => set("support_url", e.target.value)}
-                        placeholder={t("https://...")}
-                      />
-                    </Field>
-                    <Field label={t("Announcement")} className="sm:col-span-2">
-                      <Textarea
-                        className="input min-h-24"
-                        value={cfg.announcement}
-                        onChange={(e) => set("announcement", e.target.value)}
-                        placeholder={t(
-                          "Message sent to compatible subscription clients",
-                        )}
-                      />
-                    </Field>
-                    <Field
-                      label={t("Announcement URL")}
-                      className="sm:col-span-2"
-                    >
-                      <Input
-                        className="input"
-                        value={cfg.announcement_url}
-                        onChange={(e) =>
-                          set("announcement_url", e.target.value)
-                        }
-                        placeholder={t("https://...")}
-                      />
-                    </Field>
-                    <Field label={t("Accent")}>
-                      <Select
-                        className="input"
-                        value={cfg.accent}
-                        onChange={(e) => set("accent", e.target.value)}
-                      >
-                        {["emerald", "blue", "violet", "rose", "amber"].map(
-                          (x) => (
-                            <option key={x} value={x}>
-                              {x}
-                            </option>
-                          ),
-                        )}
-                      </Select>
-                    </Field>
-                    <Field label={t("Dashboard refresh")}>
-                      <Select
-                        className="input"
-                        value={cfg.dashboard_refresh_seconds}
-                        onChange={(e) =>
-                          set(
-                            "dashboard_refresh_seconds",
-                            Number(e.target.value),
-                          )
-                        }
-                      >
-                        {[10, 15, 30, 60, 120, 300].map((x) => (
-                          <option key={x} value={x}>
-                            {x}
-                            {t("s")}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-                    <Toggle
-                      label={t("Maintenance mode")}
-                      text={t(
-                        "Pause public subscriptions while administrator access remains online.",
-                      )}
-                      checked={cfg.maintenance_mode}
-                      onChange={(v) => set("maintenance_mode", v)}
-                    />
-                    <Actions busy={busy} />
-                  </CardContent>
-                </Card>
-              )}
-              {tab === "subscription" && (
-                <Card>
-                  <CardHeader>
-                    <div>
-                      <CardTitle>{t("Subscription portal")}</CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="grid gap-4 sm:grid-cols-2">
-                    <Field label={t("Template")}>
-                      <Select
-                        className="input"
-                        value={cfg.subscription_template}
-                        onChange={(e) =>
-                          set("subscription_template", e.target.value)
-                        }
-                      >
-                        <option value="default">
-                          {t("Simple subscription page")}
-                        </option>
-                        <option value="dashboard">
-                          {t("Modern dashboard")}
-                        </option>
-                        <option value="custom">{t("Custom HTML file")}</option>
-                        <option value="compact">
-                          {t("Classic compact portal")}
-                        </option>
-                      </Select>
-                    </Field>
-                    <SubscriptionOptions
-                      cfg={cfg}
-                      set={(key, value) =>
-                        setCfg((previous) => ({ ...previous, [key]: value }))
-                      }
-                      disabled={!canEdit || busy}
-                    />
-                    <Field label={t("Portal footer")}>
-                      <Input
-                        className="input"
-                        maxLength={180}
-                        value={cfg.subscription_footer}
-                        onChange={(e) =>
-                          set("subscription_footer", e.target.value)
-                        }
-                        placeholder={t("Optional footer")}
-                      />
-                    </Field>
-                    <Field label={t("Subscription update interval (hours)")}>
-                      <Input
-                        className="input"
-                        type="number"
-                        min={1}
-                        max={168}
-                        value={cfg.subscription_update_interval_hours}
-                        onChange={(e) =>
-                          set(
-                            "subscription_update_interval_hours",
-                            Number(e.target.value),
-                          )
-                        }
-                      />
-                    </Field>
-                    <Field label={t("Default subscription format")}>
-                      <Select
-                        className="input"
-                        value={cfg.subscription_default_format}
-                        onChange={(e) =>
-                          set("subscription_default_format", e.target.value)
-                        }
-                      >
-                        <option value="auto">{t("Auto detect")}</option>
-                        <option value="base64">Base64</option>
-                        <option value="raw">RAW</option>
-                        <option value="clash">Clash</option>
-                        <option value="singbox">sing-box</option>
-                        <option value="xray">Xray JSON</option>
-                      </Select>
-                    </Field>
-                    <Field label={t("Subscription portal theme")}>
-                      <Select
-                        className="input"
-                        value={cfg.subscription_theme}
-                        onChange={(e) =>
-                          set("subscription_theme", e.target.value)
-                        }
-                      >
-                        <option value="system">{t("Follow device")}</option>
-                        <option value="light">{t("Light")}</option>
-                        <option value="dark">{t("Dark")}</option>
-                      </Select>
-                    </Field>
-                    <Toggle
-                      label={t("Traffic chart")}
-                      text={t(
-                        "Display actual historical traffic in the subscription portal.",
-                      )}
-                      checked={cfg.subscription_show_analytics}
-                      onChange={(v) => set("subscription_show_analytics", v)}
-                    />
-                    <Toggle
-                      label={t("Subscription downloads")}
-                      text={t(
-                        "Show export buttons for supported client configuration formats.",
-                      )}
-                      checked={cfg.subscription_show_downloads}
-                      onChange={(v) => set("subscription_show_downloads", v)}
-                    />
-                    <Toggle
-                      label={t("Subscriptions enabled")}
-                      text={t("Turn public subscription endpoints on or off.")}
-                      checked={cfg.subscription_enabled}
-                      onChange={(v) => set("subscription_enabled", v)}
-                    />
-                    <Toggle
-                      label={t("Recommended apps")}
-                      text={t("Display compatible client suggestions.")}
-                      checked={cfg.subscription_show_apps}
-                      onChange={(v) => set("subscription_show_apps", v)}
-                    />
-                    <Toggle
-                      label={t("QR code")}
-                      text={t("Allow subscription URL QR display.")}
-                      checked={cfg.subscription_show_qr}
-                      onChange={(v) => set("subscription_show_qr", v)}
-                    />
-                    <Toggle
-                      label={t("Connection URI")}
-                      text={t("Expose the raw protocol URI when supported.")}
-                      checked={cfg.subscription_show_connection_uri}
-                      onChange={(v) =>
-                        set("subscription_show_connection_uri", v)
-                      }
-                    />
-                    <Actions busy={busy} />
-                  </CardContent>
-                </Card>
-              )}
-              {tab === "defaults" && (
-                <Card>
-                  <CardHeader>
-                    <div>
-                      <CardTitle>{t("Client defaults")}</CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="grid gap-4 sm:grid-cols-2">
-                    <Field label={t("Default expiry (days)")}>
-                      <Input
-                        className="input"
-                        type="number"
-                        min="0"
-                        value={cfg.default_client_days}
-                        onChange={(e) =>
-                          set("default_client_days", Number(e.target.value))
-                        }
-                      />
-                    </Field>
-                    <Field label={t("Default traffic (GB)")}>
-                      <Input
-                        className="input"
-                        type="number"
-                        min="0"
-                        value={cfg.default_traffic_gb}
-                        onChange={(e) =>
-                          set("default_traffic_gb", Number(e.target.value))
-                        }
-                      />
-                    </Field>
-                    <Field label={t("Default renewal (days)")}>
-                      <Input
-                        className="input"
-                        type="number"
-                        min="0"
-                        value={cfg.default_renewal_days}
-                        onChange={(e) =>
-                          set("default_renewal_days", Number(e.target.value))
-                        }
-                      />
-                    </Field>
-                    <Field label={t("Traffic history retention")}>
-                      <Select
-                        className="input"
-                        value={cfg.traffic_history_days}
-                        onChange={(e) =>
-                          set("traffic_history_days", Number(e.target.value))
-                        }
-                      >
-                        {[7, 14, 30, 60, 90, 180, 365].map((x) => (
-                          <option key={x} value={x}>
-                            {x} {t("days")}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-                    <Actions busy={busy} />
-                  </CardContent>
-                </Card>
-              )}
-              {tab === "security" && (
-                <Card>
-                  <CardHeader>
-                    <div>
-                      <CardTitle>{t("Security & API")}</CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="grid gap-4 sm:grid-cols-2">
-                    <Toggle
-                      label={t("Require administrator 2FA")}
-                      text={t(
-                        "Staff must enroll TOTP before protected API use.",
-                      )}
-                      checked={cfg.require_2fa_for_admins}
-                      onChange={(v) => set("require_2fa_for_admins", v)}
-                    />
-                    <Toggle
-                      label={t("Enable API keys")}
-                      text={t("Allow scoped Bearer tokens from Accounts.")}
-                      checked={cfg.api_keys_enabled}
-                      onChange={(v) => set("api_keys_enabled", v)}
-                    />
-                    <Field label={t("Default API key lifetime")}>
-                      <Input
-                        className="input"
-                        type="number"
-                        min="1"
-                        max="3650"
-                        value={cfg.api_key_default_days}
-                        onChange={(e) =>
-                          set("api_key_default_days", Number(e.target.value))
-                        }
-                      />
-                    </Field>
-                    <Field label={t("Audit retention")}>
-                      <Input
-                        className="input"
-                        type="number"
-                        min="1"
-                        max="3650"
-                        value={cfg.audit_retention_days}
-                        onChange={(e) =>
-                          set("audit_retention_days", Number(e.target.value))
-                        }
-                      />
-                    </Field>
-                    <Actions busy={busy} />
-                  </CardContent>
-                </Card>
-              )}
-              {tab === "telegram" && (
-                <Card>
-                  <CardHeader>
-                    <div>
-                      <CardTitle>{t("Telegram automation")}</CardTitle>
-                    </div>
-                    <span
-                      className={`rounded-full px-2 py-1 text-[9px] ${cfg.telegram_configured ? "bg-emerald-500/10 text-emerald-500" : "bg-[var(--surface-2)] text-[var(--muted)]"}`}
-                    >
-                      {cfg.telegram_configured
-                        ? t("Token configured")
-                        : t("No token")}
-                    </span>
-                  </CardHeader>
-                  <CardContent className="grid gap-4 sm:grid-cols-2">
-                    <Toggle
-                      label={t("Telegram enabled")}
-                      text={t(
-                        "Send alerts and accept commands from configured owner IDs.",
-                      )}
-                      checked={cfg.telegram_enabled}
-                      onChange={(v) => set("telegram_enabled", v)}
-                    />
-                    <Toggle
-                      label={t("Allow bot management")}
-                      text={t(
-                        "Enable confirmed client and node changes. Required panel 2FA keeps bot management read-only.",
-                      )}
-                      checked={cfg.telegram_allow_changes}
-                      onChange={(v) => set("telegram_allow_changes", v)}
-                    />
-                    <Toggle
-                      label={t("Quota and expiry alerts")}
-                      text={t(
-                        "Notify owners before quota exhaustion or account expiry.",
-                      )}
-                      checked={cfg.telegram_client_alerts}
-                      onChange={(v) => set("telegram_client_alerts", v)}
-                    />
-                    <Field label={t("Bot language")}>
-                      <Select
-                        className="input"
-                        value={cfg.telegram_locale}
-                        onChange={(e) => set("telegram_locale", e.target.value)}
-                      >
-                        <option value="en">{t("English")}</option>
-                        <option value="fa">{t("Persian")}</option>
-                      </Select>
-                    </Field>
-                    <Field label={t("Quota warning %")}>
-                      <Input
-                        className="input"
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={cfg.telegram_quota_warning_percent}
-                        onChange={(e) =>
-                          set(
-                            "telegram_quota_warning_percent",
-                            Number(e.target.value),
-                          )
-                        }
-                      />
-                    </Field>
-                    <Field label={t("Expiry warning (days)")}>
-                      <Input
-                        className="input"
-                        type="number"
-                        min="1"
-                        max="30"
-                        value={cfg.telegram_expiry_warning_days}
-                        onChange={(e) =>
-                          set(
-                            "telegram_expiry_warning_days",
-                            Number(e.target.value),
-                          )
-                        }
-                      />
-                    </Field>
-                    <Field label={t("Bot token")}>
-                      <Input
-                        className="input"
-                        type="password"
-                        autoComplete="off"
-                        value={telegramToken}
-                        onChange={(e) => setTelegramToken(e.target.value)}
-                        placeholder={
-                          cfg.telegram_configured
-                            ? t("Leave blank to keep current token")
-                            : "123456:ABC..."
-                        }
-                      />
-                    </Field>
-                    <Field label={t("Owner IDs")} className="sm:col-span-2">
-                      <Input
-                        className="input"
-                        value={cfg.telegram_owner_ids.join(", ")}
-                        onChange={(e) =>
-                          set(
-                            "telegram_owner_ids",
-                            e.target.value
-                              .split(",")
-                              .map((x) => x.trim())
-                              .filter(Boolean),
-                          )
-                        }
-                        placeholder="123456789, 987654321"
-                      />
-                    </Field>
-                    <Field label={t("CPU alert %")}>
-                      <Input
-                        className="input"
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={cfg.telegram_alert_cpu_percent}
-                        onChange={(e) =>
-                          set(
-                            "telegram_alert_cpu_percent",
-                            Number(e.target.value),
-                          )
-                        }
-                      />
-                    </Field>
-                    <Field label={t("Memory alert %")}>
-                      <Input
-                        className="input"
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={cfg.telegram_alert_memory_percent}
-                        onChange={(e) =>
-                          set(
-                            "telegram_alert_memory_percent",
-                            Number(e.target.value),
-                          )
-                        }
-                      />
-                    </Field>
-                    <Field label={t("Disk alert %")}>
-                      <Input
-                        className="input"
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={cfg.telegram_alert_disk_percent}
-                        onChange={(e) =>
-                          set(
-                            "telegram_alert_disk_percent",
-                            Number(e.target.value),
-                          )
-                        }
-                      />
-                    </Field>
-                    <Field label={t("Alert cooldown (minutes)")}>
-                      <Input
-                        className="input"
-                        type="number"
-                        min="1"
-                        max="1440"
-                        value={cfg.telegram_alert_cooldown_minutes}
-                        onChange={(e) =>
-                          set(
-                            "telegram_alert_cooldown_minutes",
-                            Number(e.target.value),
-                          )
-                        }
-                      />
-                    </Field>
-                    {cfg.telegram_configured && (
-                      <Toggle
-                        label={t("Remove stored bot token")}
-                        text={t(
-                          "Clear the encrypted Telegram credential on save.",
-                        )}
-                        checked={clearTelegram}
-                        onChange={setClearTelegram}
-                      />
-                    )}
-                    <div className="sm:col-span-2 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-[10px] leading-5 text-[var(--muted)]">
-                      {t("Commands:")} <code>{t("/status")}</code>,{" "}
-                      <code>{t("/nodes")}</code>,{" "}
-                      <code>{t("/clients [page]")}</code>,{" "}
-                      <code>{t("/search name")}</code>,{" "}
-                      <code>{t("/client ID")}</code>,{" "}
-                      <code>{t("/link ID")}</code>
-                      {t(
-                        ". Management actions require a confirmation button that expires after five minutes. Every owner must start the bot before testing. Save changed settings before checking the connection.",
-                      )}
-                    </div>
-                    <div className="sm:col-span-2 flex flex-wrap gap-2">
-                      <Button
-                        variant="outline"
-                        disabled={busy || !cfg.telegram_configured || !canEdit}
-                        onClick={() => checkBot("status")}
-                      >
-                        {t("Check bot connection")}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        disabled={busy || !cfg.telegram_configured || !canEdit}
-                        onClick={() => checkBot("test")}
-                      >
-                        {t("Send test to owners")}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        disabled={busy || !cfg.telegram_configured || !canEdit}
-                        onClick={() => checkBot("setup")}
-                      >
-                        {t("Register owner commands")}
-                      </Button>
-                    </div>
-                    {botStatus && (
-                      <div className="sm:col-span-2 rounded-md border border-[var(--border)] p-3 text-[12px] leading-6">
-                        @{botStatus.username} · {botStatus.owner_count}{" "}
-                        {t("owners ·")}{" "}
-                        {botStatus.webhook_configured
-                          ? t("Existing webhook blocks polling")
-                          : t("Polling available")}
-                        <br />
-                        {t("Last successful poll:")}{" "}
-                        {botStatus.last_success || t("Not yet")}
-                        {botStatus.last_error && (
-                          <p className="text-amber-500">
-                            {botStatus.last_error}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    <Actions busy={busy} />
-                  </CardContent>
-                </Card>
-              )}
-              {tab === "webhooks" && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>{t("Signed event webhooks")}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid gap-4 sm:grid-cols-2">
-                    <Toggle
-                      label={t("Enable webhooks")}
-                      text={t(
-                        "Deliver signed administrative audit events to your HTTPS endpoint. Save settings before sending a test.",
-                      )}
-                      checked={cfg.webhook_enabled}
-                      onChange={(value) => set("webhook_enabled", value)}
-                    />
-                    <Field
-                      label={t("HTTPS destination URL")}
-                      className="sm:col-span-2"
-                    >
-                      <Input
-                        className="input"
-                        type="url"
-                        placeholder="https://example.com/hooks/veloray"
-                        value={cfg.webhook_url}
-                        onChange={(e) => set("webhook_url", e.target.value)}
-                      />
-                    </Field>
-                    <Field
-                      label={t("HMAC signing secret")}
-                      className="sm:col-span-2"
-                    >
-                      <Input
-                        className="input"
-                        type="password"
-                        autoComplete="new-password"
-                        value={webhookSecret}
-                        onChange={(e) => setWebhookSecret(e.target.value)}
-                        placeholder={
-                          cfg.webhook_configured
-                            ? t("Leave blank to keep the stored secret")
-                            : t("At least 32 random characters")
-                        }
-                      />
-                    </Field>
-                    {cfg.webhook_configured && (
-                      <Toggle
-                        label={t("Remove stored signing secret")}
-                        text={t("Disable webhooks before removing the secret.")}
-                        checked={clearWebhook}
-                        onChange={setClearWebhook}
-                      />
-                    )}
-                    <div className="sm:col-span-2 rounded-lg border border-[var(--border)] p-3 text-[11px] leading-5 text-[var(--muted)]">
-                      {t(
-                        "Requests are signed using HMAC-SHA256 over timestamp + '.' + raw JSON body. Verify X-VeloRay-Timestamp and X-VeloRay-Signature. Event bodies exclude credentials, tokens, configuration and audit details. Failed deliveries are retried up to eight times.",
-                      )}
-                    </div>
-                    {webhookStats && (
-                      <div className="sm:col-span-2 rounded-lg border border-[var(--border)] p-3 text-[12px]">
-                        {t("Queued")}: {webhookStats.pending} · {t("Failed")}:{" "}
-                        {webhookStats.failed} · {t("Delivered (7 days)")}:{" "}
-                        {webhookStats.delivered}
-                      </div>
-                    )}
-                    <div className="sm:col-span-2 flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={busy || !canEdit}
-                        onClick={() => void webhookAction("status")}
-                      >
-                        {t("Queue status")}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={
-                          busy ||
-                          !canEdit ||
-                          !cfg.webhook_configured ||
-                          !cfg.webhook_enabled
-                        }
-                        onClick={() => void webhookAction("test")}
-                      >
-                        {t("Queue test event")}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={busy || !canEdit || !cfg.webhook_configured}
-                        onClick={() => void webhookAction("retry")}
-                      >
-                        {t("Retry failed")}
-                      </Button>
-                    </div>
-                    {session?.is_superuser && (
-                      <>
-                        <SMTPSettings
-                          value={cfg}
-                          onChange={set}
-                          password={smtpPassword}
-                          onPassword={setSmtpPassword}
-                          clear={clearSMTP}
-                          onClear={setClearSMTP}
-                        />
-                        <NotificationEndpoints />
-                      </>
-                    )}
-                    <Actions busy={busy} />
-                  </CardContent>
-                </Card>
-              )}
-              {tab === "system" && (
-                <div className="space-y-4">
-                  <DatePreferences />
-                  {session?.is_superuser && (
-                    <Card>
-                      <CardHeader>
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <CardTitle>
-                              {t("Verified GitHub auto-update")}
-                            </CardTitle>
-                            <p className="mt-1 text-[12px] text-[var(--muted)]">
-                              {t(
-                                "Daily commit checks, CI verification, restricted pre-update backup and application rollback.",
-                              )}
-                            </p>
-                          </div>
-                          <span
-                            className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${updateInfo?.auto_update_enabled ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300" : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--muted-strong)]"}`}
-                          >
-                            {updateInfo?.auto_update_enabled
-                              ? t("Automatic updates enabled")
-                              : t("Automatic updates disabled")}
-                          </span>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="grid gap-3 md:grid-cols-3">
-                          <Read
-                            label={t("Tracked repository")}
-                            value={
-                              updateInfo?.repository || "ParsaZali/VeloRay"
-                            }
-                          />
-                          <Read
-                            label={t("Tracked branch")}
-                            value={updateInfo?.tracking_branch || "main"}
-                          />
-                          <Read
-                            label={t("Installed GitHub commit")}
-                            value={
-                              updateInfo?.installed_commit
-                                ? updateInfo.installed_commit.slice(0, 12)
-                                : t("Not recorded yet")
-                            }
-                          />
-                        </div>
-                        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                          <p className="mb-3 text-[12px] font-semibold">
-                            {t(
-                              "Run once on the server to activate automatic updates:",
-                            )}
-                          </p>
-                          <code
-                            className="block select-all overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-[12px] text-[var(--fg)]"
-                            dir="ltr"
-                          >
-                            sudo veloray auto-update enable
-                          </code>
-                          <p className="mt-3 text-[12px] text-[var(--muted)]">
-                            {t(
-                              "The panel does not execute root commands from the browser. Once enabled, the Linux systemd timer checks GitHub every day. Updates are installed only after that exact commit passes CI.",
-                            )}
-                          </p>
-                        </div>
-                        <div className="grid gap-2 sm:grid-cols-3">
-                          {[
-                            "sudo veloray auto-update status",
-                            "sudo veloray auto-update check",
-                            "sudo veloray auto-update disable",
-                          ].map((cmd) => (
-                            <code
-                              key={cmd}
-                              dir="ltr"
-                              className="overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-[11px] text-[var(--muted-strong)]"
-                            >
-                              {cmd}
-                            </code>
-                          ))}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => void load()}
-                            disabled={loading}
-                          >
-                            {t("Refresh update status")}
-                          </Button>
-                          <a
-                            className="text-[12px] font-medium text-[var(--brand)] underline underline-offset-4"
-                            href="https://github.com/ParsaZali/VeloRay"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {t("View source on GitHub")}
-                          </a>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
+          <div className="settings-content min-w-0 space-y-4">
+            <SubscriptionEndpoint
+              enabled={tab === "subscription" && canEdit && !loading}
+            />
+            <form onSubmit={save}>
+              <fieldset disabled={!canEdit} className="contents">
+                {tab === "general" && (
                   <Card>
                     <CardHeader>
                       <div>
-                        <CardTitle>{t("Host health")}</CardTitle>
+                        <CardTitle>{t("General")}</CardTitle>
                       </div>
                     </CardHeader>
-                    <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                      <Read
-                        label={t("CPU")}
-                        value={
-                          sys
-                            ? tx(
-                                "{0}% · {1} cores",
-                                sys.cpu_percent.toFixed(1),
-                                sys.cpu_count,
-                              )
-                            : "—"
-                        }
+                    <CardContent className="grid gap-4 sm:grid-cols-2">
+                      <Field label={t("Panel name")}>
+                        <Input
+                          className="input"
+                          value={cfg.site_name}
+                          onChange={(e) => set("site_name", e.target.value)}
+                        />
+                      </Field>
+                      <Field label={t("Default locale")}>
+                        <Select
+                          className="input"
+                          value={cfg.default_locale}
+                          onChange={(e) =>
+                            set("default_locale", e.target.value)
+                          }
+                        >
+                          <option value="en">{t("English")}</option>
+                          <option value="fa">{t("Persian")}</option>
+                        </Select>
+                      </Field>
+                      <Field label={t("Support URL")} className="sm:col-span-2">
+                        <Input
+                          className="input"
+                          value={cfg.support_url}
+                          onChange={(e) => set("support_url", e.target.value)}
+                          placeholder={t("https://...")}
+                        />
+                      </Field>
+                      <Field
+                        label={t("Announcement")}
+                        className="sm:col-span-2"
+                      >
+                        <Textarea
+                          className="input min-h-24"
+                          value={cfg.announcement}
+                          onChange={(e) => set("announcement", e.target.value)}
+                          placeholder={t(
+                            "Message sent to compatible subscription clients",
+                          )}
+                        />
+                      </Field>
+                      <Field
+                        label={t("Announcement URL")}
+                        className="sm:col-span-2"
+                      >
+                        <Input
+                          className="input"
+                          value={cfg.announcement_url}
+                          onChange={(e) =>
+                            set("announcement_url", e.target.value)
+                          }
+                          placeholder={t("https://...")}
+                        />
+                      </Field>
+                      <Field label={t("Accent")}>
+                        <Select
+                          className="input"
+                          value={cfg.accent}
+                          onChange={(e) => set("accent", e.target.value)}
+                        >
+                          {["emerald", "blue", "violet", "rose", "amber"].map(
+                            (x) => (
+                              <option key={x} value={x}>
+                                {x}
+                              </option>
+                            ),
+                          )}
+                        </Select>
+                      </Field>
+                      <Field label={t("Dashboard refresh")}>
+                        <Select
+                          className="input"
+                          value={cfg.dashboard_refresh_seconds}
+                          onChange={(e) =>
+                            set(
+                              "dashboard_refresh_seconds",
+                              Number(e.target.value),
+                            )
+                          }
+                        >
+                          {[10, 15, 30, 60, 120, 300].map((x) => (
+                            <option key={x} value={x}>
+                              {x}
+                              {t("s")}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Toggle
+                        label={t("Maintenance mode")}
+                        text={t(
+                          "Pause public subscriptions while administrator access remains online.",
+                        )}
+                        checked={cfg.maintenance_mode}
+                        onChange={(v) => set("maintenance_mode", v)}
                       />
-                      <Read
-                        label={t("Memory")}
-                        value={
-                          sys
-                            ? `${fmt(sys.memory_used_bytes)} / ${fmt(sys.memory_total_bytes)} (${sys.memory_percent.toFixed(1)}%)`
-                            : "—"
-                        }
-                      />
-                      <Read
-                        label={t("Swap")}
-                        value={
-                          sys
-                            ? `${fmt(sys.swap_used_bytes)} / ${fmt(sys.swap_total_bytes)} (${sys.swap_percent.toFixed(1)}%)`
-                            : "—"
-                        }
-                      />
-                      <Read
-                        label={t("Disk")}
-                        value={
-                          sys
-                            ? `${fmt(sys.disk_used_bytes)} / ${fmt(sys.disk_total_bytes)} (${diskPct}%)`
-                            : "—"
-                        }
-                      />
-                      <Read
-                        label={t("Operating system")}
-                        value={sys?.platform || "—"}
-                      />
-                      <Read label={t("Go")} value={sys?.go_version || "—"} />
-                      <Read
-                        label={t("Load average")}
-                        value={
-                          sys
-                            ? sys.load_average
-                                .map((x) => x.toFixed(2))
-                                .join(" · ")
-                            : "—"
-                        }
-                      />
-                      <Read
-                        label={t("Admins")}
-                        value={String(sys?.admins_total ?? 0)}
-                      />
+                      <Actions busy={busy} />
                     </CardContent>
                   </Card>
+                )}
+                {tab === "subscription" && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>{t("Server management")}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                        {[
-                          t("veloray status"),
-                          t("veloray doctor"),
-                          t("veloray backup"),
-                          t("veloray port PORT"),
-                          t("veloray logs web"),
-                          t("veloray logs agent"),
-                          t("veloray ssl EMAIL"),
-                          t("veloray update"),
-                        ].map((x) => (
-                          <div
-                            key={x}
-                            className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 mono text-[10px] text-[var(--muted-strong)]"
-                          >
-                            {x}
-                          </div>
-                        ))}
+                      <div>
+                        <CardTitle>{t("Subscription portal")}</CardTitle>
                       </div>
+                    </CardHeader>
+                    <CardContent className="grid gap-4 sm:grid-cols-2">
+                      <div className="settings-section-title sm:col-span-2">
+                        <h3>{t("Subscription page", "صفحهٔ اشتراک")}</h3>
+                        <p>
+                          {t(
+                            "Choose the page customers see when they open their subscription link.",
+                            "صفحه‌ای را انتخاب کنید که مشتری با باز کردن لینک اشتراک می‌بیند.",
+                          )}
+                        </p>
+                      </div>
+                      <Field label={t("Template")}>
+                        <Select
+                          className="input"
+                          value={cfg.subscription_template}
+                          onChange={(e) =>
+                            set("subscription_template", e.target.value)
+                          }
+                        >
+                          <option value="default">
+                            {t("Simple subscription page")}
+                          </option>
+                          <option value="dashboard">
+                            {t("Modern dashboard")}
+                          </option>
+                          <option value="custom">
+                            {t("Custom HTML file")}
+                          </option>
+                          <option value="compact">
+                            {t("Classic compact portal")}
+                          </option>
+                        </Select>
+                      </Field>
+                      <SubscriptionOptions
+                        cfg={cfg}
+                        set={(key, value) =>
+                          setCfg((previous) => ({ ...previous, [key]: value }))
+                        }
+                        disabled={!canEdit || busy}
+                      />
+                      <Field label={t("Portal footer")}>
+                        <Input
+                          className="input"
+                          maxLength={180}
+                          value={cfg.subscription_footer}
+                          onChange={(e) =>
+                            set("subscription_footer", e.target.value)
+                          }
+                          placeholder={t("Optional footer")}
+                        />
+                      </Field>
+                      <Field label={t("Subscription update interval (hours)")}>
+                        <Input
+                          className="input"
+                          type="number"
+                          min={1}
+                          max={168}
+                          value={cfg.subscription_update_interval_hours}
+                          onChange={(e) =>
+                            set(
+                              "subscription_update_interval_hours",
+                              Number(e.target.value),
+                            )
+                          }
+                        />
+                      </Field>
+                      <Field label={t("Default subscription format")}>
+                        <Select
+                          className="input"
+                          value={cfg.subscription_default_format}
+                          onChange={(e) =>
+                            set("subscription_default_format", e.target.value)
+                          }
+                        >
+                          <option value="auto">{t("Auto detect")}</option>
+                          <option value="base64">Base64</option>
+                          <option value="raw">RAW</option>
+                          <option value="clash">Clash</option>
+                          <option value="singbox">sing-box</option>
+                          <option value="xray">Xray JSON</option>
+                        </Select>
+                      </Field>
+                      <Field label={t("Subscription portal theme")}>
+                        <Select
+                          className="input"
+                          value={cfg.subscription_theme}
+                          onChange={(e) =>
+                            set("subscription_theme", e.target.value)
+                          }
+                        >
+                          <option value="system">{t("Follow device")}</option>
+                          <option value="light">{t("Light")}</option>
+                          <option value="dark">{t("Dark")}</option>
+                        </Select>
+                      </Field>
+                      <Toggle
+                        label={t("Traffic chart")}
+                        text={t(
+                          "Display actual historical traffic in the subscription portal.",
+                        )}
+                        checked={cfg.subscription_show_analytics}
+                        onChange={(v) => set("subscription_show_analytics", v)}
+                      />
+                      <Toggle
+                        label={t("Subscription downloads")}
+                        text={t(
+                          "Show export buttons for supported client configuration formats.",
+                        )}
+                        checked={cfg.subscription_show_downloads}
+                        onChange={(v) => set("subscription_show_downloads", v)}
+                      />
+                      <Toggle
+                        label={t("Subscriptions enabled")}
+                        text={t(
+                          "Turn public subscription endpoints on or off.",
+                        )}
+                        checked={cfg.subscription_enabled}
+                        onChange={(v) => set("subscription_enabled", v)}
+                      />
+                      <Toggle
+                        label={t("Recommended apps")}
+                        text={t("Display compatible client suggestions.")}
+                        checked={cfg.subscription_show_apps}
+                        onChange={(v) => set("subscription_show_apps", v)}
+                      />
+                      <Toggle
+                        label={t("QR code")}
+                        text={t("Allow subscription URL QR display.")}
+                        checked={cfg.subscription_show_qr}
+                        onChange={(v) => set("subscription_show_qr", v)}
+                      />
+                      <Toggle
+                        label={t("Connection URI")}
+                        text={t("Expose the raw protocol URI when supported.")}
+                        checked={cfg.subscription_show_connection_uri}
+                        onChange={(v) =>
+                          set("subscription_show_connection_uri", v)
+                        }
+                      />
+                      <Actions busy={busy} />
                     </CardContent>
                   </Card>
-                </div>
-              )}
-            </fieldset>
-          </form>
+                )}
+                {tab === "defaults" && (
+                  <Card>
+                    <CardHeader>
+                      <div>
+                        <CardTitle>{t("Client defaults")}</CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="grid gap-4 sm:grid-cols-2">
+                      <Field label={t("Default expiry (days)")}>
+                        <Input
+                          className="input"
+                          type="number"
+                          min="0"
+                          value={cfg.default_client_days}
+                          onChange={(e) =>
+                            set("default_client_days", Number(e.target.value))
+                          }
+                        />
+                      </Field>
+                      <Field label={t("Default traffic (GB)")}>
+                        <Input
+                          className="input"
+                          type="number"
+                          min="0"
+                          value={cfg.default_traffic_gb}
+                          onChange={(e) =>
+                            set("default_traffic_gb", Number(e.target.value))
+                          }
+                        />
+                      </Field>
+                      <Field label={t("Default renewal (days)")}>
+                        <Input
+                          className="input"
+                          type="number"
+                          min="0"
+                          value={cfg.default_renewal_days}
+                          onChange={(e) =>
+                            set("default_renewal_days", Number(e.target.value))
+                          }
+                        />
+                      </Field>
+                      <Field label={t("Traffic history retention")}>
+                        <Select
+                          className="input"
+                          value={cfg.traffic_history_days}
+                          onChange={(e) =>
+                            set("traffic_history_days", Number(e.target.value))
+                          }
+                        >
+                          {[7, 14, 30, 60, 90, 180, 365].map((x) => (
+                            <option key={x} value={x}>
+                              {x} {t("days")}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Actions busy={busy} />
+                    </CardContent>
+                  </Card>
+                )}
+                {tab === "security" && (
+                  <Card>
+                    <CardHeader>
+                      <div>
+                        <CardTitle>{t("Security & API")}</CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="grid gap-4 sm:grid-cols-2">
+                      <Toggle
+                        label={t("Require administrator 2FA")}
+                        text={t(
+                          "Staff must enroll TOTP before protected API use.",
+                        )}
+                        checked={cfg.require_2fa_for_admins}
+                        onChange={(v) => set("require_2fa_for_admins", v)}
+                      />
+                      <Toggle
+                        label={t("Enable API keys")}
+                        text={t("Allow scoped Bearer tokens from Accounts.")}
+                        checked={cfg.api_keys_enabled}
+                        onChange={(v) => set("api_keys_enabled", v)}
+                      />
+                      <Field label={t("Default API key lifetime")}>
+                        <Input
+                          className="input"
+                          type="number"
+                          min="1"
+                          max="3650"
+                          value={cfg.api_key_default_days}
+                          onChange={(e) =>
+                            set("api_key_default_days", Number(e.target.value))
+                          }
+                        />
+                      </Field>
+                      <Field label={t("Audit retention")}>
+                        <Input
+                          className="input"
+                          type="number"
+                          min="1"
+                          max="3650"
+                          value={cfg.audit_retention_days}
+                          onChange={(e) =>
+                            set("audit_retention_days", Number(e.target.value))
+                          }
+                        />
+                      </Field>
+                      <Actions busy={busy} />
+                    </CardContent>
+                  </Card>
+                )}
+                {tab === "telegram" && (
+                  <Card>
+                    <CardHeader>
+                      <div>
+                        <CardTitle>{t("Telegram automation")}</CardTitle>
+                      </div>
+                      <span
+                        className={`rounded-full px-2 py-1 text-[9px] ${cfg.telegram_configured ? "bg-emerald-500/10 text-emerald-500" : "bg-[var(--surface-2)] text-[var(--muted)]"}`}
+                      >
+                        {cfg.telegram_configured
+                          ? t("Token configured")
+                          : t("No token")}
+                      </span>
+                    </CardHeader>
+                    <CardContent className="grid gap-4 sm:grid-cols-2">
+                      <Toggle
+                        label={t("Telegram enabled")}
+                        text={t(
+                          "Send alerts and accept commands from configured owner IDs.",
+                        )}
+                        checked={cfg.telegram_enabled}
+                        onChange={(v) => set("telegram_enabled", v)}
+                      />
+                      <Toggle
+                        label={t("Allow bot management")}
+                        text={t(
+                          "Enable confirmed client and node changes. Required panel 2FA keeps bot management read-only.",
+                        )}
+                        checked={cfg.telegram_allow_changes}
+                        onChange={(v) => set("telegram_allow_changes", v)}
+                      />
+                      <Toggle
+                        label={t("Quota and expiry alerts")}
+                        text={t(
+                          "Notify owners before quota exhaustion or account expiry.",
+                        )}
+                        checked={cfg.telegram_client_alerts}
+                        onChange={(v) => set("telegram_client_alerts", v)}
+                      />
+                      <Field label={t("Bot language")}>
+                        <Select
+                          className="input"
+                          value={cfg.telegram_locale}
+                          onChange={(e) =>
+                            set("telegram_locale", e.target.value)
+                          }
+                        >
+                          <option value="en">{t("English")}</option>
+                          <option value="fa">{t("Persian")}</option>
+                        </Select>
+                      </Field>
+                      <Field label={t("Quota warning %")}>
+                        <Input
+                          className="input"
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={cfg.telegram_quota_warning_percent}
+                          onChange={(e) =>
+                            set(
+                              "telegram_quota_warning_percent",
+                              Number(e.target.value),
+                            )
+                          }
+                        />
+                      </Field>
+                      <Field label={t("Expiry warning (days)")}>
+                        <Input
+                          className="input"
+                          type="number"
+                          min="1"
+                          max="30"
+                          value={cfg.telegram_expiry_warning_days}
+                          onChange={(e) =>
+                            set(
+                              "telegram_expiry_warning_days",
+                              Number(e.target.value),
+                            )
+                          }
+                        />
+                      </Field>
+                      <Field label={t("Bot token")}>
+                        <Input
+                          className="input"
+                          type="password"
+                          autoComplete="off"
+                          value={telegramToken}
+                          onChange={(e) => setTelegramToken(e.target.value)}
+                          placeholder={
+                            cfg.telegram_configured
+                              ? t("Leave blank to keep current token")
+                              : "123456:ABC..."
+                          }
+                        />
+                      </Field>
+                      <Field label={t("Owner IDs")} className="sm:col-span-2">
+                        <Input
+                          className="input"
+                          value={cfg.telegram_owner_ids.join(", ")}
+                          onChange={(e) =>
+                            set(
+                              "telegram_owner_ids",
+                              e.target.value
+                                .split(",")
+                                .map((x) => x.trim())
+                                .filter(Boolean),
+                            )
+                          }
+                          placeholder="123456789, 987654321"
+                        />
+                      </Field>
+                      <Field label={t("CPU alert %")}>
+                        <Input
+                          className="input"
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={cfg.telegram_alert_cpu_percent}
+                          onChange={(e) =>
+                            set(
+                              "telegram_alert_cpu_percent",
+                              Number(e.target.value),
+                            )
+                          }
+                        />
+                      </Field>
+                      <Field label={t("Memory alert %")}>
+                        <Input
+                          className="input"
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={cfg.telegram_alert_memory_percent}
+                          onChange={(e) =>
+                            set(
+                              "telegram_alert_memory_percent",
+                              Number(e.target.value),
+                            )
+                          }
+                        />
+                      </Field>
+                      <Field label={t("Disk alert %")}>
+                        <Input
+                          className="input"
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={cfg.telegram_alert_disk_percent}
+                          onChange={(e) =>
+                            set(
+                              "telegram_alert_disk_percent",
+                              Number(e.target.value),
+                            )
+                          }
+                        />
+                      </Field>
+                      <Field label={t("Alert cooldown (minutes)")}>
+                        <Input
+                          className="input"
+                          type="number"
+                          min="1"
+                          max="1440"
+                          value={cfg.telegram_alert_cooldown_minutes}
+                          onChange={(e) =>
+                            set(
+                              "telegram_alert_cooldown_minutes",
+                              Number(e.target.value),
+                            )
+                          }
+                        />
+                      </Field>
+                      {cfg.telegram_configured && (
+                        <Toggle
+                          label={t("Remove stored bot token")}
+                          text={t(
+                            "Clear the encrypted Telegram credential on save.",
+                          )}
+                          checked={clearTelegram}
+                          onChange={setClearTelegram}
+                        />
+                      )}
+                      <div className="sm:col-span-2 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-[10px] leading-5 text-[var(--muted)]">
+                        {t("Commands:")} <code>{t("/status")}</code>,{" "}
+                        <code>{t("/nodes")}</code>,{" "}
+                        <code>{t("/clients [page]")}</code>,{" "}
+                        <code>{t("/search name")}</code>,{" "}
+                        <code>{t("/client ID")}</code>,{" "}
+                        <code>{t("/link ID")}</code>
+                        {t(
+                          ". Management actions require a confirmation button that expires after five minutes. Every owner must start the bot before testing. Save changed settings before checking the connection.",
+                        )}
+                      </div>
+                      <div className="sm:col-span-2 flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          disabled={
+                            busy || !cfg.telegram_configured || !canEdit
+                          }
+                          onClick={() => checkBot("status")}
+                        >
+                          {t("Check bot connection")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          disabled={
+                            busy || !cfg.telegram_configured || !canEdit
+                          }
+                          onClick={() => checkBot("test")}
+                        >
+                          {t("Send test to owners")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          disabled={
+                            busy || !cfg.telegram_configured || !canEdit
+                          }
+                          onClick={() => checkBot("setup")}
+                        >
+                          {t("Register owner commands")}
+                        </Button>
+                      </div>
+                      {botStatus && (
+                        <div className="sm:col-span-2 rounded-md border border-[var(--border)] p-3 text-[12px] leading-6">
+                          @{botStatus.username} · {botStatus.owner_count}{" "}
+                          {t("owners ·")}{" "}
+                          {botStatus.webhook_configured
+                            ? t("Existing webhook blocks polling")
+                            : t("Polling available")}
+                          <br />
+                          {t("Last successful poll:")}{" "}
+                          {botStatus.last_success || t("Not yet")}
+                          {botStatus.last_error && (
+                            <p className="text-amber-500">
+                              {botStatus.last_error}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      <Actions busy={busy} />
+                    </CardContent>
+                  </Card>
+                )}
+                {tab === "webhooks" && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>{t("Signed event webhooks")}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid gap-4 sm:grid-cols-2">
+                      <Toggle
+                        label={t("Enable webhooks")}
+                        text={t(
+                          "Deliver signed administrative audit events to your HTTPS endpoint. Save settings before sending a test.",
+                        )}
+                        checked={cfg.webhook_enabled}
+                        onChange={(value) => set("webhook_enabled", value)}
+                      />
+                      <Field
+                        label={t("HTTPS destination URL")}
+                        className="sm:col-span-2"
+                      >
+                        <Input
+                          className="input"
+                          type="url"
+                          placeholder="https://example.com/hooks/veloray"
+                          value={cfg.webhook_url}
+                          onChange={(e) => set("webhook_url", e.target.value)}
+                        />
+                      </Field>
+                      <Field
+                        label={t("HMAC signing secret")}
+                        className="sm:col-span-2"
+                      >
+                        <Input
+                          className="input"
+                          type="password"
+                          autoComplete="new-password"
+                          value={webhookSecret}
+                          onChange={(e) => setWebhookSecret(e.target.value)}
+                          placeholder={
+                            cfg.webhook_configured
+                              ? t("Leave blank to keep the stored secret")
+                              : t("At least 32 random characters")
+                          }
+                        />
+                      </Field>
+                      {cfg.webhook_configured && (
+                        <Toggle
+                          label={t("Remove stored signing secret")}
+                          text={t(
+                            "Disable webhooks before removing the secret.",
+                          )}
+                          checked={clearWebhook}
+                          onChange={setClearWebhook}
+                        />
+                      )}
+                      <div className="sm:col-span-2 rounded-lg border border-[var(--border)] p-3 text-[11px] leading-5 text-[var(--muted)]">
+                        {t(
+                          "Requests are signed using HMAC-SHA256 over timestamp + '.' + raw JSON body. Verify X-VeloRay-Timestamp and X-VeloRay-Signature. Event bodies exclude credentials, tokens, configuration and audit details. Failed deliveries are retried up to eight times.",
+                        )}
+                      </div>
+                      {webhookStats && (
+                        <div className="sm:col-span-2 rounded-lg border border-[var(--border)] p-3 text-[12px]">
+                          {t("Queued")}: {webhookStats.pending} · {t("Failed")}:{" "}
+                          {webhookStats.failed} · {t("Delivered (7 days)")}:{" "}
+                          {webhookStats.delivered}
+                        </div>
+                      )}
+                      <div className="sm:col-span-2 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={busy || !canEdit}
+                          onClick={() => void webhookAction("status")}
+                        >
+                          {t("Queue status")}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={
+                            busy ||
+                            !canEdit ||
+                            !cfg.webhook_configured ||
+                            !cfg.webhook_enabled
+                          }
+                          onClick={() => void webhookAction("test")}
+                        >
+                          {t("Queue test event")}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={busy || !canEdit || !cfg.webhook_configured}
+                          onClick={() => void webhookAction("retry")}
+                        >
+                          {t("Retry failed")}
+                        </Button>
+                      </div>
+                      {session?.is_superuser && (
+                        <>
+                          <SMTPSettings
+                            value={cfg}
+                            onChange={set}
+                            password={smtpPassword}
+                            onPassword={setSmtpPassword}
+                            clear={clearSMTP}
+                            onClear={setClearSMTP}
+                          />
+                          <NotificationEndpoints />
+                        </>
+                      )}
+                      <Actions busy={busy} />
+                    </CardContent>
+                  </Card>
+                )}
+                {tab === "system" && (
+                  <div className="space-y-4">
+                    <DatePreferences />
+                    {session?.is_superuser && (
+                      <Card>
+                        <CardHeader>
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <CardTitle>
+                                {t("Verified GitHub auto-update")}
+                              </CardTitle>
+                              <p className="mt-1 text-[12px] text-[var(--muted)]">
+                                {t(
+                                  "Daily commit checks, CI verification, restricted pre-update backup and application rollback.",
+                                )}
+                              </p>
+                            </div>
+                            <span
+                              className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${updateInfo?.auto_update_enabled ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300" : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--muted-strong)]"}`}
+                            >
+                              {updateInfo?.auto_update_enabled
+                                ? t("Automatic updates enabled")
+                                : t("Automatic updates disabled")}
+                            </span>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div className="grid gap-3 md:grid-cols-3">
+                            <Read
+                              label={t("Tracked repository")}
+                              value={
+                                updateInfo?.repository || "ParsaZali/VeloRay"
+                              }
+                            />
+                            <Read
+                              label={t("Tracked branch")}
+                              value={updateInfo?.tracking_branch || "main"}
+                            />
+                            <Read
+                              label={t("Installed GitHub commit")}
+                              value={
+                                updateInfo?.installed_commit
+                                  ? updateInfo.installed_commit.slice(0, 12)
+                                  : t("Not recorded yet")
+                              }
+                            />
+                          </div>
+                          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                            <p className="mb-3 text-[12px] font-semibold">
+                              {t(
+                                "Run once on the server to activate automatic updates:",
+                              )}
+                            </p>
+                            <code
+                              className="block select-all overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-[12px] text-[var(--fg)]"
+                              dir="ltr"
+                            >
+                              sudo veloray auto-update enable
+                            </code>
+                            <p className="mt-3 text-[12px] text-[var(--muted)]">
+                              {t(
+                                "The panel does not execute root commands from the browser. Once enabled, the Linux systemd timer checks GitHub every day. Updates are installed only after that exact commit passes CI.",
+                              )}
+                            </p>
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            {[
+                              "sudo veloray auto-update status",
+                              "sudo veloray auto-update check",
+                              "sudo veloray auto-update disable",
+                            ].map((cmd) => (
+                              <code
+                                key={cmd}
+                                dir="ltr"
+                                className="overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-[11px] text-[var(--muted-strong)]"
+                              >
+                                {cmd}
+                              </code>
+                            ))}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => void load()}
+                              disabled={loading}
+                            >
+                              {t("Refresh update status")}
+                            </Button>
+                            <a
+                              className="text-[12px] font-medium text-[var(--brand)] underline underline-offset-4"
+                              href="https://github.com/ParsaZali/VeloRay"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {t("View source on GitHub")}
+                            </a>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                    <Card>
+                      <CardHeader>
+                        <div>
+                          <CardTitle>{t("Host health")}</CardTitle>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <Read
+                          label={t("CPU")}
+                          value={
+                            sys
+                              ? tx(
+                                  "{0}% · {1} cores",
+                                  sys.cpu_percent.toFixed(1),
+                                  sys.cpu_count,
+                                )
+                              : "—"
+                          }
+                        />
+                        <Read
+                          label={t("Memory")}
+                          value={
+                            sys
+                              ? `${fmt(sys.memory_used_bytes)} / ${fmt(sys.memory_total_bytes)} (${sys.memory_percent.toFixed(1)}%)`
+                              : "—"
+                          }
+                        />
+                        <Read
+                          label={t("Swap")}
+                          value={
+                            sys
+                              ? `${fmt(sys.swap_used_bytes)} / ${fmt(sys.swap_total_bytes)} (${sys.swap_percent.toFixed(1)}%)`
+                              : "—"
+                          }
+                        />
+                        <Read
+                          label={t("Disk")}
+                          value={
+                            sys
+                              ? `${fmt(sys.disk_used_bytes)} / ${fmt(sys.disk_total_bytes)} (${diskPct}%)`
+                              : "—"
+                          }
+                        />
+                        <Read
+                          label={t("Operating system")}
+                          value={sys?.platform || "—"}
+                        />
+                        <Read label={t("Go")} value={sys?.go_version || "—"} />
+                        <Read
+                          label={t("Load average")}
+                          value={
+                            sys
+                              ? sys.load_average
+                                  .map((x) => x.toFixed(2))
+                                  .join(" · ")
+                              : "—"
+                          }
+                        />
+                        <Read
+                          label={t("Admins")}
+                          value={String(sys?.admins_total ?? 0)}
+                        />
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>{t("Server management")}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                          {[
+                            t("veloray status"),
+                            t("veloray doctor"),
+                            t("veloray backup"),
+                            t("veloray port PORT"),
+                            t("veloray logs web"),
+                            t("veloray logs agent"),
+                            t("veloray ssl EMAIL"),
+                            t("veloray update"),
+                          ].map((x) => (
+                            <div
+                              key={x}
+                              className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 mono text-[10px] text-[var(--muted-strong)]"
+                            >
+                              {x}
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+              </fieldset>
+            </form>
+          </div>
         )}
       </div>
     </div>
@@ -1414,7 +1452,10 @@ function Toggle({
   return (
     <label className="group flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3.5 transition hover:border-[var(--border-strong)]">
       <div>
-        <div className="text-[11px] font-semibold">{label}</div>
+        <div className="text-[13px] font-semibold">{label}</div>
+        <p className="mt-1 text-[12px] leading-relaxed text-[var(--muted)]">
+          {text}
+        </p>
       </div>
       <span
         className={`relative h-6 w-11 shrink-0 rounded-full border transition ${checked ? "border-[var(--brand)] bg-[var(--brand)]" : "border-[var(--border-strong)] bg-[var(--surface-3)]"}`}
@@ -1422,11 +1463,12 @@ function Toggle({
         <Input
           className="sr-only"
           type="checkbox"
+          aria-label={label}
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
         />
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-0.5"}`}
+          className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-0"}`}
         />
       </span>
     </label>
@@ -1444,9 +1486,15 @@ function Read({ label, value }: { label: string; value: string }) {
 function Actions({ busy }: { busy: boolean }) {
   useLocale();
   return (
-    <div className="sm:col-span-2 flex justify-end pt-2">
+    <div className="settings-save-bar sm:col-span-2">
+      <span>
+        {t(
+          "Changes apply after saving.",
+          "تغییرات فرم با ذخیره اعمال می‌شوند.",
+        )}
+      </span>
       <Button type="submit" disabled={busy}>
-        {busy ? "Saving…" : t("Save settings")}
+        {busy ? t("Saving…") : t("Save settings")}
       </Button>
     </div>
   );

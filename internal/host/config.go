@@ -35,7 +35,7 @@ func SetEnv(path, key, value string) error {
 	}
 	return AtomicFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0640)
 }
-func RenderNginx(ctx context.Context, origin, path string) error {
+func RenderNginx(ctx context.Context, origin, path string, subscriptionPort ...int) error {
 	u, e := url.Parse(origin)
 	if e != nil || u.Scheme != "https" || u.User != nil || u.Path != "" || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
 		return errors.New("HTTPS origin is required")
@@ -92,6 +92,12 @@ func RenderNginx(ctx context.Context, origin, path string) error {
 		return e
 	}
 	raw := nginxConfiguration(host, port, cert, key)
+	if len(subscriptionPort) > 0 && subscriptionPort[0] > 0 {
+		if subscriptionPort[0] > 65535 || subscriptionPort[0] == n || subscriptionPort[0] == 80 {
+			return errors.New("invalid subscription listener port")
+		}
+		raw = append(raw, nginxSubscriptionConfiguration(host, strconv.Itoa(subscriptionPort[0]), cert, key)...)
+	}
 
 	old, e := os.ReadFile(path)
 	exists := e == nil
@@ -163,4 +169,36 @@ func nginxConfiguration(host, port, cert, key string) []byte {
 `, host, net.JoinHostPort(host, port)))...)
 	}
 	return raw
+}
+
+// The separate HTTPS listener forwards only to the subscription-only process.
+func nginxSubscriptionConfiguration(host, port, cert, key string) []byte {
+	return []byte(fmt.Sprintf(`server {
+ listen %s ssl;
+ listen [::]:%s ssl;
+ server_name %s;
+ ssl_certificate %s;
+ ssl_certificate_key %s;
+ ssl_protocols TLSv1.2 TLSv1.3;
+ server_tokens off;
+ client_max_body_size 1m;
+ location / {
+  proxy_pass http://127.0.0.1:8611;
+  proxy_set_header Host $http_host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-Proto https;
+  proxy_set_header X-Forwarded-For $remote_addr;
+  proxy_read_timeout 180s;
+ }
+ access_log off;
+ error_log /dev/null;
+}
+`, port, port, host, cert, key))
+}
+func NginxCertificate(host string) string {
+	path := fmt.Sprintf("/etc/letsencrypt/live/%s/fullchain.pem", host)
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	return "/etc/veloray/tls/panel.crt"
 }

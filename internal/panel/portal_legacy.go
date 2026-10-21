@@ -104,7 +104,7 @@ func (s *Server) subscriptionQR(w http.ResponseWriter, r *http.Request, c, cfg D
 		return
 	}
 	target := r.URL.Query().Get("data")
-	base := strings.TrimRight(s.Config.PublicURL, "/") + "/sub/" + str(c, "subscription_token")
+	base := subscriptionOrigin(s.Config, cfg) + "/sub/" + str(c, "subscription_token")
 	allowed := target == base
 	if u, e := url.Parse(target); e == nil && strings.HasPrefix(target, base+"?") {
 		q := u.Query()

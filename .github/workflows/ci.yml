@@ -43,13 +43,14 @@ jobs:
           VELORAY_TEST_PORTAL_HTML="$RUNNER_TEMP/veloray-portal.html" VELORAY_TEST_MODERN_PORTAL_HTML="$RUNNER_TEMP/veloray-modern.html" VELORAY_TEST_SIMPLE_PORTAL_HTML="$RUNNER_TEMP/veloray-simple.html" go -C .. test ./internal/panel -run "TestCompactPortal|TestModernSubscriptionPortal|TestSimplePortalDefault" -count=1
           npx playwright install --with-deps chromium
           VELORAY_TEST_PORTAL_HTML="$RUNNER_TEMP/veloray-portal.html" VELORAY_TEST_MODERN_PORTAL_HTML="$RUNNER_TEMP/veloray-modern.html" VELORAY_TEST_SIMPLE_PORTAL_HTML="$RUNNER_TEMP/veloray-simple.html" npx playwright test --config playwright.refinements.config.ts
-          npx playwright test --config playwright.pwa.config.ts
+          npx playwright test --config playwright.pwa.config.ts --output=test-results/pwa
         working-directory: frontend
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: panel-test-results
           path: frontend/test-results
+          retention-days: 7
       - run: for script in install.sh scripts/*.sh scripts/velorayctl deploy/node/install.sh; do bash -n "$script"; done
       - run: bash scripts/test-auto-update.sh
       - run: python3 scripts/test-deployment.py

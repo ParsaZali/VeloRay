@@ -1,0 +1,8 @@
+[Unit]
+Description=Check VeloRay subscription port requests
+[Timer]
+OnBootSec=15s
+OnUnitInactiveSec=5s
+AccuracySec=1s
+[Install]
+WantedBy=timers.target

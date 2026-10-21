@@ -25,7 +25,7 @@ export function Header({
   const next = theme === "dark" ? "light" : "dark";
   const ThemeIcon = theme === "dark" ? Moon : Sun;
   return (
-    <header className="glass sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-[var(--border)] px-4 sm:px-6">
+    <header className="panel-header sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-[var(--border)] px-4 sm:px-6">
       <div className="flex min-w-0 items-center gap-3">
         <Button
           variant="ghost"
@@ -40,10 +40,10 @@ export function Header({
           <VeloRayMark className="h-8 w-8" />
         </div>
         <div className="min-w-0">
-          <div className="truncate text-[13px] font-semibold tracking-[-.01em] text-[var(--fg)]">
+          <div className="truncate text-[15px] font-semibold tracking-[-.01em] text-[var(--fg)]">
             {title}
           </div>
-          <div className="hidden truncate text-[10px] text-[var(--muted)] sm:block">
+          <div className="hidden truncate text-[12px] text-[var(--muted)] sm:block">
             {subtitle}
           </div>
         </div>
@@ -77,7 +77,7 @@ export function Header({
           <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[10px] font-semibold uppercase text-[var(--fg)]">
             {user.username.slice(0, 2)}
           </div>
-          <div className="max-w-28 truncate text-[11px] font-medium text-[var(--muted-strong)]">
+          <div className="max-w-28 truncate text-[13px] font-medium text-[var(--muted-strong)]">
             {user.username}
           </div>
         </div>

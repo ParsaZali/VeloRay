@@ -129,7 +129,12 @@ func TestIntegrationNativeProtocolsWithPinnedSingBox(t *testing.T) {
 					t.Fatal(e, string(out))
 				}
 				nativeRun(t, binary, serverFile)
+				waitNetworkListener(t, controller)
+				if p == "snell" {
+					waitNetworkListener(t, int(num(i, "port")))
+				}
 				nativeRun(t, binary, clientFile)
+				waitNetworkListener(t, clientPort)
 				proxy, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", clientPort))
 				transport := &http.Transport{Proxy: http.ProxyURL(proxy)}
 				defer transport.CloseIdleConnections()
@@ -146,8 +151,16 @@ func TestIntegrationNativeProtocolsWithPinnedSingBox(t *testing.T) {
 				var response *http.Response
 				for attempt := 0; attempt < 50; attempt++ {
 					response, e = httpClient.Get(upstream.URL)
-					if e == nil {
+					if e == nil && response.StatusCode == http.StatusOK {
 						break
+					}
+					if e == nil {
+						status := response.StatusCode
+						response.Body.Close()
+						e = fmt.Errorf("native proxy returned HTTP %d during startup", status)
+						if status != http.StatusBadGateway && status != http.StatusServiceUnavailable {
+							t.Fatal(e)
+						}
 					}
 					time.Sleep(40 * time.Millisecond)
 				}

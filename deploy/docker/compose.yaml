@@ -25,6 +25,8 @@ x-panel-env: &panel-env
   VELORAY_PUBLIC_URL: https://${VELORAY_DOMAIN}
   VELORAY_PANEL_PORT: "443"
   VELORAY_COOKIE_SECURE: "true"
+  VELORAY_SUBSCRIPTION_DRIVER: caddy
+  VELORAY_SUBSCRIPTION_PORT: ${VELORAY_SUBSCRIPTION_PORT:-8444}
 services:
   db:
     image: postgres:17
@@ -78,7 +80,7 @@ services:
       VELORAY_ADMIN_PASSWORD_FILE: /run/secrets/admin_password
       VELORAY_LOCAL_NODE_TOKEN_FILE: /run/secrets/agent_token
     secrets: [database_password, secret_key, field_key, admin_password, agent_token]
-    volumes: [../../examples/subscription:/etc/veloray/templates:ro]
+    volumes: [../../examples/subscription:/etc/veloray/templates:ro, proxy-control:/run/veloray-proxy:ro]
     depends_on:
       db: {condition: service_healthy}
       agent: {condition: service_healthy}
@@ -108,7 +110,7 @@ services:
   proxy:
     image: veloray-proxy:local
     build: {context: ../.., target: proxy}
-    user: "10003:10003"
+    user: "10003:10001"
     network_mode: host
     read_only: true
     restart: unless-stopped
@@ -117,8 +119,9 @@ services:
     security_opt: [no-new-privileges:true]
     environment:
       VELORAY_DOMAIN: ${VELORAY_DOMAIN}
+      VELORAY_SUBSCRIPTION_PORT: ${VELORAY_SUBSCRIPTION_PORT:-8444}
     tmpfs: ["/tmp:rw,noexec,nosuid,size=16m,mode=1777"]
-    volumes: [caddy-data:/data, caddy-config:/config]
+    volumes: [caddy-data:/data, caddy-config:/config, proxy-control:/run/veloray-proxy]
     depends_on:
       panel: {condition: service_healthy}
       subscriptions: {condition: service_healthy}
@@ -131,5 +134,6 @@ secrets:
 volumes:
   postgres-data:
   agent-data:
+  proxy-control:
   caddy-data:
   caddy-config:

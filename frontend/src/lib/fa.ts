@@ -1238,3 +1238,14 @@ Object.assign(fa, {
   "Requires LDAPS in server configuration. Sign in with the panel username and directory password; local permissions and 2FA still apply.":
     "به تنظیم LDAPS در سرور نیاز دارد. با نام کاربری پنل و رمز دایرکتوری وارد شوید؛ سطح دسترسی و تأیید دومرحله‌ای حساب حفظ می‌شوند.",
 });
+
+Object.assign(fa, {
+  "The subscription listener could not be applied. The previous endpoint remains active. Check that the port is free and the subscription service is running.":
+    "پورت اشتراک اعمال نشد. آدرس قبلی فعال است؛ آزاد بودن پورت و وضعیت سرویس اشتراک را بررسی کنید.",
+  "subscription endpoint changed; refresh before applying":
+    "تنظیم پورت تغییر کرده است؛ ابتدا وضعیت را تازه‌سازی کنید.",
+  "subscription port is reserved by the panel or another VeloRay service":
+    "این پورت برای پنل یا یکی از سرویس‌های VeloRay رزرو شده است.",
+  "subscription port is already reserved by a local inbound":
+    "این پورت توسط یکی از اینباندهای همین سرور استفاده می‌شود.",
+});

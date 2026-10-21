@@ -25,4 +25,11 @@ func operationsAPISpec(paths, schemas Data) {
 	schemas["NotificationSettingsPatch"] = object(Data{"smtp_enabled": boolean, "smtp_host": text, "smtp_port": integer(1, 65535), "smtp_tls_mode": Data{"enum": []any{"tls", "starttls"}}, "smtp_from": text, "smtp_username": text, "smtp_password": Data{"type": "string", "maxLength": 4096, "writeOnly": true, "description": "Encrypted; omitted or blank preserves existing secret"}, "smtp_clear_password": Data{"type": "boolean", "writeOnly": true}, "alert_quota_percent": integer(0, 99), "alert_expiry_days": integer(0, 365), "alert_inactive_days": integer(0, 365)})
 	obj(schemas, "NotificationSettingsPatch")["additionalProperties"] = true
 	paths["/api/settings"] = Data{"get": Data{"summary": "Panel settings; SMTP secret never returned, smtp_configured is a read-only boolean", "responses": responses}, "patch": Data{"summary": "Partial panel settings update; documented schema covers notification fields, other existing settings also accepted", "requestBody": body("NotificationSettingsPatch"), "responses": responses}}
+	schemas["SubscriptionEndpointInput"] = object(Data{"port": integer(1, 65535), "revision": text})
+	obj(schemas, "SubscriptionEndpointInput")["required"] = []any{"port", "revision"}
+	paths["/api/subscription-endpoint"] = Data{
+		"get": Data{"summary": "Superuser administrator-only requested/applied subscription port, public origin and application status", "responses": responses},
+		"put": Data{"summary": "Request a separate HTTPS subscription port; links move only after successful listener application", "requestBody": body("SubscriptionEndpointInput"), "responses": Data{"202": Data{"description": "Queued; poll GET until ready"}, "400": Data{"description": "Reserved port or local inbound conflict"}, "403": Data{"description": "Superuser administrator scope required"}, "409": Data{"description": "Stale revision or manual deployment"}}},
+	}
+
 }

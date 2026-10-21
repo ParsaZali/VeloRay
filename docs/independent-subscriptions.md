@@ -1,50 +1,50 @@
-# Independent subscription service
+# Separate HTTPS subscription endpoint
 
-`VELORAY_SUBSCRIPTION_ONLY=true veloray serve` exposes only subscription paths
-and `/api/health`; management, authentication and frontend routes return 404.
-It uses the shared prepared PostgreSQL schema, encryption keys and template
-files, but runs no migrations, traffic reconciliation or background workers.
-HWID registration and subscription history still write to the shared database.
-The primary panel must run migrations before starting the separate service.
+The installed subscription process serves `/sub/*`, public subscription assets,
+and `/api/health`. Administration and authentication routes return 404. It shares
+the panel database and private template directory, but does not migrate the
+database or run the panel's background jobs. It listens on `127.0.0.1:8611` on a
+native server and `127.0.0.1:8612` in Docker. Those addresses are local only.
 
-The installer provides `veloray-subscriptions.service` without enabling it.
-To run the optional local instance after installation:
+The **public HTTPS port** is independently managed in **Settings → Subscription
+→ Separate subscription port**. The first native install selects an available
+port starting at `8444`, avoiding existing local inbounds; Docker defaults to
+`8444` and its initial port can be set with `VELORAY_SUBSCRIPTION_PORT` before
+the stack is created. The control is available to superuser administrators.
+Open the chosen TCP port in the host and provider firewalls. Existing `/sub/`
+links on the panel port redirect to the applied port and preserve the path and
+query. New customer links, portal URLs and QR codes use the applied port.
 
-```bash
-sudo systemctl enable --now veloray-subscriptions.service
-sudo systemctl status veloray-subscriptions.service
-```
+Port changes enter a pending state. Links switch only after the proxy listener
+is configured successfully; an apply error leaves the old listener and URLs in
+place. The screen shows both addresses and the application status. A stale
+revision or conflict with the panel, a reserved service or a local VPN inbound
+is rejected. Existing customer tokens, usage, quotas and templates remain the
+same. Apps that do not follow HTTP redirects should receive the updated URL.
 
-The server controller includes enabled/active subscription instances in
-start/stop/restart, status and doctor. `veloray logs subscriptions` shows its
-journal. Restore pauses an active instance during data replacement; uninstall
-stops it and disables the automatic updater timer.
+## Native server
 
-Its default listener is `127.0.0.1:8611`. Keep that port free. The managed updater
-stops/restarts an already active instance around migrations and checks its local
-health. Its optional unit is preserved during application rollback. The service
-uses the existing root-managed environment and read-only template directory.
-Do not give it the privileged agent's credentials. Separate-host deployment
-requires an operator-prepared database connection with TLS, the same field key,
-template files and matching application/schema versions; automated provisioning
-of a remote host is outside this unit's scope.
+The installer enables `veloray-subscriptions.service` and a root-only
+`veloray-subscription-endpoint.timer`. The timer checks requested changes every
+few seconds. It renders an Nginx HTTPS listener that forwards to the
+subscription-only service, validates and reloads Nginx, checks the local HTTPS
+health route, then records the new port in the database. Nginx reuses the
+panel's existing certificate. The web process cannot write Nginx configuration
+or read the certificate key. `sudo veloray stop` stops the timer before the
+services; `sudo veloray start` starts it again. Inspect the independent process
+with `sudo veloray logs subscriptions` and the timer with
+`sudo journalctl -u veloray-subscription-endpoint.service -n 100`.
 
-Configure your own TLS certificate and Nginx subscription virtual host, forwarding
-only `/sub/` and optionally health. For example, inside a TLS server block:
+## Docker
 
-```nginx
-location /sub/ {
-    proxy_pass http://127.0.0.1:8611;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-Proto https;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-}
-location / { return 404; }
-```
+The Caddy proxy serves the panel on `443` and subscriptions on the configured
+port. Only the subscription-only process handles requests to the latter. The
+panel requests port changes over a dedicated Unix socket restricted to one
+integer operation. Caddy's configuration API uses a separate private socket
+inside the proxy container. Its applied port is saved in the proxy config
+volume so Compose restarts preserve the choice. See
+[container deployment](container-deployment.md) for the stack and backups.
 
-Set `VELORAY_PUBLIC_URL` for that process through a systemd drop-in if its browser
-portal must generate URLs at the subscription origin. A second service does not
-automatically rewrite links copied from the primary panel; substitute only the
-origin, preserving the complete secret path. Never log subscription tokens in
-reverse-proxy access logs. Check a synthetic active, expired and HWID-limited
-subscription at the new domain before changing customer-facing links.
+For a custom HTML subscription page, change the template path separately in
+**Settings → Subscription**. That setting controls the page content; the port
+setting controls its public origin. See [subscription customization](subscription-customization.md).
