@@ -155,7 +155,7 @@ func legacySubscriptionInfo(c, cfg Data) Data {
 // never the administrator SPA or API. Both modes share these exact files.
 func (s *Server) serveSubscriptionAsset(w http.ResponseWriter, r *http.Request) bool {
 	path := r.URL.Path
-	allowed := oneOf(path, "/subscription-portal.js", "/subscription-modern.js", "/subscription-modern.css", "/subscription-simple.js", "/subscription-simple.css", "/subscription-template-compat.js", "/subscription-template-compat.css")
+	allowed := oneOf(path, "/subscription-portal.js", "/subscription-modern.js", "/subscription-modern.css", "/subscription-simple.js", "/subscription-simple.css", "/subscription-traffic.js", "/subscription-traffic.css", "/subscription-connect.js", "/subscription-template-compat.js", "/subscription-template-compat.css")
 	if strings.HasPrefix(path, "/fonts/") || strings.HasPrefix(path, "/subscription-template-assets/") {
 		allowed = oneOf(strings.ToLower(filepath.Ext(path)), ".woff2", ".woff", ".css") && filepath.Clean(path) == path
 	}

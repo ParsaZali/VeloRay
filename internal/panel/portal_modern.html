@@ -8,13 +8,15 @@
   <meta name="referrer" content="no-referrer">
   <title>{{.Site}} · {{.Name}}</title>
   <link rel="stylesheet" href="/subscription-modern.css">
+<link rel="stylesheet" href="/subscription-traffic.css">
   <script src="/subscription-modern.js" defer></script>
+  <script src="/subscription-connect.js" defer></script>
+  <script src="/subscription-traffic.js" defer></script>
 </head>
 <body>
 <div class="portal-shell" data-client-expiry="{{.ExpiryISO}}" data-chart-url="{{.ChartURL}}" data-portal-version="2">
   <header class="topbar" aria-label="Subscription navigation">
     <div class="brand">
-      <span class="brand-symbol" aria-hidden="true"><svg viewBox="0 0 36 36" fill="none"><path d="M8 18 18 7l10 11-10 11L8 18Z" stroke="currentColor" stroke-width="2.5"/><path d="M13 18h10" stroke="currentColor" stroke-width="2.5"/></svg></span>
       <div class="brand-word"><span>{{.Site}}</span><small data-i18n="subscriptionCenter">Subscription center</small></div>
     </div>
     <div class="toolbar">
@@ -28,7 +30,7 @@
   <main id="main-content">
     <div class="welcome">
       <div class="welcome-text">
-        <div class="eyebrow"><span class="eyebrow-dot"></span><span data-i18n="yourSubscription">YOUR SUBSCRIPTION</span></div>
+
         <h1>{{.Name}}</h1>
         <p class="welcome-sub"><span data-i18n="manageConnection">Manage your subscription and connection profiles in one place.</span></p>
       </div>
@@ -36,6 +38,28 @@
     </div>
 
     {{if .Announcement}}<section class="announcement" aria-label="Service announcement"><span aria-hidden="true">✦</span><p>{{.Announcement}}</p>{{if .AnnouncementURL}}<a href="{{.AnnouncementURL}}" target="_blank" rel="noopener noreferrer" data-i18n="more">More ↗</a>{{end}}</section>{{end}}
+
+    <section class="panel subscription-card" aria-labelledby="link-heading">
+      <div class="panel-heading">
+        <div><div class="section-overline" data-i18n="subscriptionLink">SUBSCRIPTION LINK</div><h2 id="link-heading" data-i18n="yourLink">Your universal link</h2></div>
+
+      </div>
+      <p class="section-description" data-i18n="importHelp">Copy the link and import it into a compatible client to receive configuration updates automatically.</p>
+      <label class="field-caption" for="client-format" data-i18n="clientApp">Application</label>
+      <select id="client-format" class="client-format"><option value="" data-i18n="autoApp">Auto detect / other</option>{{if .Link}}<option value="base64">v2rayNG / v2rayN</option>{{end}}{{if .Clash}}<option value="clash">Clash / Mihomo</option>{{end}}{{if .SingBox}}<option value="singbox">sing-box</option>{{end}}{{if .Xray}}<option value="xray">Xray</option>{{end}}</select>
+      <label class="field-caption" for="subscription" data-i18n="url">Subscription URL</label>
+      <div class="subscription-input-row">
+        <input id="subscription" data-base-url="{{.URL}}" readonly value="{{.URL}}" aria-label="Subscription URL" dir="ltr" autocomplete="off" spellcheck="false">
+        <button type="button" id="copy-subscription" class="primary-button" data-success="Copied" data-error="Select and copy" data-i18n="copyLink">Copy link</button>
+        {{if .ShowQR}}<button type="button" class="outline-button qr-trigger" data-qr="{{.QR}}" data-label="Subscription" data-i18n="qr">QR code</button>{{end}}
+      </div>
+      <span id="copy-feedback" class="feedback" role="status" aria-live="polite"></span>
+      {{if .ShowDownloads}}<div class="format-links" aria-label="Subscription download formats">
+        {{if .Link}}<a href="{{.URL}}?format=base64&download=1">↓ Base64</a><a href="{{.URL}}?format=raw&download=1">↓ RAW</a>{{end}}{{if .Clash}}<a href="{{.URL}}?format=clash&download=1">↓ Clash</a>{{end}}{{if .SingBox}}<a href="{{.URL}}?format=singbox&download=1">↓ sing-box</a>{{end}}{{if .Xray}}<a href="{{.URL}}?format=xray&download=1">↓ Xray JSON</a>{{end}}
+        {{if .Profile}}<a href="{{.URL}}?format=wireguard">↓ WireGuard</a>{{end}}
+        <a href="{{.URL}}?format=json" data-i18n="jsonDetails">JSON details</a>
+      </div>{{end}}
+    </section>
 
     <div class="stat-grid" aria-label="Subscription summary">
       <section class="stat-card">
@@ -93,9 +117,8 @@
       <section class="panel quota-panel" aria-labelledby="quota-heading">
         <div class="section-overline" data-i18n="quota">QUOTA</div>
         <h2 id="quota-heading" data-i18n="dataAllowance">Data allowance</h2>
-        <div class="ring" style="--usage:{{.Percent}}%" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{.Percent}}" aria-label="Traffic quota used">
-          <div><strong>{{.Percent}}%</strong><small data-i18n="consumed">consumed</small></div>
-        </div>
+        <div class="quota-amount"><strong>{{.Used}}</strong><span> / {{.Quota}}</span></div>
+        {{if .Limited}}<progress max="100" value="{{.Percent}}" aria-label="Traffic quota used">{{.Percent}}%</progress>{{end}}
         <div class="quota-legend"><span data-i18n="rawTraffic">Raw traffic</span><strong dir="ltr">{{.Actual}}</strong></div>
         <div class="quota-legend"><span data-i18n="billingRate">Billing multiplier</span><strong dir="ltr">{{.Factor}}×</strong></div>
         <div class="quota-legend"><span data-i18n="registeredDevices">Registered devices</span><strong dir="ltr">{{.DeviceCount}}{{if .HasDeviceLimit}} / {{.DeviceLimit}}{{else}} / ∞{{end}}</strong></div>
@@ -103,26 +126,6 @@
         <p class="quota-description" data-i18n="quotaNote">Usage is counted from server accounting.</p>
       </section>
     </div>
-
-    <section class="panel subscription-card" aria-labelledby="link-heading">
-      <div class="panel-heading">
-        <div><div class="section-overline" data-i18n="subscriptionLink">SUBSCRIPTION LINK</div><h2 id="link-heading" data-i18n="yourLink">Your universal link</h2></div>
-        <span class="sub-tag">SUB</span>
-      </div>
-      <p class="section-description" data-i18n="importHelp">Copy the link and import it into a compatible client to receive configuration updates automatically.</p>
-      <label class="field-caption" for="subscription" data-i18n="url">Subscription URL</label>
-      <div class="subscription-input-row">
-        <input id="subscription" readonly value="{{.URL}}" aria-label="Subscription URL" dir="ltr" autocomplete="off" spellcheck="false">
-        <button type="button" id="copy-subscription" class="primary-button" data-success="Copied" data-error="Select and copy" data-i18n="copyLink">Copy link</button>
-        {{if .ShowQR}}<button type="button" class="outline-button qr-trigger" data-qr="{{.QR}}" data-label="Subscription" data-i18n="qr">QR code</button>{{end}}
-      </div>
-      <span id="copy-feedback" class="sr-only" role="status" aria-live="polite"></span>
-      {{if .ShowDownloads}}<div class="format-links" aria-label="Subscription download formats">
-        {{if .Link}}<a href="{{.URL}}?format=base64&download=1">↓ Base64</a><a href="{{.URL}}?format=raw&download=1">↓ RAW</a>{{end}}{{if .Clash}}<a href="{{.URL}}?format=clash&download=1">↓ Clash</a>{{end}}{{if .SingBox}}<a href="{{.URL}}?format=singbox&download=1">↓ sing-box</a>{{end}}{{if .Xray}}<a href="{{.URL}}?format=xray&download=1">↓ Xray JSON</a>{{end}}
-        {{if .Profile}}<a href="{{.URL}}?format=wireguard">↓ WireGuard</a>{{end}}
-        <a href="{{.URL}}?format=json" data-i18n="jsonDetails">JSON details</a>
-      </div>{{end}}
-    </section>
 
     {{if .ShowURI}}
       {{if .Connections}}

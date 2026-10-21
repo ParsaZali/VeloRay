@@ -59,6 +59,8 @@ type Overview = {
 };
 type TrafficPoint = {
   at: string;
+  used_traffic_bytes?: number;
+  bytes?: number;
   raw_upload_traffic_bytes: number;
   raw_download_traffic_bytes: number;
   upload_bytes: number;
@@ -131,7 +133,18 @@ function Metric({
     </Card>
   );
 }
-function TrafficChart({ points }: { points: TrafficPoint[] }) {
+function TrafficChart({
+  points,
+  loading,
+  error,
+  onRetry,
+}: {
+  points: TrafficPoint[];
+  loading: boolean;
+  error: string;
+  onRetry: () => void;
+}) {
+  const locale = useLocale();
   const root = useRef<HTMLDivElement>(null),
     chart = useRef<echarts.ECharts | null>(null);
   const { resolved } = useTheme();
@@ -194,7 +207,7 @@ function TrafficChart({ points }: { points: TrafficPoint[] }) {
     const css = getComputedStyle(document.documentElement),
       color = css.getPropertyValue("--chart-line").trim();
     const downloadColor = css.getPropertyValue("--info").trim();
-    const series = [
+    const directions = [
       {
         name: t("Upload"),
         color,
@@ -207,7 +220,25 @@ function TrafficChart({ points }: { points: TrafficPoint[] }) {
         cumulative: "raw_download_traffic_bytes",
         interval: "download_bytes",
       },
-    ].map((direction) => ({
+    ];
+    // Old accounting records can have totals without directional counters.
+    // Keep that measured traffic visible instead of plotting two zero lines.
+    if (
+      points.some(
+        (p) =>
+          (p.used_traffic_bytes || 0) >
+          (p.raw_upload_traffic_bytes || 0) +
+            (p.raw_download_traffic_bytes || 0),
+      )
+    ) {
+      directions.push({
+        name: t("Earlier traffic"),
+        color: css.getPropertyValue("--muted").trim(),
+        cumulative: "earlier",
+        interval: "earlier",
+      });
+    }
+    const series = directions.map((direction) => ({
       name: direction.name,
       type: "line",
       smooth: 0.25,
@@ -223,10 +254,25 @@ function TrafficChart({ points }: { points: TrafficPoint[] }) {
       },
       data: points.map((p) => [
         new Date(p.at).getTime(),
-        mode === "usage"
-          ? (p[direction.cumulative as keyof TrafficPoint] ?? 0)
-          : Number(p[direction.interval as keyof TrafficPoint] ?? 0) /
-            Math.max(1, p.interval_seconds || 300),
+        direction.cumulative === "earlier"
+          ? Math.max(
+              0,
+              Number(mode === "usage" ? p.used_traffic_bytes : p.bytes) -
+                Number(
+                  mode === "usage"
+                    ? p.raw_upload_traffic_bytes || 0
+                    : p.upload_bytes || 0,
+                ) -
+                Number(
+                  mode === "usage"
+                    ? p.raw_download_traffic_bytes || 0
+                    : p.download_bytes || 0,
+                ),
+            ) / (mode === "usage" ? 1 : Math.max(1, p.interval_seconds || 300))
+          : mode === "usage"
+            ? Number(p[direction.cumulative as keyof TrafficPoint] || 0)
+            : Number(p[direction.interval as keyof TrafficPoint] || 0) /
+              Math.max(1, p.interval_seconds || 300),
       ]),
     }));
     chart.current?.setOption(
@@ -296,7 +342,7 @@ function TrafficChart({ points }: { points: TrafficPoint[] }) {
       },
       true,
     );
-  }, [points, resolved, mode]);
+  }, [points, resolved, mode, locale]);
   return (
     <div>
       <div className="chart-mode">
@@ -322,7 +368,24 @@ function TrafficChart({ points }: { points: TrafficPoint[] }) {
         aria-label={t("Traffic chart")}
       />
       <ChartRange points={preview} value={windowRange} onChange={updateRange} />
-      {!points.length && (
+      {loading && !points.length && (
+        <p role="status" className="text-center text-xs text-[var(--muted)]">
+          {t("Loading…")}
+        </p>
+      )}
+      {error && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center justify-center gap-3 text-xs text-red-500"
+        >
+          <span>{error}</span>
+          <Button variant="outline" onClick={onRetry} disabled={loading}>
+            <RefreshCw className="h-3.5 w-3.5" />
+            {t("Refresh")}
+          </Button>
+        </div>
+      )}
+      {!loading && !error && !points.length && (
         <p className="text-center text-xs text-[var(--muted)]">
           {t("No traffic recorded yet.")}
         </p>
@@ -340,6 +403,7 @@ export function Dashboard() {
     [cfg, setCfg] = useState<AppSettings | null>(null),
     [sys, setSys] = useState<SystemInfo | null>(null),
     [msg, setMsg] = useState(""),
+    [historyError, setHistoryError] = useState(""),
     [busy, setBusy] = useState(false);
   useEffect(() => {
     if (!session || typeof EventSource === "undefined") return;
@@ -369,7 +433,7 @@ export function Dashboard() {
     const options = { signal: controller.signal };
     setBusy(true);
     try {
-      const [ov, n, c, h, s, system] = await Promise.all([
+      const [ov, n, c, h, s, system] = await Promise.allSettled([
         api<Overview>("/overview", options),
         can(session, "nodes.read")
           ? api<NodeItem[]>("/nodes/", options)
@@ -384,13 +448,33 @@ export function Dashboard() {
           : Promise.resolve(null),
       ]);
       if (controller.signal.aborted) return;
-      setO(ov);
-      setNodes(n);
-      setClients(c);
-      setHistory(h);
-      setCfg(s);
-      setSys(system);
-      setMsg("");
+      // A server-info or client-list failure must not discard valid history.
+      if (ov.status === "fulfilled") setO(ov.value);
+      if (n.status === "fulfilled") setNodes(n.value);
+      if (c.status === "fulfilled") setClients(c.value);
+      if (h.status === "fulfilled") {
+        setHistory(
+          (Array.isArray(h.value) ? h.value : []).filter((point) =>
+            Number.isFinite(Date.parse(point.at)),
+          ),
+        );
+        setHistoryError("");
+      } else
+        setHistoryError(
+          h.reason instanceof Error
+            ? h.reason.message
+            : t("Traffic history could not load."),
+        );
+      if (s.status === "fulfilled") setCfg(s.value);
+      if (system.status === "fulfilled") setSys(system.value);
+      const failure = [ov, n, c, s, system].find(
+        (result) => result.status === "rejected",
+      );
+      setMsg(
+        failure?.status === "rejected"
+          ? String(failure.reason?.message || failure.reason)
+          : "",
+      );
     } catch (e: any) {
       if (!controller.signal.aborted) setMsg(e.message);
     } finally {
@@ -408,10 +492,9 @@ export function Dashboard() {
     };
   }, [load]);
   useEffect(() => {
-    if (!cfg) return;
     const id = setInterval(
       load,
-      Math.max(5, cfg.dashboard_refresh_seconds) * 1000,
+      Math.max(5, cfg?.dashboard_refresh_seconds || 15) * 1000,
     );
     return () => clearInterval(id);
   }, [cfg?.dashboard_refresh_seconds, load]);
@@ -636,7 +719,12 @@ export function Dashboard() {
                   )}
                 </div>
               )}
-            <TrafficChart points={history} />
+            <TrafficChart
+              points={history}
+              loading={busy}
+              error={historyError}
+              onRetry={load}
+            />
           </CardContent>
         </Card>
         <Card>

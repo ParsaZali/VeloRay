@@ -35,6 +35,14 @@
       if (feedback) feedback.textContent = success ? button.dataset.success : button.dataset.error;
     });
   });
+  const search = document.getElementById("profile-search");
+  search?.addEventListener("input", () => {
+    const query = search.value.trim().toLocaleLowerCase();
+    document.querySelectorAll(".profiles li").forEach(row => {
+      row.hidden = !(row.dataset.search || "").toLocaleLowerCase().includes(query);
+    });
+  });
   const dialog = document.getElementById("qr-dialog");
   document.getElementById("show-qr")?.addEventListener("click", () => dialog?.showModal());
+  dialog?.addEventListener("click", event => { if (event.target === dialog) dialog.close(); });
 })();
