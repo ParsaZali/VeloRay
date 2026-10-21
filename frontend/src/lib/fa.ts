@@ -1,4 +1,9 @@
 const entries = `
+FakeTLS hostname|دامنه پوششی FakeTLS
+Use a public HTTPS hostname reachable from this node. Each user receives a separate Telegram secret, traffic counter and revocable connection. No local TLS certificate is needed.|دامنه HTTPS عمومی و قابل دسترس از نود وارد کنید. هر کاربر، سکرت تلگرام و آمار مصرف مستقل دارد و دسترسی او جداگانه قطع می‌شود. نیازی به گواهی TLS محلی نیست.
+AmneziaWG obfuscation|تنظیمات استتار AmneziaWG
+These values must match the client configuration. Exports include them automatically. UDP must be allowed on the selected port.|این مقادیر باید با کانفیگ کلاینت یکسان باشند و به صورت خودکار در خروجی قرار می‌گیرند. پورت UDP انتخاب‌شده باید باز باشد.
+
 Traffic history could not load.|دریافت تاریخچه مصرف ناموفق بود.
 
 Install app|نصب برنامه

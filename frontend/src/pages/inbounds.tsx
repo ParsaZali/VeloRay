@@ -61,6 +61,7 @@ type FormState = {
   wg_dns: string;
   socks_udp: boolean;
   ss_method: string;
+  awg: Record<string, string>;
   mtproto_host: string;
   st_handshake: string;
   st_port: string;
@@ -107,6 +108,19 @@ const fresh = (node = ""): FormState => ({
   wg_dns: "1.1.1.1",
   socks_udp: true,
   ss_method: "aes-256-gcm",
+  awg: {
+    jc: "4",
+    jmin: "40",
+    jmax: "70",
+    s1: "32",
+    s2: "64",
+    s3: "8",
+    s4: "16",
+    h1: "123456789",
+    h2: "234567890",
+    h3: "345678901",
+    h4: "456789012",
+  },
   mtproto_host: "www.cloudflare.com",
   st_handshake: "",
   st_port: "443",
@@ -185,6 +199,7 @@ const protocolOptions = [
   ["snell", "Snell v6", "shield"],
   ["shadowtls", "ShadowTLS v3", "shield"],
   ["mtproto", "MTProto · Telegram", "paper-plane"],
+  ["amneziawg", "AmneziaWG", "link"],
   ["wireguard", "WireGuard", "link"],
   ["http", "HTTP Proxy", "globe"],
   ["socks", "SOCKS5", "socks"],
@@ -321,8 +336,9 @@ export function InboundsPage() {
     setForm((f) => {
       const n: any = { ...f, [k]: v };
       if (k === "protocol") {
-        if (v === "mtproto") {
+        if (["mtproto", "amneziawg"].includes(v)) {
           n.core = "native";
+          if (v === "amneziawg") n.wg_mtu = "1280";
           n.transport = "raw";
           n.security = "none";
           n.flow = "";
@@ -443,13 +459,19 @@ export function InboundsPage() {
       form.fallbacks.length
     )
       p.protocol_settings.fallbacks = form.fallbacks;
-    if (form.protocol === "wireguard")
+    if (["wireguard", "amneziawg"].includes(form.protocol))
       p.protocol_settings = {
         secret_key: form.wg_secret_key,
         public_key: form.wg_public_key,
         mtu: Number(form.wg_mtu || 1420),
         dns: form.wg_dns || "1.1.1.1",
       };
+    if (form.protocol === "amneziawg")
+      Object.entries(form.awg).forEach(([key, value]) => {
+        p.protocol_settings[key] = key.startsWith("h")
+          ? value.trim()
+          : Number(value);
+      });
     if (form.protocol === "mtproto")
       p.protocol_settings = {
         fake_tls_host: form.mtproto_host.trim().toLowerCase(),
@@ -567,6 +589,12 @@ export function InboundsPage() {
       wg_dns: String(ps.dns || "1.1.1.1"),
       socks_udp: ps.udp !== false,
       ss_method: String(ps.method || "aes-256-gcm"),
+      awg: Object.fromEntries(
+        Object.entries(fresh().awg).map(([key, value]) => [
+          key,
+          String(ps[key] ?? value),
+        ]),
+      ),
       mtproto_host: String(ps.fake_tls_host || "www.cloudflare.com"),
       st_handshake: String(ps.handshake_server || ""),
       st_port: String(ps.handshake_port || 443),
@@ -738,7 +766,9 @@ export function InboundsPage() {
                     >
                       <option value="xray">Xray · Primary</option>
                       <option value="singbox">sing-box</option>
-                      <option value="native">VeloRay · MTProto</option>
+                      <option value="native">
+                        VeloRay · MTProto / AmneziaWG
+                      </option>
                     </Select>
                   </Field>
                   {!editing && form.core !== "native" && (
@@ -879,6 +909,7 @@ export function InboundsPage() {
                                 "snell",
                                 "shadowtls",
                                 "mtproto",
+                                "amneziawg",
                               ].includes(v)) ||
                             (form.core === "singbox" &&
                               [
@@ -894,7 +925,8 @@ export function InboundsPage() {
                                 "http",
                                 "socks",
                               ].includes(v)) ||
-                            (form.core === "native" && v === "mtproto"),
+                            (form.core === "native" &&
+                              ["mtproto", "amneziawg"].includes(v)),
                         )
                         .map(([v, l]) => (
                           <option key={v} value={v}>
@@ -928,9 +960,13 @@ export function InboundsPage() {
                       </p>
                     </section>
                   )}
-                  {!["wireguard", "tunnel", "tun", "mtproto"].includes(
-                    form.protocol,
-                  ) && (
+                  {![
+                    "wireguard",
+                    "tunnel",
+                    "tun",
+                    "mtproto",
+                    "amneziawg",
+                  ].includes(form.protocol) && (
                     <section>
                       <div className="panel-section-title mb-3">
                         {t("Transport")}
@@ -1021,9 +1057,13 @@ export function InboundsPage() {
                       )}
                     </section>
                   )}
-                  {!["wireguard", "tunnel", "tun", "mtproto"].includes(
-                    form.protocol,
-                  ) && (
+                  {![
+                    "wireguard",
+                    "tunnel",
+                    "tun",
+                    "mtproto",
+                    "amneziawg",
+                  ].includes(form.protocol) && (
                     <section>
                       <div className="panel-section-title mb-3">
                         {t("Security")}
@@ -1182,10 +1222,12 @@ export function InboundsPage() {
                       )}
                     </section>
                   )}
-                  {form.protocol === "wireguard" && (
+                  {["wireguard", "amneziawg"].includes(form.protocol) && (
                     <section>
                       <div className="panel-section-title mb-3">
-                        {t("WireGuard")}
+                        {form.protocol === "amneziawg"
+                          ? "AmneziaWG"
+                          : "WireGuard"}
                       </div>
                       <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
                         <div>
@@ -1229,8 +1271,12 @@ export function InboundsPage() {
                           <Input
                             className="input"
                             type="number"
-                            min="1200"
-                            max="9000"
+                            min={
+                              form.protocol === "amneziawg" ? "1280" : "1200"
+                            }
+                            max={
+                              form.protocol === "amneziawg" ? "1420" : "9000"
+                            }
                             value={form.wg_mtu}
                             onChange={(e) => set("wg_mtu", e.target.value)}
                           />
@@ -1242,6 +1288,56 @@ export function InboundsPage() {
                             onChange={(e) => set("wg_dns", e.target.value)}
                           />
                         </Field>
+                      </div>
+                    </section>
+                  )}
+                  {form.protocol === "amneziawg" && (
+                    <section className="space-y-3">
+                      <div className="panel-section-title">
+                        {t("AmneziaWG obfuscation")}
+                      </div>
+                      <p className="text-xs leading-6 text-[var(--muted-strong)]">
+                        {t(
+                          "These values must match the client configuration. Exports include them automatically. UDP must be allowed on the selected port.",
+                        )}
+                      </p>
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        {Object.entries(form.awg).map(([key, value]) => (
+                          <Field
+                            key={key}
+                            label={
+                              key === "jc"
+                                ? "Jc · Junk count"
+                                : key === "jmin"
+                                  ? "Jmin · Minimum size"
+                                  : key === "jmax"
+                                    ? "Jmax · Maximum size"
+                                    : key.toUpperCase()
+                            }
+                          >
+                            <Input
+                              type="number"
+                              value={value}
+                              min={key.startsWith("h") ? 5 : 0}
+                              max={
+                                key.startsWith("h")
+                                  ? 4294967295
+                                  : key === "jc"
+                                    ? 128
+                                    : key === "s4"
+                                      ? 64
+                                      : 1280
+                              }
+                              onChange={(e) =>
+                                set("awg", {
+                                  ...form.awg,
+                                  [key]: e.target.value,
+                                })
+                              }
+                              required
+                            />
+                          </Field>
+                        ))}
                       </div>
                     </section>
                   )}
@@ -1563,12 +1659,18 @@ export function InboundsPage() {
                         </Badge>
                       </td>
                       <td>
-                        {["wireguard", "tunnel", "tun"].includes(i.protocol)
+                        {[
+                          "wireguard",
+                          "tunnel",
+                          "tun",
+                          "amneziawg",
+                          "mtproto",
+                        ].includes(i.protocol)
                           ? t("Native")
                           : i.transport}
                       </td>
                       <td>
-                        {i.protocol === "wireguard"
+                        {["wireguard", "amneziawg"].includes(i.protocol)
                           ? t("WireGuard")
                           : ["tunnel", "tun"].includes(i.protocol)
                             ? t("Native")

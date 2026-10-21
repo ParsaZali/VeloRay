@@ -45,6 +45,7 @@ type Engine struct {
 	apply     sync.Mutex
 	mu        sync.RWMutex
 	live      map[string]liveInbound
+	awgs      map[string]*awgRuntime
 	counters  map[string]*account
 	counterMu sync.Mutex
 	network   mtglib.Network
@@ -52,7 +53,7 @@ type Engine struct {
 }
 
 func New() *Engine {
-	return &Engine{live: map[string]liveInbound{}, counters: map[string]*account{}, network: publicNetwork{}}
+	return &Engine{live: map[string]liveInbound{}, awgs: map[string]*awgRuntime{}, counters: map[string]*account{}, network: publicNetwork{}}
 }
 func (e *Engine) account(name string) *account {
 	e.counterMu.Lock()
@@ -95,6 +96,9 @@ func (e *Engine) Apply(raw []byte) error {
 		}
 	}
 	for _, in := range cfg.Inbounds {
+		if in.Protocol != "mtproto" {
+			continue
+		}
 		key := address(in)
 		prior := old[key]
 		ln := prior.listener
@@ -129,6 +133,10 @@ func (e *Engine) Apply(raw []byte) error {
 			users = append(users, user)
 		}
 		next[key] = liveInbound{listener: ln, users: users}
+	}
+	if err := e.applyAWG(cfg.Inbounds); err != nil {
+		cleanup()
+		return err
 	}
 	e.mu.Lock()
 	e.live = next
@@ -183,9 +191,14 @@ func (e *Engine) Close() {
 	defer e.apply.Unlock()
 	e.mu.Lock()
 	old := e.live
+	awgs := e.awgs
+	e.awgs = map[string]*awgRuntime{}
 	e.live = map[string]liveInbound{}
 	e.closed = true
 	e.mu.Unlock()
+	for _, awg := range awgs {
+		awg.close()
+	}
 	for _, in := range old {
 		in.listener.ln.Close()
 		for _, u := range in.users {
@@ -220,34 +233,49 @@ func (e *Engine) serve(conn net.Conn, ln *listener) {
 	if _, err := io.ReadFull(conn, head); err != nil {
 		return
 	}
+
 	size := int(binary.BigEndian.Uint16(head[3:]))
-	if size < 43 || size > 16384 || head[0] != 22 {
-		return
-	}
-	frame := make([]byte, 5+size)
-	copy(frame, head)
-	if _, err := io.ReadFull(conn, frame[5:]); err != nil {
-		return
-	}
-	// Select a user's secret by the FakeTLS HMAC. The pinned engine performs the
-	// complete SNI, timestamp, anti-replay and obfuscated transport validation.
-	random := append([]byte{}, frame[11:43]...)
-	zeroed := append([]byte{}, frame...)
-	clear(zeroed[11:43])
-	e.mu.RLock()
-	var chosen *proxyUser
-	for _, in := range e.live {
-		if in.listener == ln {
-			for _, u := range in.users {
-				mac := hmac.New(sha256.New, u.secret.Key[:])
-				mac.Write(zeroed)
-				if hmac.Equal(mac.Sum(nil)[:28], random[:28]) {
-					chosen = u
-					break
-				}
-			}
-			break
+	frame := head
+	if size >= 43 && size <= 16384 && head[0] == 22 {
+		frame = make([]byte, 5+size)
+		copy(frame, head)
+		if _, err := io.ReadFull(conn, frame[5:]); err != nil {
+			return
 		}
+	}
+	e.mu.RLock()
+	var chosen, fallbackUser *proxyUser
+	for _, in := range e.live {
+		if in.listener != ln {
+			continue
+		}
+		for _, u := range in.users {
+			expired := false
+			if u.config.ExpiresAt != "" {
+				at, _ := time.Parse(time.RFC3339, u.config.ExpiresAt)
+				expired = !time.Now().Before(at)
+			}
+			if !expired && fallbackUser == nil {
+				fallbackUser = u
+			}
+			if len(frame) < 43 {
+				continue
+			}
+			zeroed := append([]byte{}, frame...)
+			clear(zeroed[11:43])
+			mac := hmac.New(sha256.New, u.secret.Key[:])
+			mac.Write(zeroed)
+			if hmac.Equal(mac.Sum(nil)[:28], frame[11:39]) {
+				chosen = u
+				break
+			}
+		}
+		break
+	}
+	// Ordinary TLS and unknown secrets follow the pinned engine's real domain
+	// fronting path. They never emit authenticated-user traffic counters.
+	if chosen == nil {
+		chosen = fallbackUser
 	}
 	if chosen == nil {
 		e.mu.RUnlock()
@@ -288,10 +316,17 @@ type Counter struct {
 }
 
 func (e *Engine) Snapshot() ([]Counter, map[string]map[string]int64) {
+	online := map[string]map[string]int64{}
+	e.mu.RLock()
+	for _, awg := range e.awgs {
+		for name, ips := range awg.online() {
+			online[name] = ips
+		}
+	}
+	e.mu.RUnlock()
 	e.counterMu.Lock()
 	defer e.counterMu.Unlock()
 	counters := []Counter{}
-	online := map[string]map[string]int64{}
 	for name, a := range e.counters {
 		a.mu.Lock()
 		counters = append(counters, Counter{"user>>>" + name + ">>>traffic>>>uplink", a.up}, Counter{"user>>>" + name + ">>>traffic>>>downlink", a.down})

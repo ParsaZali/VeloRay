@@ -8,6 +8,7 @@ import (
 	qrcode "github.com/skip2/go-qrcode"
 	"html/template"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -144,7 +145,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		}
 		if active(member, time.Now()) && flag(inbound, "enabled") && flag(node, "enabled") {
 			observed, telemetryErr := timestamp(node, "_telemetry_at")
-			if telemetryErr != nil || time.Since(observed) < 0 || time.Since(observed) >= 20*time.Second || !flag(node, "_online_available") || !oneOf(str(inbound, "protocol"), "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell", "shadowtls", "mtproto") {
+			if telemetryErr != nil || time.Since(observed) < 0 || time.Since(observed) >= 20*time.Second || !flag(node, "_online_available") || !oneOf(str(inbound, "protocol"), "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell", "shadowtls", "mtproto", "amneziawg") {
 				onlineKnown = false
 			} else if flag(obj(node, "_online_clients"), fmt.Sprint(num(member, "id"))) {
 				onlineConnected = true
@@ -227,13 +228,13 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 	link := shareLink(c, i, n)
 	links := []string{}
 	details := []Data{}
-	for _, item := range connections {
+	for index, item := range connections {
 		client := clone(item.client)
 		uri := shareLink(client, item.inbound, item.node)
 		if uri != "" {
 			links = append(links, uri)
 		}
-		details = append(details, Data{"name": str(item.inbound, "name"), "protocol": str(item.inbound, "protocol"), "link": uri, "node": str(item.node, "name"), "host": str(item.node, "public_host")})
+		details = append(details, Data{"name": str(item.inbound, "name"), "protocol": str(item.inbound, "protocol"), "link": uri, "node": str(item.node, "name"), "host": str(item.node, "public_host"), "profile": profile(client, item.inbound, item.node), "index": index})
 	}
 	link = strings.Join(links, "\n")
 	profile := profile(c, i, n)
@@ -346,7 +347,17 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 			body = output
 		}
 		w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
-	case "wireguard", "wg":
+	case "wireguard", "wg", "amneziawg", "awg":
+		if value := r.URL.Query().Get("connection"); value != "" {
+			index, err := strconv.Atoi(value)
+			if err != nil || index < 0 || index >= len(connections) {
+				writeJSON(w, 400, Data{"detail": "invalid connection index"})
+				return
+			}
+			item := connections[index]
+			profile = connectionProfile(item.client, item.inbound, item.node)
+		}
+
 		if profile == "" {
 			writeJSON(w, 400, Data{"detail": "No WireGuard profile is available"})
 			return

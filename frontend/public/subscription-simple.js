@@ -24,7 +24,7 @@
   document.querySelectorAll("[data-copy]").forEach(button => {
     button.addEventListener("click", async () => {
       const input = document.getElementById(button.dataset.copy);
-      if (!(input instanceof HTMLInputElement)) return;
+      if (!(input instanceof HTMLInputElement) && !(input instanceof HTMLTextAreaElement)) return;
       let success = false;
       try { await navigator.clipboard.writeText(input.value); success = true; } catch {}
       if (!success) {
@@ -43,6 +43,9 @@
     });
   });
   const dialog = document.getElementById("qr-dialog");
-  document.getElementById("show-qr")?.addEventListener("click", () => dialog?.showModal());
+  const qrImage = document.getElementById("subscription-qr");
+  const subscriptionQR = qrImage?.src;
+  document.getElementById("show-qr")?.addEventListener("click", () => { if(qrImage) qrImage.src = subscriptionQR; dialog?.showModal(); });
+  document.querySelectorAll("[data-profile-qr]").forEach(button => button.addEventListener("click", () => { if(qrImage) qrImage.src = button.dataset.profileQr; dialog?.showModal(); }));
   dialog?.addEventListener("click", event => { if (event.target === dialog) dialog.close(); });
 })();

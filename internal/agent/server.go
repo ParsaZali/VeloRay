@@ -110,7 +110,7 @@ func (s Server) Handler() http.Handler {
 		if s.Native == nil {
 			return nil, errors.New("native runtime unavailable; upgrade the node agent")
 		}
-		return map[string]any{"version": 1, "protocols": []string{"mtproto"}, "per_user_traffic": true, "hot_users": true}, nil
+		return map[string]any{"version": 1, "protocols": []string{"mtproto", "amneziawg"}, "per_user_traffic": true, "hot_users": true}, nil
 	}, "GET"))
 	mux.HandleFunc("/diagnostics", wrap(func(c context.Context, _ map[string]json.RawMessage) (any, error) {
 		result := map[string]any{"xray": s.Manager.Diagnostics(c)}

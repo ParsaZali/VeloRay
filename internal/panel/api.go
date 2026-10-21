@@ -509,7 +509,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 			if err != nil {
 				return nil, fail(400, "inbound does not exist")
 			}
-			if str(inbound, "protocol") == "wireguard" {
+			if oneOf(str(inbound, "protocol"), "wireguard", "amneziawg") {
 				ps := obj(d, "protocol_settings")
 				if str(ps, "private_key") == "" || str(ps, "public_key") == "" {
 					node, err := get(ctx, tx, "nodes", num(inbound, "node"))
@@ -837,6 +837,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request, kind string, id 
 			if err != nil {
 				return nil, 0, err
 			}
+
 			out, err := s.nodeCall(ctx, d, "/xray/ports", Data{"config": cfg})
 			if err != nil {
 				return nil, 0, fail(502, err.Error())
@@ -901,7 +902,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request, kind string, id 
 			}
 			candidate["node"] = id
 			port := num(candidate, "port")
-			if port < 1 || port > 65535 || net.ParseIP(str(candidate, "listen")) == nil || !oneOf(str(candidate, "protocol"), "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "http", "socks", "tunnel", "tun", "tuic", "naive", "snell", "shadowtls") || !oneOf(str(candidate, "transport"), "raw", "ws", "grpc", "xhttp", "httpupgrade", "mkcp", "hysteria") {
+			if port < 1 || port > 65535 || net.ParseIP(str(candidate, "listen")) == nil || !oneOf(str(candidate, "protocol"), "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "http", "socks", "tunnel", "tun", "tuic", "naive", "snell", "shadowtls", "mtproto", "amneziawg") || !oneOf(str(candidate, "transport"), "raw", "ws", "grpc", "xhttp", "httpupgrade", "mkcp", "hysteria") {
 				return nil, 0, fail(400, "valid protocol, transport, IP listen address and port are required")
 			}
 			if port == 10085 || port == 9191 || flag(d, "is_local") && (port == 8610 || port == int64(s.Config.PanelPort)) {
@@ -913,6 +914,17 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request, kind string, id 
 				protocol = "dokodemo-door"
 			}
 			cfg := Data{"inbounds": []any{Data{"tag": "candidate", "listen": candidate["listen"], "port": candidate["port"], "protocol": protocol, "settings": obj(candidate, "protocol_settings"), "streamSettings": stream}}}
+			if oneOf(protocol, "mtproto", "amneziawg") {
+				entry := Data{"tag": "candidate", "listen": candidate["listen"], "port": candidate["port"], "protocol": protocol, "users": []any{}}
+				if protocol == "amneziawg" {
+					params, err := panelAWGSettings(obj(candidate, "protocol_settings"))
+					if err != nil {
+						return nil, 0, fail(400, err.Error())
+					}
+					entry["awg"] = params
+				}
+				cfg = Data{"inbounds": []any{}, "_native": Data{"inbounds": []any{entry}}}
+			}
 			out, err := s.nodeCall(ctx, d, "/xray/ports", Data{"config": cfg})
 			if err != nil {
 				return nil, 0, fail(502, err.Error())

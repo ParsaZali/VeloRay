@@ -6,11 +6,16 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 )
 
 // A domain-separated key allows a user to rotate the ordinary panel credential
 // without exposing it in a Telegram link. FakeTLS's hostname is part of ee secrets.
+func nativeUsername(c Data) string {
+	return strings.Replace(naiveUsername(c), "veloray-naive-", "veloray-native-", 1)
+}
+
 func mtprotoSecret(client, inbound Data) string {
 	key := sha256.Sum256([]byte("VeloRay/MTProto/v1/" + str(client, "credential")))
 	return "ee" + hex.EncodeToString(key[:16]) + hex.EncodeToString([]byte(str(obj(inbound, "protocol_settings"), "fake_tls_host")))
@@ -42,13 +47,25 @@ func buildNativeConfig(ctx context.Context, q Query, node Data) (Data, error) {
 					denied = append(denied, ip)
 				}
 			}
-			u := Data{"name": fmt.Sprintf("veloray:%d:%s", num(c, "id"), str(c, "name")), "secret": mtprotoSecret(c, in), "ip_limit": num(c, "device_limit"), "denied_ips": denied}
+			u := Data{"name": nativeUsername(c), "secret": mtprotoSecret(c, in), "ip_limit": num(c, "device_limit"), "denied_ips": denied}
+			if str(in, "protocol") == "amneziawg" {
+				ps := obj(c, "protocol_settings")
+				u = Data{"name": nativeUsername(c), "public_key": wireHex(str(ps, "public_key")), "preshared_key": wireHex(str(ps, "pre_shared_key")), "address": str(ps, "address")}
+			}
 			if value := str(c, "expires_at"); value != "" {
 				u["expires_at"] = value
 			}
 			users = append(users, u)
 		}
-		result = append(result, Data{"tag": fmt.Sprintf("in-%d-%s", num(in, "id"), str(in, "name")), "protocol": str(in, "protocol"), "listen": str(in, "listen"), "port": num(in, "port"), "users": users})
+		entry := Data{"tag": fmt.Sprintf("in-%d-%s", num(in, "id"), str(in, "name")), "protocol": str(in, "protocol"), "listen": str(in, "listen"), "port": num(in, "port"), "users": users}
+		if str(in, "protocol") == "amneziawg" {
+			params, err := panelAWGSettings(obj(in, "protocol_settings"))
+			if err != nil {
+				return nil, err
+			}
+			entry["awg"] = params
+		}
+		result = append(result, entry)
 	}
 	return Data{"inbounds": result}, nil
 }

@@ -51,6 +51,7 @@ func streamSettings(i, node Data) Data {
 	if s == "reality" {
 		v["realitySettings"] = merge(obj(v, "realitySettings"), Data{"show": false, "target": str(i, "reality_dest"), "serverNames": []any{str(i, "reality_server_name")}, "privateKey": str(i, "reality_private_key"), "shortIds": []any{str(i, "reality_short_id")}})
 	}
+
 	return v
 }
 func clientFlow(c, i Data) string {
@@ -338,8 +339,9 @@ func wireguardAddress(id int64) string {
 	}
 	return fmt.Sprintf("10.66.%d.%d/32", (id-1)/253+1, (id-1)%253+2)
 }
-func profile(c, i, node Data) string {
-	if str(i, "protocol") != "wireguard" {
+func profile(c, i, node Data) string { return connectionProfile(c, i, node) }
+func connectionProfile(c, i, node Data) string {
+	if !oneOf(str(i, "protocol"), "wireguard", "amneziawg") {
 		return ""
 	}
 	cs, ps := obj(c, "protocol_settings"), obj(i, "protocol_settings")
@@ -350,6 +352,19 @@ func profile(c, i, node Data) string {
 	v := fmt.Sprintf("[Interface]\nPrivateKey = %s\nAddress = %s\nDNS = %s\n\n[Peer]\nPublicKey = %s\nEndpoint = %s\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = %d\n", str(cs, "private_key"), address, fallback(str(ps, "dns"), "1.1.1.1"), str(ps, "public_key"), net.JoinHostPort(str(node, "public_host"), strconv.FormatInt(num(i, "port"), 10)), max(25, num(cs, "keepalive")))
 	if str(cs, "pre_shared_key") != "" {
 		v += "PresharedKey = " + str(cs, "pre_shared_key") + "\n"
+	}
+	if str(i, "protocol") == "amneziawg" {
+		params, err := panelAWGSettings(ps)
+		if err != nil {
+			return ""
+		}
+		extra := fmt.Sprintf("\nMTU = %d\nJc = %d\nJmin = %d\nJmax = %d\nS1 = %d\nS2 = %d\nS3 = %d\nS4 = %d\nH1 = %s\nH2 = %s\nH3 = %s\nH4 = %s", params.MTU, params.Jc, params.Jmin, params.Jmax, params.S1, params.S2, params.S3, params.S4, params.H1, params.H2, params.H3, params.H4)
+		v = strings.Replace(v, "\n\n[Peer]", extra+"\n\n[Peer]", 1)
+		allowed := "0.0.0.0/0"
+		if strings.Contains(address, ":") {
+			allowed = "::/0"
+		}
+		v = strings.Replace(v, "AllowedIPs = 0.0.0.0/0, ::/0", "AllowedIPs = "+allowed, 1)
 	}
 	return v
 }

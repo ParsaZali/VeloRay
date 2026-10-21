@@ -14,7 +14,10 @@ func naiveUsername(c Data) string {
 	return "veloray-naive-" + base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf("veloray:%d:%s", num(c, "id"), str(c, "name"))))
 }
 func canonicalNaiveUsername(name string) string {
-	const prefix = "veloray-naive-"
+	prefix := "veloray-naive-"
+	if strings.HasPrefix(name, "veloray-native-") {
+		prefix = "veloray-native-"
+	}
 	if !strings.HasPrefix(name, prefix) || len(name) > 1024 {
 		return name
 	}

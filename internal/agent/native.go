@@ -27,7 +27,7 @@ type nativeRuntime struct {
 }
 
 func newNativeManager(directory string) (*Manager, error) {
-	runtime := &nativeRuntime{engine: nativecore.New(), config: filepath.Join(directory, "native-config.json")}
+	runtime := &nativeRuntime{engine: nativecore.New(), started: time.Now().UnixNano(), config: filepath.Join(directory, "native-config.json")}
 	manager, err := NewManager("veloray-native", runtime.config, "veloray-native.service", filepath.Join(directory, "native-state.json"), runtime)
 	if err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func (n *nativeRuntime) Run(ctx context.Context, name string, args ...string) ([
 		if err = n.engine.Apply(raw); err != nil {
 			return nil, err
 		}
-		if !n.running {
+		if n.started == 0 {
 			n.started = time.Now().UnixNano()
 		}
 		n.running = true
@@ -138,6 +138,24 @@ func (n *nativeRuntime) ports(ctx context.Context, raw []byte) ([]PortCheck, err
 		}
 		address := net.JoinHostPort(in.Listen, strconv.Itoa(in.Port))
 		check := PortCheck{Tag: in.Tag, Listen: in.Listen, Port: in.Port, Network: "tcp", State: "free"}
+		if in.Protocol == "amneziawg" {
+			check.Network = "udp"
+			if n.engine.OwnsUDP(address) {
+				check.State = "owned"
+				check.Owner = "native"
+			} else {
+				socket, err := net.ListenPacket("udp", address)
+				if err != nil {
+					check.State = "conflict"
+					check.Owner = "another listener"
+				} else {
+					socket.Close()
+				}
+			}
+			checks = append(checks, check)
+			continue
+		}
+
 		if n.engine.Owns(address) {
 			check.State = "owned"
 			check.Owner = "native"

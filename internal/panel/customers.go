@@ -201,7 +201,7 @@ func (s *Server) syncCustomer(ctx context.Context, tx pgx.Tx, a Actor, d Data, l
 		if e != nil {
 			return e
 		}
-		if str(inbound, "protocol") == "wireguard" && isNew {
+		if oneOf(str(inbound, "protocol"), "wireguard", "amneziawg") && isNew {
 			node, e := get(ctx, tx, "nodes", num(inbound, "node"))
 			if e != nil {
 				return e

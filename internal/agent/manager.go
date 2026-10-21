@@ -349,6 +349,13 @@ func atomicWrite(path string, raw []byte, mode os.FileMode) error {
 	defer d.Close()
 	return d.Sync()
 }
+func (m *Manager) configMode() os.FileMode {
+	if m.native != nil {
+		return 0600
+	}
+	return 0640
+}
+
 func (m *Manager) persist() error {
 	b, err := json.Marshal(m.state)
 	if err != nil {
@@ -678,7 +685,7 @@ func (m *Manager) Apply(ctx context.Context, id string, raw []byte) error {
 	}
 	additions, live := liveUserAdditions(before, raw)
 	live = live && m.Core != "singbox" && m.native == nil && m.status(ctx).Running
-	if e = atomicWrite(m.ConfigPath, raw, 0640); e == nil {
+	if e = atomicWrite(m.ConfigPath, raw, m.configMode()); e == nil {
 		if live {
 			e = m.addUsersLive(ctx, additions)
 		} else {
@@ -707,7 +714,7 @@ func (m *Manager) restore(ctx context.Context, b []byte) error {
 		_, e := m.Runtime.Run(ctx, "systemctl", "stop", m.ServiceName)
 		return e
 	}
-	if e := atomicWrite(m.ConfigPath, b, 0640); e != nil {
+	if e := atomicWrite(m.ConfigPath, b, m.configMode()); e != nil {
 		return e
 	}
 	return m.restart(ctx)

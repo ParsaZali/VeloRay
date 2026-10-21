@@ -129,7 +129,8 @@ See [fallbacks and balancing](fallbacks-and-balancing.md) for limits and verific
 - [x] Native Naive TLS management and exports.
 - [x] Verify a compatible Naive HTTP/1.1 client round trip with native user attribution; Chromium/HTTP2 client coverage remains separate.
 - [x] Managed ShadowTLS v3 with an authenticated Shadowsocks 2022 inner graph, TCP-only sing-box/Mihomo exports, per-user accounting and pinned-core tests; see [scope](shadowtls.md).
-- [ ] Native, tested AmneziaWG, MTProto and optional SSH proxy management.
+- [x] Native MTProto/FakeTLS and AmneziaWG with per-user accounting, exports and encrypted wire fixtures; see [scope](mtproto-and-amneziawg.md).
+- [ ] Optional SSH proxy management.
 - [x] Validate feasibility per pinned engine and distinguish upstream engine capability
       from supported forms; see `native-protocols-and-live-apply.md`. This does not mark the remaining protocol implementations complete.
 - [x] Guided outbound chaining and sing-box selector/URL-test controls, with cycle/dependency validation.
