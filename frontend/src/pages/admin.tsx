@@ -35,6 +35,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { FaIcon } from "@/components/ui/fa-icon";
 
 type Editor = {
+  ldap_dn: string;
   oidc_issuer: string;
   oidc_subject: string;
   id?: number;
@@ -58,6 +59,7 @@ type KeyEditor = {
   days: string;
 };
 const blank = (): Editor => ({
+  ldap_dn: "",
   oidc_issuer: "",
   oidc_subject: "",
   username: "",
@@ -122,6 +124,7 @@ export function AdminPage() {
       id: u.id,
       username: u.username,
       email: u.email || "",
+      ldap_dn: u.ldap_dn || "",
       oidc_issuer: u.oidc_issuer || "",
       oidc_subject: u.oidc_subject || "",
       password: "",
@@ -154,6 +157,7 @@ export function AdminPage() {
         max_clients: Number(editor.max_clients),
         traffic_budget_bytes: Math.round(Number(editor.budget) * 1024 ** 3),
       };
+      body.ldap_dn = editor.ldap_dn;
       body.oidc_issuer = editor.oidc_issuer;
       body.oidc_subject = editor.oidc_subject;
       if (editor.password) body.password = editor.password;
@@ -593,6 +597,30 @@ export function AdminPage() {
                     setEditor({ ...editor, email: e.target.value })
                   }
                 />
+              </Field>
+              <Field
+                label={t("LDAP distinguished name (optional)")}
+                className="sm:col-span-2"
+              >
+                <Input
+                  value={editor.ldap_dn}
+                  aria-label={t("LDAP distinguished name (optional)")}
+                  aria-describedby="ldap-binding-hint"
+                  maxLength={1024}
+                  autoComplete="off"
+                  placeholder="uid=alice,ou=people,dc=example,dc=com"
+                  onChange={(e) =>
+                    setEditor({ ...editor, ldap_dn: e.target.value })
+                  }
+                />
+                <p
+                  id="ldap-binding-hint"
+                  className="field-hint text-xs text-[var(--muted)]"
+                >
+                  {t(
+                    "Requires LDAPS in server configuration. Sign in with the panel username and directory password; local permissions and 2FA still apply.",
+                  )}
+                </p>
               </Field>
               <Field label={t("OIDC issuer (optional)")}>
                 <Input

@@ -19,7 +19,7 @@ var editable = map[string]string{
 	"clients":       "renewal_period renewal_every renewal_timezone hwid_limit device_limit start_after_first_use duration_days owner_id inbound name credential protocol_settings subscription_token enabled expires_at traffic_limit_bytes renewal_interval_days next_renewal_at traffic_multiplier note",
 	"outbounds":     "name node core tag protocol config enabled",
 	"routing_rules": "name node core priority config enabled",
-	"users":         "oidc_issuer oidc_subject username email is_active is_staff is_superuser password role permissions allowed_inbounds own_clients_only max_clients traffic_budget_bytes",
+	"users":         "ldap_dn oidc_issuer oidc_subject username email is_active is_staff is_superuser password role permissions allowed_inbounds own_clients_only max_clients traffic_budget_bytes",
 	"api_keys":      "name scope enabled expires_at user",
 }
 
@@ -432,8 +432,11 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 		prior := clone(d)
 		d = merge(d, input)
 		if kind == "users" {
-			if str(d, "oidc_issuer") != str(prior, "oidc_issuer") || str(d, "oidc_subject") != str(prior, "oidc_subject") {
+			if str(d, "ldap_dn") != str(prior, "ldap_dn") || str(d, "oidc_issuer") != str(prior, "oidc_issuer") || str(d, "oidc_subject") != str(prior, "oidc_subject") {
 				d["_auth_version"] = num(d, "_auth_version") + 1
+			}
+			if e := validateLDAPBinding(d); e != nil {
+				return nil, fail(400, e.Error())
 			}
 			if e := validateOIDCBinding(d); e != nil {
 				return nil, fail(400, e.Error())
@@ -630,7 +633,12 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 		token := str(d, "_new_token")
 		delete(d, "_new_token")
 		if e := save(ctx, tx, kind, d); e != nil {
-			return nil, fail(400, databaseError(e).Error())
+			mapped := databaseError(e)
+			var api *apiError
+			if errors.As(mapped, &api) {
+				return nil, mapped
+			}
+			return nil, fail(400, mapped.Error())
 		}
 		out, e := s.view(ctx, tx, kind, d)
 		if e != nil {

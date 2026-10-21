@@ -162,7 +162,7 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		if path == "auth/oidc" && r.Method == "GET" {
-			writeJSON(w, 200, Data{"enabled": s.Config.OIDCIssuer != "" && s.Config.OIDCClientID != "", "github_enabled": s.githubEnabled(), "telegram": s.Config.OIDCIssuer == "https://oauth.telegram.org"})
+			writeJSON(w, 200, Data{"enabled": s.Config.OIDCIssuer != "" && s.Config.OIDCClientID != "", "github_enabled": s.githubEnabled(), "ldap_enabled": s.ldapEnabled(), "telegram": s.Config.OIDCIssuer == "https://oauth.telegram.org"})
 			return
 		}
 		if path == "auth/oidc/callback" && r.Method == "GET" {

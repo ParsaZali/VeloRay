@@ -2110,3 +2110,70 @@ for (const legacyName of [
     await expect(page.locator("img[src=Route]")).toHaveCount(0);
   });
 }
+
+test("LDAP login keeps its provider through second factor and offers local fallback", async ({ page }) => {
+  let enabled = true;
+  const attempts: any[] = [];
+  await page.addInitScript(() => {
+    localStorage.setItem("veloray-locale", "en");
+    localStorage.setItem("veloray-login-locale", "en");
+  });
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/me") await route.fulfill({ status: 401, json: { detail: "Authentication required" } });
+    else if (path === "/api/auth/oidc") await route.fulfill({ json: { enabled: false, ldap_enabled: enabled } });
+    else if (path === "/api/auth/login") {
+      const body = route.request().postDataJSON(); attempts.push(body);
+      if (!body.totp_code && body.provider === "ldap") await route.fulfill({ status: 202, json: { two_factor_required: true } });
+      else await route.fulfill({ status: 401, json: { detail: "Test rejected credentials" } });
+    } else await route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  const method = page.getByRole("combobox", { name: "Sign-in method" });
+  await expect(method).toBeVisible();
+  await method.click();
+  await page.getByRole("option", { name: "LDAP directory", exact: true }).click();
+  await page.getByLabel("Username", { exact: true }).fill("alice");
+  await page.getByLabel("Password", { exact: true }).fill("directory-secret");
+  await page.getByRole("button", { name: "Login", exact: true }).click();
+  await expect(page.getByLabel("Authenticator / recovery code")).toBeVisible();
+  await page.getByLabel("Authenticator / recovery code").fill("RECOVERY-ONCE");
+  await page.getByRole("button", { name: "Verify and continue", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Test rejected credentials");
+  expect(attempts.map((x) => x.provider)).toEqual(["ldap", "ldap"]);
+  expect(attempts[1]).toMatchObject({ username: "alice", password: "directory-secret", totp_code: "RECOVERY-ONCE" });
+  await page.getByRole("button", { name: "Back to login", exact: true }).click();
+  await method.click();
+  await page.getByRole("option", { name: "Local account", exact: true }).click();
+  await expect(page.getByLabel("Password", { exact: true })).toHaveValue("");
+  await page.getByLabel("Password", { exact: true }).fill("local-secret");
+  await page.getByRole("button", { name: "Login", exact: true }).click();
+  await expect.poll(() => attempts.length).toBe(3);
+  expect(attempts[2].provider).toBe("local");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  enabled = false;
+  await page.reload();
+  await expect(method).toHaveCount(0);
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+});
+
+test("administrator edits LDAP binding while preserving local role and SSO fields", async ({ page }) => {
+  const user = { id: 2, username: "alice", email: "", is_active: true, is_staff: true, is_superuser: false, role: "viewer", ldap_dn: "uid=old,dc=example,dc=com", oidc_issuer: "https://github.com", oidc_subject: "42" };
+  const saves: any[] = [];
+  await panel(page, "/admin", { "admin/users": { json: [user] } });
+  await page.route("**/api/admin/users/2/", async (route) => {
+    saves.push(route.request().postDataJSON());
+    await route.fulfill({ json: { ...user, ...saves.at(-1) } });
+  });
+  await page.getByRole("row").filter({ hasText: "alice" }).getByTitle("Edit", { exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Administrator", exact: true });
+  const dn = dialog.getByRole("textbox", { name: "LDAP distinguished name (optional)", exact: true });
+  await expect(dn).toHaveValue(user.ldap_dn);
+  await dn.fill("uid=alice,ou=people,dc=example,dc=com");
+  await dialog.getByRole("button", { name: "Save account", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(saves).toHaveLength(1);
+  expect(saves[0]).toMatchObject({ ldap_dn: "uid=alice,ou=people,dc=example,dc=com", oidc_issuer: "https://github.com", oidc_subject: "42", role: "viewer" });
+  expect(saves[0].password).toBeUndefined();
+});

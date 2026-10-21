@@ -19,8 +19,7 @@ printf 'module test\ngo 1.26.0\n' >"$TEST_ROOT/fixture/go.mod"
 printf '{}\n' >"$TEST_ROOT/fixture/frontend/package-lock.json"
 manifest_root="$TEST_ROOT/manifest-fixture"
 mkdir -p "$manifest_root/scripts" "$manifest_root/cmd" "$manifest_root/internal/panel" "$manifest_root/frontend/src"
-cp "$project/scripts/build-runtime.sh" "$manifest_root/scripts/"
-cp "$project/scripts/build-singbox.sh" "$manifest_root/scripts/"
+for script in build-runtime.sh build.sh build-singbox.sh build-xray.sh verify-runtime-toolchain.sh;do cp "$project/scripts/$script" "$manifest_root/scripts/";done
 printf 'module manifest-test\ngo 1.26.0\n' >"$manifest_root/go.mod"
 touch "$manifest_root/go.sum"
 printf '0.1.0\n' >"$manifest_root/VERSION"
@@ -415,6 +414,25 @@ pass web-assets-readable-after-private-umask
 test -f "$HOST_ROOT/admin";test -f "$HOST_ROOT/database";test -f "$HOST_ROOT/role"
 original_env="$(sha256sum "$HOST_ROOT/etc/veloray/veloray.env")"
 pass host-fresh-install
+# A same-version engine rebuild can contain a critical compiler security fix.
+# Updating a complete runtime must replace an already installed Xray binary.
+patched_xray="$TEST_ROOT/patched-xray";mkdir -p "$patched_xray"
+printf '#!/usr/bin/env bash\n# patched-release\n[[ "${TEST_XRAY_CONFIG_FAIL:-}" != 1 ]]\n' >"$patched_xray/xray"
+printf geoip >"$patched_xray/geoip.dat";printf geosite >"$patched_xray/geosite.dat"
+chmod +x "$patched_xray/xray"
+(cd "$patched_xray" && sha256sum xray geoip.dat geosite.dat >SHA256SUMS)
+config_path="$(source "$HOST_ROOT/etc/veloray-node/agent.env";printf '%s' "$VELORAY_XRAY_CONFIG")"
+prior_config="$(sha256sum "$config_path")"
+mkdir -p "$HOST_ROOT/usr/local/share/xray"
+printf operator-geoip >"$HOST_ROOT/usr/local/share/xray/geoip.dat"
+prior_geo="$(sha256sum "$HOST_ROOT/usr/local/share/xray/geoip.dat")"
+export VELORAY_XRAY_DIRECTORY="$patched_xray"
+host_install
+unset VELORAY_XRAY_DIRECTORY
+grep -Fq '# patched-release' "$HOST_ROOT/usr/local/bin/xray"
+[[ "$(sha256sum "$config_path")" == "$prior_config" ]]
+[[ "$(sha256sum "$HOST_ROOT/usr/local/share/xray/geoip.dat")" == "$prior_geo" ]]
+pass runtime-upgrade-replaces-existing-xray-and-keeps-config
 for name in modernX.html sub-dashboard.html sub-fish.html;do
  cmp "$project/examples/subscription/legacy/$name" "$HOST_ROOT/etc/veloray/templates/legacy/$name"
  [[ "$(stat -c '%a' "$HOST_ROOT/etc/veloray/templates/legacy/$name")" == 640 ]]

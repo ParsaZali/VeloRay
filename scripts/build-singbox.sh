@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+export GOTOOLCHAIN=go1.26.10
 arch="${1:?architecture required}";output="${2:?output directory required}"
 case "$arch" in amd64|arm64) ;;*) exit 2;;esac
 version=1.14.3
