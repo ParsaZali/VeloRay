@@ -203,7 +203,7 @@ test("installed geo assets load on demand, filter and create a rule", async ({
   ).toBe(true);
 });
 
-test("original dark and light palette, raw upload and download", async ({
+test("readable dark and light palette, raw upload and download", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -224,7 +224,7 @@ test("original dark and light palette, raw upload and download", async ({
         .getPropertyValue("--bg")
         .trim(),
     ),
-  ).toBe("#000000");
+  ).toBe("#101318");
   await page.getByRole("button", { name: "Theme: dark" }).click();
   await expect(page.locator("html")).toHaveClass(/light/);
   expect(
@@ -233,7 +233,7 @@ test("original dark and light palette, raw upload and download", async ({
         .getPropertyValue("--bg")
         .trim(),
     ),
-  ).toBe("#f3f6f8");
+  ).toBe("#f5f6f8");
   await page
     .getByRole("button", { name: "Transfer rate", exact: true })
     .click();
@@ -2440,6 +2440,7 @@ test("ShadowTLS form sends a paired TCP configuration and preserves its keys on 
 test("separate subscription port applies independently and preserves the previous address while pending", async ({
   page,
 }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await panel(page, "/settings");
@@ -2503,11 +2504,13 @@ test("separate subscription port applies independently and preserves the previou
   await expect(
     section.getByRole("link", { name: "Check subscription service" }),
   ).toHaveAttribute("href", "https://panel.example:9444/api/health");
+  await page.evaluate(() => scrollTo(0, 0));
   await page.screenshot({
     path: "test-results/settings-subscription-dark-desktop.png",
     fullPage: true,
   });
   await page.getByRole("button", { name: "Theme: dark", exact: true }).click();
+  await page.evaluate(() => scrollTo(0, 0));
   await page.screenshot({
     path: "test-results/settings-subscription-light-desktop.png",
     fullPage: true,
@@ -2522,6 +2525,7 @@ test("separate subscription port applies independently and preserves the previou
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+  await page.evaluate(() => scrollTo(0, 0));
   await page.screenshot({
     path: "test-results/settings-subscription-fa-mobile.png",
     fullPage: true,
@@ -2560,4 +2564,14 @@ test("subscription port failure retains the applied URL and allows retry", async
   await expect(
     section.getByRole("button", { name: "Apply port", exact: true }),
   ).toBeEnabled();
+  // An invalid independent port draft must not block saving the HTML template.
+  await section.getByLabel("Subscription port", { exact: true }).fill("0");
+  const saved = page.waitForRequest(
+    (request) =>
+      request.url().endsWith("/api/settings") && request.method() === "PATCH",
+  );
+  await page
+    .getByRole("button", { name: "Save settings", exact: true })
+    .click();
+  expect((await saved).postDataJSON()).not.toHaveProperty("port");
 });

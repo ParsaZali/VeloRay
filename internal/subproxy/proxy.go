@@ -63,8 +63,10 @@ func configuration(domain string, port int) string {
 	}
 	raw := fmt.Sprintf(`{
  admin unix/%s
+ skip_install_trust
  log default {
-  output discard
+  output stderr
+  exclude http admin.api
  }
 }
 https://%s {

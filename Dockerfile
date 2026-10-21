@@ -23,6 +23,7 @@ FROM caddy:2.11.7-alpine AS proxy
 USER root
 RUN mkdir -p /data /config /run/veloray-proxy && chown -R 10003:10001 /data /config /run/veloray-proxy && chmod 2770 /run/veloray-proxy
 COPY --from=bundle /bundle/bin/native/veloray /usr/local/bin/veloray
+RUN setcap cap_net_bind_service=+ep /usr/local/bin/veloray
 USER 10003:10001
 ENTRYPOINT ["/usr/local/bin/veloray", "proxy-serve"]
 CMD []

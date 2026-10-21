@@ -16,7 +16,8 @@
   gap: 1.25rem;
   align-items: start;
 }
-.settings-layout > form {
+.settings-content,
+.settings-content > form {
   min-width: 0;
 }
 .settings-nav {

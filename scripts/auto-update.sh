@@ -72,7 +72,7 @@ vr_auto_restore() {
  fi
  systemctl daemon-reload
  systemctl restart veloray-agent.service veloray-web.service xray.service sing-box.service
- if [[ "$subscriptions_active" == true ]];then systemctl restart veloray-subscriptions.service;fi
+ if [[ "$subscriptions_active" == true ]];then systemctl restart veloray-subscriptions.service;else systemctl disable --now veloray-subscriptions.service;fi
  # Restore the previous proxy layout as well as the binaries.
  /usr/local/bin/veloray render-nginx
  if [[ -f "$previous/deploy/systemd/veloray-subscription-endpoint.timer" ]];then systemctl enable --now veloray-subscription-endpoint.timer;fi

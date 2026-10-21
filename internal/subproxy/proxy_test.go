@@ -87,7 +87,7 @@ func TestConfigurationIsFixedAndDomainValidated(t *testing.T) {
 			t.Fatalf("rejected %q", host)
 		}
 	}
-	if raw := configuration("example.com", 9000); !strings.Contains(raw, "redir https://example.com:9000{uri} 307") || !strings.Contains(raw, "admin unix//tmp/veloray-caddy-admin.sock") {
+	if raw := configuration("example.com", 9000); !strings.Contains(raw, "redir https://example.com:9000{uri} 307") || !strings.Contains(raw, "admin unix//tmp/veloray-caddy-admin.sock") || !strings.Contains(raw, "exclude http admin.api") {
 		t.Fatal(raw)
 	}
 }
