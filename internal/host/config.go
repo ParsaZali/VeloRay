@@ -191,6 +191,7 @@ func nginxSubscriptionConfiguration(host, port, cert, key string) []byte {
   proxy_read_timeout 180s;
  }
  access_log off;
+ error_log /dev/null;
 }
 `, port, port, host, cert, key))
 }
