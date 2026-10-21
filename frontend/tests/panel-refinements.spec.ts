@@ -904,6 +904,7 @@ test("subscription dashboard supports chart, four languages, search, QR and mobi
   await page.goto("/portal-modern-preview");
   await expect(page.locator('[data-portal-version="2"]')).toBeVisible();
   await expect(page.getByRole("heading", { name: "Arman" })).toBeVisible();
+  await expect(page.locator(".stat-date")).toHaveText("No expiry");
   await expect(page.locator("#traffic-chart")).toBeVisible();
   await expect(page.locator("#chart-total")).toContainText("MB");
   await page.locator('[data-metric="upload_bytes"]').click();
@@ -923,7 +924,7 @@ test("subscription dashboard supports chart, four languages, search, QR and mobi
   await page.locator('[data-metric="bytes"]').click();
   await expect(page.locator("#download-traffic")).toHaveAttribute(
     "href",
-    /export=csv.*range=7d/,
+    /(?=.*export=csv)(?=.*range=7d)/,
   );
   const copy = page.getByRole("button", { name: "Copy link" });
   await copy.click();
@@ -2610,6 +2611,7 @@ test("dashboard history survives unrelated API failures and retries history inde
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await panel(page, "/dashboard", {
     "system-info": { json: { detail: "Server info unavailable" }, status: 503 },
   });
@@ -2667,6 +2669,7 @@ test("dashboard history survives unrelated API failures and retries history inde
     0,
   );
   await expect(page.locator('[aria-label="Traffic chart"]')).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({
     path: "test-results/dashboard-recovered-history.png",
     fullPage: true,
@@ -2734,7 +2737,7 @@ for (const variant of ["simple", "modern"]) {
       },
     ];
     await page.locator('[data-range="24h"]').click();
-    await expect(page.locator("#chart-total")).toContainText("0 B");
+    await expect(page.locator("#chart-total")).toHaveText(/[0۰] B/);
     await expect(page.locator("#chart-points circle")).toHaveCount(1);
     points = [];
     await page.locator('[data-range="1h"]').click();

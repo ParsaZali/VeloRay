@@ -156,9 +156,11 @@ function TrafficChart({
     () =>
       points.map((point) => ({
         at: point.at,
-        bytes:
+        bytes: Math.max(
+          Number(point.used_traffic_bytes || 0),
           Number(point.raw_upload_traffic_bytes || 0) +
-          Number(point.raw_download_traffic_bytes || 0),
+            Number(point.raw_download_traffic_bytes || 0),
+        ),
       })),
     [points],
   );
@@ -257,7 +259,7 @@ function TrafficChart({
         direction.cumulative === "earlier"
           ? Math.max(
               0,
-              Number(mode === "usage" ? p.used_traffic_bytes : p.bytes) -
+              Number((mode === "usage" ? p.used_traffic_bytes : p.bytes) || 0) -
                 Number(
                   mode === "usage"
                     ? p.raw_upload_traffic_bytes || 0
