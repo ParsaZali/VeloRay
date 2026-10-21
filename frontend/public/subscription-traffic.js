@@ -68,7 +68,9 @@
   const bytes = (value) => {
     const units = ["B", "KB", "MB", "GB", "TB", "PB"];
     const exponent =
-      value > 0 ? Math.min(5, Math.floor(Math.log(value) / Math.log(1024))) : 0;
+      value > 0
+        ? Math.max(0, Math.min(5, Math.floor(Math.log(value) / Math.log(1024))))
+        : 0;
     return (
       new Intl.NumberFormat(locale(), { maximumFractionDigits: 2 }).format(
         value / 1024 ** exponent,
@@ -95,7 +97,7 @@
   }
   chart.setAttribute("viewBox", "0 0 660 220");
   chart.setAttribute("preserveAspectRatio", "none");
-  chart.setAttribute("dir", "ltr");
+  chart.setAttribute("direction", "ltr");
   const grid = svg("g", { class: "traffic-grid", "aria-hidden": "true" });
   chart.prepend(grid);
   const marks = svg("g", { id: "chart-points" });

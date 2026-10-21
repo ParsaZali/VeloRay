@@ -42,6 +42,9 @@ func TestSimplePortalDefaultLegacyCompatibility(t *testing.T) {
 			if strings.Contains(w.Header().Get("Content-Security-Policy"), "unsafe-eval") || strings.Contains(w.Header().Get("Content-Security-Policy"), "https://") {
 				t.Fatal("CSP broadened")
 			}
+			if name == "sub-dashboard.html" && (strings.Contains(w.Body.String(), "dailyWeights") || !strings.Contains(w.Body.String(), "VeloRayTemplate.drawHistory()")) {
+				t.Fatal("legacy dashboard still invents history")
+			}
 			directory := os.Getenv("VELORAY_TEST_LEGACY_PORTAL_DIR")
 			if directory == "" && os.Getenv("VELORAY_TEST_SIMPLE_PORTAL_HTML") != "" {
 				directory = filepath.Join(filepath.Dir(os.Getenv("VELORAY_TEST_SIMPLE_PORTAL_HTML")), "veloray-legacy-portals")

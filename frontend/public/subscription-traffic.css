@@ -2,3 +2,5 @@
 @media(max-width:425px){.traffic-panel .range-selector{width:100%;justify-content:space-between}.traffic-panel .range-selector button{padding-inline:7px}.traffic-grid text{font-size:12px}.chart-footer{line-height:1.7}}
 
 .chart-area stop{stop-color:var(--link,var(--primary))}
+
+.traffic-grid text{direction:ltr;unicode-bidi:embed}

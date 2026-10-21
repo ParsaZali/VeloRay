@@ -946,11 +946,17 @@ test("subscription dashboard supports chart, four languages, search, QR and mobi
   await expect(page.locator(".profile-item:visible")).toHaveCount(1);
   await page.locator("#portal-language").selectOption("fa");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
-  await expect(page.getByText("نمودار مصرف ترافیک")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "نمودار مصرف ترافیک", exact: true }),
+  ).toBeVisible();
   await page.locator("#portal-language").selectOption("ru");
-  await expect(page.getByText("История трафика")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "История трафика", exact: true }),
+  ).toBeVisible();
   await page.locator("#portal-language").selectOption("zh");
-  await expect(page.getByText("流量概览")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "流量概览", exact: true }),
+  ).toBeVisible();
   await page.locator("#toggle-theme").click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   for (const width of [390, 320]) {
@@ -2120,6 +2126,21 @@ for (const legacyName of [
     });
     await page.route("https://panel.example/**", async (route) => {
       const url = new URL(route.request().url());
+      if (url.searchParams.get("format") === "stats") {
+        await route.fulfill({
+          json: {
+            points: [
+              {
+                at: "2026-10-21T00:00:00Z",
+                bytes: 1048576,
+                upload_bytes: 262144,
+                download_bytes: 786432,
+              },
+            ],
+          },
+        });
+        return;
+      }
       if (url.searchParams.get("format") === "info") {
         infoRequests++;
         await route.fulfill({
@@ -2195,6 +2216,8 @@ for (const legacyName of [
       await expect(page.locator("#qrModal")).not.toHaveClass(/active/);
       await expect(page.locator("#daysLeftBadge")).toContainText("روز");
     } else if (legacyName === "sub-dashboard.html") {
+      await expect(page.locator("#chartPointsGroup circle")).toHaveCount(1);
+      await expect(page.locator("#chartPointsGroup title")).toContainText("B");
       await expect(page.locator("#usedStatValue")).toHaveText(
         /^[۱1](?:[٫.][۰0])?$/,
       );
@@ -2738,6 +2761,7 @@ for (const variant of ["simple", "modern"]) {
     ];
     await page.locator('[data-range="24h"]').click();
     await expect(page.locator("#chart-total")).toHaveText(/[0۰] B/);
+    await expect(page.locator(".traffic-grid")).not.toContainText("undefined");
     await expect(page.locator("#chart-points circle")).toHaveCount(1);
     points = [];
     await page.locator('[data-range="1h"]').click();

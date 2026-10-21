@@ -117,7 +117,7 @@
       <section class="panel quota-panel" aria-labelledby="quota-heading">
         <div class="section-overline" data-i18n="quota">QUOTA</div>
         <h2 id="quota-heading" data-i18n="dataAllowance">Data allowance</h2>
-        <div class="quota-amount"><strong>{{.Used}}</strong><span> / {{.Quota}}</span></div>
+        <div class="quota-amount"><strong><bdi>{{.Used}}</bdi></strong><span dir="ltr"> / <bdi>{{.Quota}}</bdi></span></div>
         {{if .Limited}}<progress max="100" value="{{.Percent}}" aria-label="Traffic quota used">{{.Percent}}%</progress>{{end}}
         <div class="quota-legend"><span data-i18n="rawTraffic">Raw traffic</span><strong dir="ltr">{{.Actual}}</strong></div>
         <div class="quota-legend"><span data-i18n="billingRate">Billing multiplier</span><strong dir="ltr">{{.Factor}}×</strong></div>
