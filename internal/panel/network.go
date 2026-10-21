@@ -184,7 +184,7 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data, fieldKey ...str
 	if e != nil {
 		return nil, e
 	}
-	entries, users, meteredInbounds := []any{}, []any{}, []any{}
+	entries, helperInbounds, users, meteredInbounds := []any{}, []any{}, []any{}, []any{}
 	has := false
 	for _, i := range ins {
 		if str(i, "core") != "singbox" {
@@ -242,7 +242,11 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data, fieldKey ...str
 			activeClients = append(activeClients, c)
 		}
 		if p == "shadowtls" {
-			entries = append(entries, shadowTLSInbounds(i, accounts, activeClients)...)
+			pair := shadowTLSInbounds(i, accounts, activeClients)
+			if len(pair) > 0 {
+				entries = append(entries, pair[1])
+				helperInbounds = append(helperInbounds, pair[0])
+			}
 			continue
 		}
 		if p == "shadowsocks" {
@@ -267,6 +271,9 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data, fieldKey ...str
 		}
 		entries = append(entries, v)
 	}
+	// Bind every managed public listener before allocating loopback port 0.
+	// Otherwise an inner helper can randomly occupy a later public port.
+	entries = append(entries, helperInbounds...)
 	cfg := Data{"log": Data{"level": "info", "timestamp": true}, "inbounds": entries, "outbounds": []any{Data{"type": "direct", "tag": "direct"}}, "route": Data{"final": "direct", "rules": []any{}}, "experimental": Data{"v2ray_api": Data{"listen": "127.0.0.1:10086", "stats": Data{"enabled": true, "users": users, "inbounds": meteredInbounds, "outbounds": []any{}}}, "clash_api": Data{"external_controller": "127.0.0.1:10087", "secret": ""}}}
 	sharedPatch, err := profileConfigPatch(ctx, q, node, "singbox", fieldKey...)
 	if err != nil {

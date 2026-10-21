@@ -115,12 +115,34 @@ func TestIntegrationShadowTLSWithPinnedSingBox(t *testing.T) {
 	if feed.Code != 200 || json.Unmarshal(feed.Body.Bytes(), &exported) != nil || len(array(exported, "outbounds")) != 4 {
 		t.Fatal("subscription omitted the helper graph", feed.Code, feed.Body.String())
 	}
+	// A later public listener may use the host's ephemeral port range. It must
+	// bind before the helper asks the OS for a random loopback port.
+	extra := clone(i)
+	extra["id"], extra["name"], extra["protocol"], extra["port"], extra["protocol_settings"] = 0, "later-public", "vless", nativeTestPort(t), Data{}
+	if err = validateInbound(ctx, s.Store.Pool, s.Config, extra); err != nil {
+		t.Fatal(err)
+	}
+	if err = save(ctx, s.Store.Pool, "inbounds", extra); err != nil {
+		t.Fatal(err)
+	}
 	server, err := buildSingBoxConfig(ctx, s.Store.Pool, n)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(array(server, "inbounds")) != 2 || len(array(asData(array(server, "inbounds")[0]), "users")) != 2 {
-		t.Fatal(server)
+	inbounds := array(server, "inbounds")
+	if len(inbounds) != 3 || num(asData(inbounds[0]), "listen_port") < 1 || num(asData(inbounds[1]), "listen_port") < 1 || num(asData(inbounds[2]), "listen_port") != 0 || str(asData(inbounds[2]), "listen") != "127.0.0.1" {
+		t.Fatal("public listeners must precede ephemeral loopback helpers", inbounds)
+	}
+	publicTypes := map[string]bool{}
+	for _, entry := range inbounds[:2] {
+		in := asData(entry)
+		publicTypes[str(in, "type")] = true
+		if str(in, "type") == "shadowtls" && len(array(in, "users")) != 2 {
+			t.Fatal("missing wrapper users", in)
+		}
+	}
+	if !publicTypes["shadowtls"] || !publicTypes["vless"] || str(asData(inbounds[2]), "type") != "shadowsocks" || len(array(asData(inbounds[2]), "users")) != 2 {
+		t.Fatal("missing paired inbounds or users", inbounds)
 	}
 	controller, stats := nativeTestPort(t), fmt.Sprintf("127.0.0.1:%d", nativeTestPort(t))
 	obj(obj(server, "experimental"), "clash_api")["external_controller"] = fmt.Sprintf("127.0.0.1:%d", controller)
@@ -142,6 +164,10 @@ func TestIntegrationShadowTLSWithPinnedSingBox(t *testing.T) {
 		if err = save(ctx, s.Store.Pool, "clients", account); err != nil {
 			t.Fatal(err)
 		}
+	}
+	extra["enabled"] = false
+	if err = save(ctx, s.Store.Pool, "inbounds", extra); err != nil {
+		t.Fatal(err)
 	}
 	empty, err := buildSingBoxConfig(ctx, s.Store.Pool, n)
 	if err != nil || len(array(empty, "inbounds")) != 0 {
