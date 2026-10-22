@@ -5,12 +5,10 @@
   background: var(--card);
 }
 .sidebar-current {
-  box-shadow: inset 2px 0 0 var(--brand);
-  background: color-mix(in srgb, var(--brand) 9%, var(--sidebar));
-  color: var(--brand);
+  box-shadow: inset 3px 0 0 var(--brand);
 }
 [dir="rtl"] .sidebar-current {
-  box-shadow: inset -2px 0 0 var(--brand);
+  box-shadow: inset -3px 0 0 var(--brand);
 }
 .settings-layout {
   display: grid;
@@ -666,6 +664,10 @@ a:focus-visible,
 [role="menuitem"]:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 3px;
+}
+nav [aria-current="page"] {
+  background: var(--surface-3);
+  box-shadow: none;
 }
 .skip-link {
   position: fixed;

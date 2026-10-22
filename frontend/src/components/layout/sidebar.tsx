@@ -24,9 +24,12 @@ export type RouteKey =
   | "imports";
 const groups = [
   {
+    label: "Overview",
+    items: [{ key: "dashboard", label: "Dashboard", icon: "gauge-high" }],
+  },
+  {
     label: "Management",
     items: [
-      { key: "dashboard", label: "Dashboard", icon: "gauge-high" },
       { key: "customers", label: "Customers", icon: "users" },
       { key: "services", label: "Services and plans", icon: "layer-group" },
       { key: "clients", label: "Clients", icon: "users" },
@@ -96,7 +99,7 @@ export function Sidebar({
   };
   const body = (compact: boolean) => (
     <>
-      <div className="flex h-14 shrink-0 items-center justify-between px-4">
+      <div className="flex h-16 items-center justify-between px-4">
         <VeloRayWordmark compact={compact} />
         <button
           aria-label={t("Close menu")}
@@ -107,15 +110,15 @@ export function Sidebar({
         </button>
       </div>
       <div className="mx-3 h-px bg-[var(--border-subtle)]" />
-      <nav className="scrollbar-none flex-1 overflow-y-auto px-2.5 py-2">
+      <nav className="scrollbar-none flex-1 overflow-y-auto px-3 py-4">
         {groups.map((g) => (
-          <div key={g.label} className="mb-2 last:mb-0">
+          <div key={g.label} className="mb-5">
             {!compact && (
-              <div className="mb-1 px-2 text-[10px] font-medium text-[var(--muted)]">
+              <div className="mb-1.5 px-2 text-[10px] font-medium text-[var(--muted)]">
                 {t(g.label)}
               </div>
             )}
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               {g.items
                 .filter(
                   (item) =>
@@ -142,10 +145,10 @@ export function Sidebar({
                         setMobileOpen(false);
                       }}
                       className={cn(
-                        "group flex h-8 w-full min-w-0 items-center rounded-md text-[13px] font-medium transition",
+                        "group flex h-9 w-full min-w-0 items-center rounded-md text-[13px] font-medium transition",
                         compact ? "justify-center px-0" : "gap-2.5 px-2.5",
                         active
-                          ? "sidebar-current bg-[color-mix(in_srgb,var(--brand)_9%,var(--sidebar))] text-[var(--brand)]"
+                          ? "sidebar-current bg-[var(--surface-2)] text-[var(--fg)]"
                           : "text-[var(--muted-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--fg)]",
                       )}
                     >
@@ -154,7 +157,7 @@ export function Sidebar({
                         className={cn(
                           "text-[12px] transition-colors",
                           active
-                            ? "text-[var(--brand)]"
+                            ? "text-[var(--fg)]"
                             : "text-[var(--muted-strong)] group-hover:text-[var(--fg)]",
                         )}
                       />
@@ -168,17 +171,17 @@ export function Sidebar({
           </div>
         ))}
       </nav>
-      <div className="sidebar-footer flex h-16 shrink-0 items-center gap-1 border-t border-[var(--border-subtle)] px-3">
+      <div className="sidebar-footer border-t border-[var(--border-subtle)] p-3">
         {!compact && (
           <a
             href="https://github.com/ParsaZali/VeloRay"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="VeloRay GitHub"
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-2 text-[var(--muted-strong)] hover:text-[var(--brand)]"
+            className="mb-2 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[var(--muted-strong)] transition hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
           >
             <VeloRayWordmark />
-            <ExternalLink className="ml-auto h-3 w-3 shrink-0 text-[var(--muted)]" />
+            <ExternalLink className="ml-auto h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
           </a>
         )}
         <button
@@ -186,7 +189,7 @@ export function Sidebar({
             compact ? t("Expand navigation") : t("Collapse navigation")
           }
           onClick={() => setCollapsed(!collapsed)}
-          className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-2)] lg:flex"
+          className="hidden h-8 w-full items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-2)] lg:flex"
         >
           <ChevronLeft
             className={cn(
@@ -203,7 +206,7 @@ export function Sidebar({
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 hidden border-r border-[var(--border)] bg-[var(--sidebar)] lg:flex lg:flex-col transition-[width] duration-200",
-          collapsed ? "w-[68px]" : "w-[240px]",
+          collapsed ? "w-[68px]" : "w-[252px]",
         )}
       >
         {body(collapsed)}
