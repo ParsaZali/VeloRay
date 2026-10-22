@@ -274,3 +274,67 @@ func TestOfficialSingBoxPreservesIPLimitEnforcement(t *testing.T) {
 		t.Fatal("rollback to official binary bypassed user IP caps")
 	}
 }
+
+func TestOfficialCatalogLargeMetadataAndStableFallback(t *testing.T) {
+	u, err := NewCoreUpdater(context.Background(), t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.Arch = "amd64"
+	stable := officialRelease{Tag: "v1.2.3", Assets: []releaseAsset{{Name: "Xray-linux-64.zip", URL: "https://github.com/XTLS/Xray-core/releases/download/v1.2.3/Xray-linux-64.zip", Digest: "sha256:" + strings.Repeat("a", 64), Size: 123}}}
+	historyFails := false
+	u.HTTP = &http.Client{Transport: coreTransport(func(r *http.Request) (*http.Response, error) {
+		status := 200
+		var raw []byte
+		if strings.HasSuffix(r.URL.Path, "/latest") {
+			data, _ := json.Marshal(stable)
+			var fields map[string]any
+			_ = json.Unmarshal(data, &fields)
+			fields["body"] = strings.Repeat("x", 3<<20)
+			raw, _ = json.Marshal(fields)
+		} else {
+			if r.URL.RawQuery != "per_page=10" {
+				t.Error("unbounded release history", r.URL)
+			}
+			prerelease := stable
+			prerelease.Tag = "v2.0.0-beta.1"
+			prerelease.Prerelease = true
+			raw, _ = json.Marshal([]officialRelease{prerelease, stable})
+			if historyFails {
+				status = 503
+			}
+		}
+		return &http.Response{StatusCode: status, Body: io.NopCloser(bytes.NewReader(raw)), Header: make(http.Header)}, nil
+	})}
+	for _, fails := range []bool{false, true} {
+		historyFails = fails
+		data, err := u.Catalog(context.Background(), "xray")
+		if err != nil {
+			t.Fatal(err)
+		}
+		releases := data["releases"].([]map[string]string)
+		if len(releases) != 1 || releases[0]["tag"] != stable.Tag {
+			t.Fatal("stable fallback or deduplication failed", data)
+		}
+	}
+}
+func TestOfficialCoreLiveCatalog(t *testing.T) {
+	if os.Getenv("VELORAY_TEST_LIVE_CORE_CATALOG") != "1" {
+		t.Skip("opt-in live official GitHub catalog check")
+	}
+	u, err := NewCoreUpdater(context.Background(), t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, core := range []string{"xray", "singbox"} {
+		data, err := u.Catalog(context.Background(), core)
+		if err != nil {
+			t.Fatal(core, err)
+		}
+		releases := data["releases"].([]map[string]string)
+		if len(releases) == 0 {
+			t.Fatal(core, "no verified stable release")
+		}
+		t.Log(core, len(releases), "verified stable releases; latest", releases[0]["tag"])
+	}
+}

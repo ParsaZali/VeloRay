@@ -27,6 +27,7 @@ import (
 
 const maxCoreArchive = 100 << 20
 const maxCoreBinary = 128 << 20
+const maxReleaseMetadata = 8 << 20
 
 var releaseTag = regexp.MustCompile(`^v?[0-9][0-9A-Za-z.-]{0,63}$`)
 
@@ -165,11 +166,11 @@ func (u *CoreUpdater) fetchJSON(ctx context.Context, endpoint string, out any) e
 	if res.StatusCode != 200 {
 		return fmt.Errorf("official GitHub release API returned %d", res.StatusCode)
 	}
-	raw, err := io.ReadAll(io.LimitReader(res.Body, (2<<20)+1))
+	raw, err := io.ReadAll(io.LimitReader(res.Body, maxReleaseMetadata+1))
 	if err != nil {
 		return err
 	}
-	if len(raw) > 2<<20 {
+	if len(raw) > maxReleaseMetadata {
 		return errors.New("release metadata too large")
 	}
 	return json.Unmarshal(raw, out)
@@ -179,16 +180,24 @@ func (u *CoreUpdater) Catalog(ctx context.Context, core string) (map[string]any,
 	if repo == "" {
 		return nil, errors.New("unsupported core")
 	}
-	var releases []officialRelease
-	if err := u.fetchJSON(ctx, repo+"/releases?per_page=30", &releases); err != nil {
+	// Large upstream asset inventories can exceed several MiB. Keep history
+	// bounded and always include the latest stable release, even when many
+	// prereleases occupy the recent history.
+	var latest officialRelease
+	if err := u.fetchJSON(ctx, repo+"/releases/latest", &latest); err != nil {
 		return nil, err
 	}
+	var history []officialRelease
+	_ = u.fetchJSON(ctx, repo+"/releases?per_page=10", &history)
+	releases := append([]officialRelease{latest}, history...)
 	items := []map[string]string{}
+	seen := map[string]bool{}
 	for _, r := range releases {
-		if r.Draft || r.Prerelease || !releaseTag.MatchString(r.Tag) {
+		if r.Draft || r.Prerelease || !releaseTag.MatchString(r.Tag) || seen[r.Tag] {
 			continue
 		}
 		if a, err := releaseDownload(core, u.Arch, r); err == nil {
+			seen[r.Tag] = true
 			items = append(items, map[string]string{"tag": r.Tag, "sha256": strings.TrimPrefix(a.Digest, "sha256:"), "url": "https://github.com/" + repo + "/releases/tag/" + r.Tag})
 		}
 	}
