@@ -179,7 +179,6 @@ export default function App() {
       .then((s) => {
         if (!localStorage.getItem("veloray-locale"))
           setLocale(s.default_locale === "fa" ? "fa" : "en");
-        document.documentElement.dataset.accent = s.accent || "blue";
         document.title = `${s.site_name || "VeloRay"}`;
       })
       .catch(() => {});

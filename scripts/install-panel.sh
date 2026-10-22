@@ -241,6 +241,9 @@ if [[ -n "${credentials_file:-}" ]];then
 fi
 printf '\n  %s\n' "$VELORAY_PUBLIC_URL"
 vr_say 'Management menu: sudo veloray' 'منوی مدیریت: sudo veloray'
+if $existing;then
+ vr_say 'Existing users and VPN configurations were reused. List administrators: sudo veloray admin-list' 'کاربران و کانفیگ‌های قبلی بازیابی شدند. فهرست مدیران: sudo veloray admin-list'
+fi
 vr_say 'Administrator password: sudo veloray reset' 'تغییر رمز مدیر: sudo veloray reset'
 if [[ ! -f "/etc/letsencrypt/live/$VELORAY_PUBLIC_HOST/fullchain.pem" ]];then
  vr_say 'HTTPS uses a local certificate. After configuring a domain, run: veloray ssl EMAIL' 'HTTPS با گواهی محلی فعال است؛ پس از تنظیم دامنه: veloray ssl EMAIL'

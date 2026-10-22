@@ -423,6 +423,45 @@ func (s *Store) bootstrap(ctx context.Context, c Config, name, password string, 
 	}
 	return tx.Commit(ctx)
 }
+func (s *Store) Administrators(ctx context.Context) ([]string, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT data->>'username' FROM vr_users WHERE data->>'is_superuser'='true' ORDER BY data->>'username'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	names := []string{}
+	for rows.Next() {
+		var name string
+		if err = rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
+}
+
+func (s *Store) AdministratorName(ctx context.Context, preferred string, exact bool) (string, error) {
+	names, err := s.Administrators(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, name := range names {
+		if name == preferred {
+			return name, nil
+		}
+	}
+	if !exact && len(names) == 1 {
+		return names[0], nil
+	}
+	if len(names) == 0 {
+		return "", errors.New("no administrator account exists")
+	}
+	if exact {
+		return "", errors.New("administrator not found; run veloray admin-list to find the current username")
+	}
+	return "", errors.New("multiple administrators exist; run veloray admin-list, then veloray reset USERNAME")
+}
+
 func (s *Store) AdminReset(ctx context.Context, name, password string) error {
 	if e := passwordPolicy(name, password); e != nil {
 		return e
@@ -433,7 +472,7 @@ func (s *Store) AdminReset(ctx context.Context, name, password string) error {
 	}
 	defer tx.Rollback(ctx)
 	var raw []byte
-	e = tx.QueryRow(ctx, `SELECT data||jsonb_build_object('id',id) FROM vr_users WHERE data->>'username'=$1 FOR UPDATE`, name).Scan(&raw)
+	e = tx.QueryRow(ctx, `SELECT data||jsonb_build_object('id',id) FROM vr_users WHERE data->>'username'=$1 AND data->>'is_superuser'='true' FOR UPDATE`, name).Scan(&raw)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return errors.New("administrator not found")
 	}

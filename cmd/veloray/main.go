@@ -91,6 +91,7 @@ func run() error {
   veloray status | doctor | url    Service health and panel address
   veloray start | stop | restart   Manage panel, agent and both cores
   veloray reset [USERNAME]         Change an administrator password
+  veloray admin-list               List existing administrator usernames
   veloray logs [web|agent|xray|singbox|subscriptions] Follow service logs
   veloray audit [LIMIT]            Read server audit events
   veloray backup [FILE]            Create a private recovery backup
@@ -102,7 +103,7 @@ func run() error {
   veloray inbound-port ID PORT     Change an inbound port and update its links
   veloray update [DIRECTORY]       Install an update with a recovery backup
   veloray auto-update enable|disable|status|check|run
-  veloray uninstall                Remove services and program files
+  veloray uninstall [--purge]      Remove programs; --purge also resets local data
 
 Development: serve | migrate | bootstrap | bootstrap-if-empty | bootstrap-local | reconcile | version
 Run veloray serve explicitly to start the application in the foreground.`)
@@ -284,6 +285,26 @@ Run veloray serve explicitly to start the application in the foreground.`)
 			return e
 		}
 		return json.NewEncoder(os.Stdout).Encode(out)
+	case "admin-list":
+		names, err := store.Administrators(ctx)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(names)
+	case "admin-username":
+		if len(args) > 2 {
+			return errors.New("usage: veloray admin-username [USERNAME]")
+		}
+		preferred := os.Getenv("VELORAY_ADMIN_USERNAME")
+		if len(args) == 2 {
+			preferred = args[1]
+		}
+		name, err := store.AdministratorName(ctx, preferred, len(args) == 2)
+		if err != nil {
+			return err
+		}
+		fmt.Println(name)
+		return nil
 	case "bootstrap", "bootstrap-if-empty", "reset-password":
 		username := os.Getenv("VELORAY_ADMIN_USERNAME")
 		if username == "" {

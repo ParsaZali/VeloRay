@@ -12,10 +12,11 @@ VeloRay 1.0 · Server management
   veloray logs [web|agent|xray|singbox|subscriptions|install]
   veloray audit [LIMIT]
   veloray reset [USERNAME]
+  veloray admin-list
   veloray domain HOST | port PORT | ssl EMAIL
   veloray backup [FILE] | restore FILE
   veloray backup-schedule daily|off
-  veloray repair | update [DIRECTORY] | uninstall
+  veloray repair | update [DIRECTORY] | uninstall [--purge]
   veloray auto-update enable|disable|status|check|run
   veloray ports | inbounds | inbound-port ID PORT
   veloray language en|fa
@@ -101,7 +102,7 @@ MENU
   case "$selection" in
    0) return 0;;1) operation=(status);;2) operation=(url);;3) operation=(restart);;4) operation=(start);;5) operation=(stop);;
    6) read -rp "$(vr_text 'Log [web/agent/xray/install]: ' 'گزارش [web/agent/xray/install]: ')" value;operation=(logs "${value:-web}");;
-   7) username="${VELORAY_ADMIN_USERNAME:-admin}";read -rp "$(vr_text "Username [$username]: " "نام کاربری [$username]: ")" value;operation=(reset "${value:-$username}");;
+   7) read -rp "$(vr_text 'Username [Enter = detect administrator]: ' 'نام کاربری [Enter = تشخیص مدیر]: ')" value;operation=(reset);[[ -z "$value" ]]||operation+=("$value");;
    8) read -rp "$(vr_text 'New domain or IP: ' 'دامنه یا آی‌پی جدید: ')" value;operation=(domain "$value");;
    9) read -rp "$(vr_text 'New port: ' 'پورت جدید: ')" value;operation=(port "$value");;
    10) read -rp "$(vr_text 'Certificate email: ' 'ایمیل گواهی: ')" value;operation=(ssl "$value");;
@@ -184,7 +185,11 @@ case "$command" in
  "$0" doctor
  ;;
  reset|admin-reset)
- export VELORAY_ADMIN_USERNAME="${1:-${VELORAY_ADMIN_USERNAME:-admin}}"
+ [[ $# -le 1 ]]||{ echo 'Usage: veloray reset [USERNAME]' >&2;exit 2; }
+ if administrator="$(veloray admin-username "$@")";then
+  export VELORAY_ADMIN_USERNAME="$administrator"
+ else exit 1;fi
+ vr_say "Administrator: $administrator" "حساب مدیر: $administrator"
  if [[ -z "${VELORAY_ADMIN_PASSWORD:-}" ]];then
   read -rsp "$(vr_text 'New password [Enter = random]: ' 'رمز جدید [Enter = تصادفی]: ')" VELORAY_ADMIN_PASSWORD||true;printf '\n'
   generated_password=false
@@ -259,18 +264,54 @@ TIMER
  vr_autoupdate run;;
  auto-update) vr_autoupdate "${1:-status}";;
  uninstall)
-  vr_say 'Remove services and program files. Configuration, database and backups are preserved.' 'سرویس‌ها و فایل‌های برنامه حذف می‌شوند؛ تنظیمات، پایگاه داده و پشتیبان‌ها حفظ می‌شوند.'
-  read -rp "$(vr_text 'Type REMOVE to continue: ' 'برای ادامه REMOVE را وارد کنید: ')" confirmation
-  [[ "$confirmation" == REMOVE ]]||{ vr_say 'Cancelled.' 'لغو شد.';exit 0; }
-  systemctl disable --now veloray-subscription-endpoint.timer veloray-subscription-endpoint.service veloray-web.service veloray-agent.service veloray-subscriptions.service veloray-reconcile.timer veloray-backup.timer veloray-auto-update.timer xray.service sing-box.service 2>/dev/null||true
-  systemctl stop veloray-reconcile.service 2>/dev/null||true
+  [[ $# -eq 0 || ( $# -eq 1 && "$1" == --purge ) ]]||{ echo 'Usage: veloray uninstall [--purge]' >&2;exit 2; }
+  purge=false;confirmation_word=REMOVE
+  if [[ "${1:-}" == --purge ]];then
+   purge=true;confirmation_word=PURGE
+   [[ -z "${DATABASE_URL:-}" && "${POSTGRES_HOST:-127.0.0.1}" =~ ^(127\.0\.0\.1|localhost)$ && "${POSTGRES_PORT:-5432}" == 5432 && "${POSTGRES_USER:-veloray}" == veloray && "${POSTGRES_DB:-veloray}" == veloray ]]||{ vr_failure 'Automatic purge supports only the installer-managed local veloray database. Custom databases require manual removal.' 'حذف کامل خودکار فقط برای دیتابیس محلی پیش‌فرض veloray مجاز است؛ دیتابیس سفارشی باید دستی بررسی شود.' >&2;exit 2; }
+   vr_warn 'Delete VeloRay accounts, VPN configurations, keys and the local veloray database. A private recovery backup is required and kept.' 'حساب‌ها، کانفیگ‌های VPN، کلیدها و دیتابیس محلی veloray پاک می‌شوند. ابتدا بکاپ خصوصی ساخته و حفظ می‌شود.'
+  else
+   vr_say 'Stop/remove program services. Existing users, VPN configurations, keys and backups are kept for reinstall.' 'سرویس‌های برنامه متوقف و حذف می‌شوند؛ کاربران، کانفیگ‌های VPN، کلیدها و بکاپ‌ها برای نصب مجدد باقی می‌مانند.'
+   vr_say 'For a clean installation instead, cancel and run: sudo veloray uninstall --purge' 'برای نصب از صفر، لغو کنید و این دستور را اجرا کنید: sudo veloray uninstall --purge'
+  fi
+  read -rp "$(vr_text "Type $confirmation_word to continue: " "برای ادامه $confirmation_word را وارد کنید: ")" confirmation
+  [[ "$confirmation" == "$confirmation_word" ]]||{ vr_say 'Cancelled.' 'لغو شد.';exit 0; }
+  vr_install_lock
+  if $purge;then
+   install -d -m 0700 /var/lib/veloray/backups
+   recovery_backup="/var/lib/veloray/backups/pre-purge-$(date -u +%Y%m%dT%H%M%SZ).tar.gz"
+   vr_run veloray backup "$recovery_backup"
+   chmod 0600 "$recovery_backup"
+   vr_say "Recovery backup: $recovery_backup" "بکاپ بازیابی: $recovery_backup"
+  fi
+  removal_units=(veloray-subscription-endpoint.timer veloray-reconcile.timer veloray-backup.timer veloray-auto-update.timer veloray-subscription-endpoint.service veloray-reconcile.service veloray-backup.service veloray-auto-update.service veloray-web.service veloray-agent.service veloray-subscriptions.service xray.service sing-box.service)
+  for unit in "${removal_units[@]}";do
+   systemctl stop "$unit" 2>/dev/null||true
+   state="$(systemctl is-active "$unit" 2>/dev/null)"||true
+   case "$state" in inactive|failed|unknown) ;;*) vr_failure "Could not confirm $unit is stopped. Files and data were kept." "توقف $unit تأیید نشد؛ فایل‌ها و داده‌ها حفظ شدند." >&2;exit 1;;esac
+   systemctl disable --now "$unit" 2>/dev/null||true
+  done
+  if $purge;then
+   vr_run runuser -u postgres -- dropdb -h /var/run/postgresql -p 5432 -U postgres --if-exists -- veloray
+   vr_run runuser -u postgres -- dropuser -h /var/run/postgresql -p 5432 -U postgres --if-exists -- veloray
+   for core in xray sing-box;do
+    slot=xray;[[ "$core" != sing-box ]]||slot=singbox
+    if [[ -L "/usr/local/bin/$core" && "$(readlink "/usr/local/bin/$core")" == "/var/lib/veloray-cores/$slot/current" ]];then rm -f "/usr/local/bin/$core";fi
+   done
+   rm -rf -- /etc/veloray /etc/veloray-node /var/lib/veloray-agent /var/lib/veloray-cores /usr/local/etc/xray /usr/local/etc/sing-box
+   find /var/lib/veloray -mindepth 1 -maxdepth 1 ! -name '*backup*' -exec rm -rf -- {} +
+  fi
   rm -f /etc/systemd/system/veloray-subscription-endpoint.{service,timer} /etc/systemd/system/{veloray-web,veloray-agent,veloray-subscriptions,veloray-reconcile,xray,sing-box}.service /etc/systemd/system/veloray-reconcile.timer /etc/systemd/system/veloray-backup.{service,timer} /etc/systemd/system/veloray-auto-update.{service,timer}
   rm -f /etc/nginx/sites-enabled/veloray /etc/nginx/sites-available/veloray /etc/letsencrypt/renewal-hooks/deploy/veloray-nginx
   systemctl daemon-reload
   if vr_run nginx -t;then vr_run systemctl reload nginx||true;fi
   rm -rf -- /opt/veloray
   rm -f /usr/local/bin/veloray /usr/local/bin/veloray-agent /usr/local/bin/velorayctl
-  vr_say 'VeloRay removed. Reinstall to reuse the preserved configuration and data.' 'VeloRay حذف شد؛ برای استفادهٔ دوباره از داده‌ها نصب را اجرا کنید.'
+  if $purge;then
+   vr_say "VeloRay data removed. Recovery backup: $recovery_backup" "داده‌های VeloRay پاک شدند. بکاپ بازیابی: $recovery_backup"
+  else
+   vr_say 'VeloRay removed. Existing users and VPN configurations will return on reinstall.' 'VeloRay حذف شد؛ کاربران و کانفیگ‌های قبلی با نصب مجدد برمی‌گردند.'
+  fi
  ;;
  node) echo 'Extract the release on the remote server and run: sudo bash deploy/node/install.sh'; ;;
  *) echo 'Unknown command. Run velorayctl help.' >&2;exit 2; ;;
