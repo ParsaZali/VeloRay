@@ -455,6 +455,7 @@ func (s *Server) portal(w http.ResponseWriter, r *http.Request, c, i, n, cfg Dat
 		for _, entry := range details {
 			safe := clone(entry)
 			delete(safe, "link")
+			delete(safe, "profile")
 			safeDetails = append(safeDetails, safe)
 		}
 		details = safeDetails

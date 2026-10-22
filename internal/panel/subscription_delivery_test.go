@@ -326,11 +326,14 @@ func TestHWIDPortalRedactsCredentialsForEveryTemplate(t *testing.T) {
 	cfg["subscription_template_path"] = "probe.html"
 	for _, page := range []string{"default", "compact", "dashboard", "custom"} {
 		cfg["subscription_template"] = page
-		for _, protocol := range []string{"vless", "http", "socks", "wireguard"} {
+		for _, protocol := range []string{"vless", "http", "socks", "wireguard", "mtproto", "amneziawg"} {
 			i["protocol"] = protocol
 			w := httptest.NewRecorder()
 			uri := "vless://private-credential-marker@vpn.example"
-			s.portal(w, httptest.NewRequest("GET", "/sub/test?format=portal", nil), c, i, n, cfg, uri, "private-wireguard-profile", Data{"name": "Primary", "link": uri})
+			if protocol == "amneziawg" {
+				uri = ""
+			}
+			s.portal(w, httptest.NewRequest("GET", "/sub/test?format=portal", nil), c, i, n, cfg, uri, "private-wireguard-profile", Data{"name": "Primary", "link": uri, "profile": "private-wireguard-profile", "protocol": protocol})
 			if strings.Contains(w.Body.String(), "private-credential-marker") || strings.Contains(w.Body.String(), "private-wireguard-profile") {
 				t.Fatal("credentials surfaced", page, protocol)
 			}
