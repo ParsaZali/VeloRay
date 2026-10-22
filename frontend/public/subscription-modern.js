@@ -82,7 +82,7 @@ document.querySelectorAll(".download-profile").forEach(button=>button.addEventLi
  const content=new Blob([input.value+"\n"],{type:"text/plain;charset=utf-8"});
  const link=document.createElement("a");
  const name=button.closest(".profile-item")?.querySelector(".profile-description strong")?.textContent||"connection";
- link.download=(name.replace(/[^a-z0-9_-]/gi,"_").slice(0,48)||"connection")+".txt";
+ link.download=(name.replace(/[^a-z0-9_-]/gi,"_").slice(0,48)||"connection")+(input.value.startsWith("[Interface]\n")?".conf":".txt");
  link.href=URL.createObjectURL(content);
  document.body.appendChild(link);
  link.click();

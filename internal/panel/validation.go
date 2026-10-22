@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/PaarSaAm/VeloRay/internal/nativecore"
 	"net"
 	"net/url"
 	"path/filepath"
@@ -159,13 +160,19 @@ func validateInbound(ctx context.Context, q Query, c Config, d Data) error {
 	p, t, s := str(d, "protocol"), str(d, "transport"), str(d, "security")
 	core := fallback(str(d, "core"), "xray")
 	d["core"] = core
-	if !oneOf(core, "xray", "singbox") {
+	if !oneOf(core, "xray", "singbox", "native") {
 		return errors.New("invalid core")
+	}
+	if core == "native" && !oneOf(p, "mtproto", "amneziawg") {
+		return errors.New("native core requires MTProto or AmneziaWG")
+	}
+	if oneOf(p, "mtproto", "amneziawg") && core != "native" {
+		return errors.New("this protocol requires the native core")
 	}
 	if core == "singbox" && (!oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "http", "socks", "tuic", "naive", "snell", "shadowtls") || !oneOf(t, "raw", "ws", "grpc", "httpupgrade", "hysteria")) {
 		return errors.New("unsupported sing-box protocol or transport")
 	}
-	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "http", "socks", "tunnel", "tun", "tuic", "naive", "snell", "shadowtls") || !oneOf(t, "raw", "ws", "grpc", "xhttp", "httpupgrade", "mkcp", "hysteria") || !oneOf(s, "none", "tls", "reality") {
+	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "http", "socks", "tunnel", "tun", "tuic", "naive", "snell", "shadowtls", "mtproto", "amneziawg") || !oneOf(t, "raw", "ws", "grpc", "xhttp", "httpupgrade", "mkcp", "hysteria") || !oneOf(s, "none", "tls", "reality") {
 		return errors.New("unsupported protocol, transport or security")
 	}
 	if core == "xray" && oneOf(p, "tuic", "naive", "snell", "shadowtls") {
@@ -199,7 +206,7 @@ func validateInbound(ctx context.Context, q Query, c Config, d Data) error {
 	if net.ParseIP(str(d, "listen")) == nil {
 		return errors.New("listen must be an IP address")
 	}
-	if oneOf(p, "wireguard", "shadowsocks", "tunnel", "tun") && (t != "raw" || s != "none") {
+	if oneOf(p, "wireguard", "shadowsocks", "tunnel", "tun", "mtproto", "amneziawg") && (t != "raw" || s != "none") {
 		return errors.New("this protocol requires RAW without stream security")
 	}
 	if p == "socks" && t != "raw" {
@@ -240,7 +247,10 @@ func validateInbound(ctx context.Context, q Query, c Config, d Data) error {
 		}
 	}
 	ps := obj(d, "protocol_settings")
-	if p == "wireguard" && (!validKey(str(ps, "secret_key")) || !validKey(str(ps, "public_key"))) {
+	if p == "mtproto" && !nativecore.ValidHostname(str(ps, "fake_tls_host")) {
+		return errors.New("MTProto requires a public FakeTLS hostname")
+	}
+	if oneOf(p, "wireguard", "amneziawg") && (!validKey(str(ps, "secret_key")) || !validKey(str(ps, "public_key"))) {
 		return errors.New("WireGuard requires a server keypair")
 	}
 	if p == "shadowsocks" && !oneOf(fallback(str(ps, "method"), "aes-256-gcm"), "aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305") {
@@ -248,6 +258,11 @@ func validateInbound(ctx context.Context, q Query, c Config, d Data) error {
 	}
 	if p == "tunnel" && !flag(ps, "follow_redirect") && (num(ps, "rewrite_port") < 1 || num(ps, "rewrite_port") > 65535) {
 		return errors.New("tunnel requires a target port or follow_redirect")
+	}
+	if p == "amneziawg" {
+		if err := validatePanelAWG(d); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -277,7 +292,7 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 		return errors.New("inbound does not exist")
 	}
 	p := str(i, "protocol")
-	if num(d, "device_limit") > 0 && !oneOf(p, "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell", "shadowtls") {
+	if num(d, "device_limit") > 0 && !oneOf(p, "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell", "shadowtls", "mtproto") {
 		return errors.New("device limits require a supported metered protocol")
 	}
 	if !supportsClients(p) {
@@ -314,6 +329,9 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 	}
 	if oneOf(p, "vless", "vmess", "tuic") && !uuidPattern.MatchString(str(d, "credential")) {
 		return errors.New("credential must be a UUID")
+	}
+	if p == "mtproto" && len(str(d, "credential")) < 16 {
+		return errors.New("MTProto credential must contain at least 16 characters")
 	}
 	if len(str(d, "credential")) > 255 || strings.ContainsAny(str(d, "credential"), "\r\n") {
 		return errors.New("invalid credential")
@@ -362,7 +380,7 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 			return errors.New("Shadowsocks supports one client per inbound")
 		}
 	}
-	if p == "wireguard" {
+	if oneOf(p, "wireguard", "amneziawg") {
 		if !validKey(str(ps, "public_key")) || !validKey(str(ps, "private_key")) {
 			return errors.New("WireGuard client requires a keypair")
 		}
@@ -384,6 +402,11 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 			}
 		}
 	}
+	if p == "amneziawg" {
+		if err := validateAWGClient(d); err != nil {
+			return err
+		}
+	}
 	if e := scheduleRenewal(d, time.Now().UTC()); e != nil {
 		return e
 	}
@@ -397,7 +420,7 @@ func fallback(s, d string) string {
 }
 func supportsClients(p string) bool { return p != "tun" && p != "tunnel" }
 func metered(p string) bool {
-	return oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "tuic", "naive", "snell", "shadowtls")
+	return oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "tuic", "naive", "snell", "shadowtls", "mtproto", "amneziawg")
 }
 func validateSettings(d Data) error {
 	if e := validateSMTP(d); e != nil {

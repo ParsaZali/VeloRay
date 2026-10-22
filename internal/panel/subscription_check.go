@@ -45,7 +45,7 @@ func (s *Server) deliveryCheck(ctx context.Context, id int64) (Data, error) {
 		if !mapped {
 			hosts = append(hosts, Data{"name": str(inbound, "name"), "address": str(node, "public_host"), "enabled": true})
 		}
-		for _, host := range hosts {
+		for hostIndex, host := range hosts {
 			i, n := deliveryHost(inbound, node, host)
 			reasons := []string{}
 			if !active(member, time.Now()) {
@@ -84,7 +84,8 @@ func (s *Server) deliveryCheck(ctx context.Context, id int64) (Data, error) {
 			if err != nil {
 				asData(formats["xray"])["reason"] = err.Error()
 			}
-			results = append(results, Data{"inbound": num(inbound, "id"), "name": str(host, "name"), "protocol": str(i, "protocol"), "eligible": len(reasons) == 0, "reasons": reasons, "formats": formats})
+			_, _, probeErr := connectionProbeConfig(member, i, n)
+			results = append(results, Data{"inbound": num(inbound, "id"), "name": str(host, "name"), "protocol": str(i, "protocol"), "eligible": len(reasons) == 0, "reasons": reasons, "formats": formats, "host_index": hostIndex, "probe_available": probeErr == nil})
 		}
 	}
 	limit, required := hwidPolicy(c, cfg)

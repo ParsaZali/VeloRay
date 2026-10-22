@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -53,7 +54,8 @@ func modernPortalData(d map[string]any, c Data, cfg Data, details []Data) {
 	protocols := map[string]bool{}
 	for _, item := range details {
 		uri := str(item, "link")
-		if uri == "" {
+		configProfile := str(item, "profile")
+		if uri == "" && configProfile == "" {
 			continue
 		}
 		protocol := strings.ToUpper(str(item, "protocol"))
@@ -63,8 +65,21 @@ func modernPortalData(d map[string]any, c Data, cfg Data, details []Data) {
 			"Node": str(item, "node"), "Host": str(item, "host"),
 			"Link": uri, "Search": strings.Join([]string{str(item, "name"), protocol, str(item, "node"), str(item, "host")}, " "),
 		}
+		if uri == "" {
+			entry["Link"] = configProfile
+			entry["ProfileURL"] = d["URL"].(string) + "?format=wireguard&connection=" + strconv.FormatInt(num(item, "index"), 10)
+		}
+		if str(item, "protocol") == "mtproto" {
+			if parsed, err := url.Parse(uri); err == nil && parsed.Scheme == "tg" && parsed.Host == "proxy" {
+				entry["OpenURL"] = "https://t.me/proxy?" + parsed.RawQuery
+			}
+		}
 		if flag(cfg, "subscription_show_qr") {
-			entry["QR"] = subscriptionQRCode(uri)
+			qrValue := uri
+			if uri == "" {
+				qrValue = configProfile
+			}
+			entry["QR"] = subscriptionQRCode(qrValue)
 		}
 		filtered = append(filtered, entry)
 	}

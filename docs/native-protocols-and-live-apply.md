@@ -30,7 +30,7 @@ exported as older Snell v3/v4 or advertised as broadly Mihomo-compatible.
 `/sub/TOKEN?format=xray` returns an array of named Xray client configurations,
 one per eligible delivery host/connection. Supported protocols: VLESS, VMess,
 Trojan and Shadowsocks; supported transports: RAW, WS, gRPC, XHTTP, HTTPUpgrade,
-MKCP. Unsupported combinations return an explicit error. Server certificate paths,
+MKCP. Mixed-account feeds include compatible members and report omitted counts in response headers; `strict=1` retains all-or-error behavior. A feed with no compatible members returns an explicit error. Server certificate paths,
 private REALITY keys, server handshake targets and socket options are omitted.
 The exporter supplies only public client TLS/REALITY settings. This endpoint uses
 the same HWID admission, quota checks and no-store headers as other feeds.
@@ -85,7 +85,7 @@ runs set `VELORAY_TEST_NO_NETLINK=1` and omit sing-box runtime round trips while
 still running configuration checks; CI does not set that escape hatch. No successful
 local network test is claimed for a test omitted under that flag.
 
-AmneziaWG, MTProto, SSH, additional client ecosystems, full
+[MTProto and AmneziaWG](mtproto-and-amneziawg.md) now have separate embedded native engines. SSH, additional client ecosystems, full
 hot remove/update and structural hot apply remain tracked individually in the
 competitor roadmap. They are not implemented by merely adding a protocol label.
 
@@ -101,8 +101,8 @@ bundled sing-box 1.14.3 source/build tags, rather than a dropdown of protocol na
 
 | Capability | Bundled engine boundary | Required panel work before support can be advertised |
 | --- | --- | --- |
-| AmneziaWG | No AmneziaWG inbound in either current protocol registry; ordinary WireGuard is a different protocol | Package and supervise a separate compatible engine/module, then implement peer lifecycle, counters, revocation and client exports |
-| MTProto | Absent from both current inbound registries | Separate MTProxy service, secret lifecycle, proven per-principal accounting and supported quota semantics |
+| AmneziaWG | Embedded independent amneziawg-go engine and userspace TCP/UDP stack | Delivered within the [documented scope](mtproto-and-amneziawg.md) |
+| MTProto | Embedded independent mtg FakeTLS engine | Delivered within the [documented scope](mtproto-and-amneziawg.md) |
 | ShadowTLS v3 | Managed sing-box wrapper + authenticated Shadowsocks 2022 inner inbound, TCP only | Delivered within the [documented scope](shadowtls.md); independent Mihomo/client-app testing remains separate |
 | SSH server | sing-box supplies an SSH outbound, not an SSH server | Separate SSH server lifecycle, authorization/isolation, tunnel-only policy and independently tested traffic accounting |
 | Naive Chromium client | Naive server is bundled; optional cronet outbound is excluded from the CGO-free build | Separate compatible Chromium/cronet client packaging and HTTP/2 interoperability coverage; HTTP/1.1 fixture coverage is shipped |

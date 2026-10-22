@@ -274,6 +274,7 @@ type ledger struct {
 	Operations map[string]operation    `json:"operations"`
 }
 type Manager struct {
+	native                                     *nativeRuntime
 	probeMu                                    sync.Mutex
 	Binary, ConfigPath, ServiceName, StatePath string
 	Core                                       string
@@ -348,6 +349,13 @@ func atomicWrite(path string, raw []byte, mode os.FileMode) error {
 	defer d.Close()
 	return d.Sync()
 }
+func (m *Manager) configMode() os.FileMode {
+	if m.native != nil {
+		return 0600
+	}
+	return 0640
+}
+
 func (m *Manager) persist() error {
 	b, err := json.Marshal(m.state)
 	if err != nil {
@@ -445,7 +453,14 @@ func (m *Manager) Stats(ctx context.Context) (Snapshot, error) {
 	}
 	s := Snapshot{Accounting: "durable-v1", OutboundAccounting: "core-scoped-v1", LedgerID: m.state.ID, Stat: []Counter{}, OnlineUsers: []string{}, ObservedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	s.OnlineIPs = map[string]map[string]int64{}
-	if m.Core == "singbox" {
+	if m.native != nil {
+		_, s.OnlineIPs = m.native.engine.Snapshot()
+		s.OnlineAvailable = true
+		s.OnlineIPsAvailable = true
+		for name := range s.OnlineIPs {
+			s.OnlineUsers = append(s.OnlineUsers, name)
+		}
+	} else if m.Core == "singbox" {
 		if running {
 			var onlineErr error
 			s.OnlineIPs, onlineErr = m.singOnlineIPs(ctx)
@@ -490,7 +505,7 @@ func (m *Manager) Stats(ctx context.Context) (Snapshot, error) {
 			}
 		}
 	}
-	if running && m.Core != "singbox" {
+	if running && m.Core != "singbox" && m.native == nil {
 		if _, ok := m.Runtime.(Commands); ok {
 			if ips, e := xrayOnlineIPs(ctx); e == nil {
 				s.OnlineIPs = ips
@@ -515,6 +530,13 @@ func (m *Manager) Validate(ctx context.Context, raw []byte) error {
 	return m.validate(ctx, raw)
 }
 func (m *Manager) validate(ctx context.Context, raw []byte) error {
+	if m.native != nil {
+		checks, err := m.native.ports(ctx, raw)
+		if err != nil {
+			return err
+		}
+		return RequireFreePorts(checks)
+	}
 	var value map[string]any
 	if err := json.Unmarshal(raw, &value); err != nil || value == nil {
 		return errors.New("config must be a JSON object")
@@ -662,8 +684,8 @@ func (m *Manager) Apply(ctx context.Context, id string, raw []byte) error {
 		return e
 	}
 	additions, live := liveUserAdditions(before, raw)
-	live = live && m.Core != "singbox" && m.status(ctx).Running
-	if e = atomicWrite(m.ConfigPath, raw, 0640); e == nil {
+	live = live && m.Core != "singbox" && m.native == nil && m.status(ctx).Running
+	if e = atomicWrite(m.ConfigPath, raw, m.configMode()); e == nil {
 		if live {
 			e = m.addUsersLive(ctx, additions)
 		} else {
@@ -692,7 +714,7 @@ func (m *Manager) restore(ctx context.Context, b []byte) error {
 		_, e := m.Runtime.Run(ctx, "systemctl", "stop", m.ServiceName)
 		return e
 	}
-	if e := atomicWrite(m.ConfigPath, b, 0640); e != nil {
+	if e := atomicWrite(m.ConfigPath, b, m.configMode()); e != nil {
 		return e
 	}
 	return m.restart(ctx)
@@ -804,6 +826,9 @@ func (m *Manager) hasOperation(id string) bool {
 }
 
 func fallbackCore(core string) string {
+	if core == "native" {
+		return "native"
+	}
 	if core == "singbox" {
 		return core
 	}

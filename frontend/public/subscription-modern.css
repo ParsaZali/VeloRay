@@ -14,3 +14,4 @@
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
 
 html[dir=rtl] .stat-number[dir=ltr]{text-align:right}.quota-amount{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px}
+.profile-item{flex-wrap:wrap}.profile-buttons{max-width:100%;flex-wrap:wrap;justify-content:flex-end}.profile-buttons .outline-button{min-height:38px;overflow-wrap:anywhere}@media(max-width:600px){.profile-description{flex-basis:100%}}

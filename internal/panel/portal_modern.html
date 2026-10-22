@@ -141,7 +141,7 @@
             <div class="profile-icon" aria-hidden="true">◈</div>
             <div class="profile-description"><strong>{{.Name}}</strong><small><span>{{.Protocol}}</span> · <span dir="ltr">{{.Host}}</span> · <span>{{.Node}}</span></small></div>
             <div class="profile-buttons">
-              <input class="profile-uri sr-only" readonly value="{{.Link}}" aria-label="Connection URI">
+              {{if .OpenURL}}<a class="outline-button" href="{{.OpenURL}}" rel="noreferrer">Telegram ↗</a>{{end}}{{if .ProfileURL}}<a class="outline-button" href="{{.ProfileURL}}">{{.Protocol}} ↓</a>{{end}}{{if .ProfileURL}}<textarea class="profile-uri sr-only" readonly aria-label="Connection profile">{{.Link}}</textarea>{{else}}<input class="profile-uri sr-only" readonly value="{{.Link}}" aria-label="Connection URI">{{end}}
               <button type="button" class="small-icon-button copy-profile" aria-label="Copy profile" title="Copy profile" data-i18n-aria="copyProfile">⧉</button>
               <button type="button" class="small-icon-button download-profile" aria-label="Download profile" title="Download profile" data-i18n-aria="downloadProfile">↓</button>
               {{if .QR}}<button type="button" class="small-icon-button qr-trigger" aria-label="Profile QR code" title="Profile QR code" data-qr="{{.QR}}" data-label="{{.Name}}" data-i18n-aria="qrProfile">▦</button>{{end}}

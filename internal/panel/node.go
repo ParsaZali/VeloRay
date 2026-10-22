@@ -18,6 +18,35 @@ import (
 )
 
 func (s *Server) nodeCall(ctx context.Context, node Data, path string, payload any) (Data, error) {
+	if oneOf(path, "/xray/validate", "/xray/apply") && payload != nil {
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return nil, err
+		}
+		body, err := decode(raw)
+		if err != nil {
+			return nil, err
+		}
+		if len(array(obj(obj(body, "config"), "_native"), "inbounds")) > 0 {
+			status, err := s.nodeCall(ctx, node, "/native/status", nil)
+			if err != nil || num(status, "version") < 1 {
+				return nil, errors.New("upgrade this node agent before deploying native protocols")
+			}
+			supported := map[string]bool{}
+			for _, value := range array(status, "protocols") {
+				if name, ok := value.(string); ok {
+					supported[name] = true
+				}
+			}
+			for _, value := range array(obj(obj(body, "config"), "_native"), "inbounds") {
+				if !supported[str(asData(value), "protocol")] {
+					return nil, errors.New("this native protocol requires a newer node agent")
+				}
+			}
+
+		}
+	}
+
 	token, e := unseal(s.Config.FieldKey, str(node, "_agent_token"))
 	if e != nil {
 		return nil, e
