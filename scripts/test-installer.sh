@@ -318,7 +318,8 @@ echo "$1" >>"$HOST_ROOT/app-calls"
 case "$1" in
  version) echo 1.0;;
  bootstrap) [[ "${TEST_BOOTSTRAP_FAIL:-}" != 1 ]]||exit 1;touch "$HOST_ROOT/admin";;
- backup) printf fixture-backup >"$2";;
+ backup) [[ "${TEST_BACKUP_FAIL:-}" != 1 ]]||exit 1;printf fixture-backup >"$2";;
+ admin-username) [[ "${TEST_ADMIN_RESOLVE_FAIL:-}" != 1 ]]||{ echo "multiple administrators exist" >&2;exit 1; };if [[ $# -gt 1 ]];then echo "$2";else echo "${TEST_CURRENT_ADMIN:-${VELORAY_ADMIN_USERNAME:-admin}}";fi;;
  reset-password) [[ "${#VELORAY_ADMIN_PASSWORD}" -ge 12 ]]||exit 1;touch "$HOST_ROOT/password-reset";;
  host-inbounds) printf '[{"id":1,"name":"main","listen":"0.0.0.0","port":443,"protocol":"vless","enabled":true}]\n';;
  host-inbound-port) [[ "$2" == 1 && "$3" == 2053 ]]||exit 2;touch "$HOST_ROOT/ports-resolved";;
@@ -385,7 +386,18 @@ cat >"$TEST_ROOT/host-tools/systemctl" <<'SYSTEMD'
 #!/usr/bin/env bash
 echo "$*" >>"$HOST_ROOT/service-calls"
 if [[ "$1" == is-enabled && "$*" == *veloray-subscriptions.service* && "${TEST_SUBSCRIPTIONS_ACTIVE:-}" != 1 ]];then exit 1;fi
+if [[ "$1" == stop || ( "$1" == disable && "${2:-}" == --now ) ]];then
+ for unit in "$@";do
+  [[ "$unit" == *.service || "$unit" == *.timer ]]||continue
+  [[ "$unit" == "${TEST_STUCK_UNIT:-__none__}" ]]||touch "$HOST_ROOT/stopped-$unit"
+ done
+fi
+if [[ "$1" == start || "$1" == restart ]];then
+ for unit in "$@";do rm -f "$HOST_ROOT/stopped-$unit";done
+fi
 if [[ "$1" == is-active ]];then
+ if [[ "${@: -1}" == "${TEST_STUCK_UNIT:-__none__}" ]];then echo active;exit 0;fi
+ if [[ -f "$HOST_ROOT/stopped-${@: -1}" ]];then [[ "$*" == *--quiet* ]]||echo inactive;exit 3;fi
  [[ "$*" != *veloray-subscriptions.service* || "${TEST_SUBSCRIPTIONS_ACTIVE:-}" == 1 ]]||exit 3
  [[ "$*" != *"${TEST_FAILED_UNIT:-__none__}"* ]]||exit 3
  [[ "$*" == *--quiet* ]]||echo active
@@ -396,6 +408,18 @@ cat >"$TEST_ROOT/host-tools/certbot" <<'CERTBOT'
 printf '%s\n' "$*" >"$HOST_ROOT/certbot-call"
 CERTBOT
 printf '#!/usr/bin/env bash\nprintf fixture-dump\n' >"$TEST_ROOT/host-tools/pg_dump"
+cat >"$TEST_ROOT/host-tools/dropdb" <<'DROPDB'
+#!/usr/bin/env bash
+[[ "${@: -1}" == veloray ]]||exit 2
+[[ -f "$HOST_ROOT/database" ]]||exit 1
+find "$HOST_ROOT/var/lib/veloray/backups" -name 'pre-purge-*.tar.gz' | read -r backup || exit 1
+rm -f "$HOST_ROOT/database" "$HOST_ROOT/admin"
+DROPDB
+cat >"$TEST_ROOT/host-tools/dropuser" <<'DROPUSER'
+#!/usr/bin/env bash
+[[ "${@: -1}" == veloray && ! -f "$HOST_ROOT/database" ]]||exit 2
+rm -f "$HOST_ROOT/role"
+DROPUSER
 chmod +x "$TEST_ROOT/host-tools/"*
 bootstrap_test_path="$PATH"
 export PATH="$HOST_ROOT/usr/local/bin:$TEST_ROOT/host-tools:$PATH" TEST_MACHINE=x86_64
@@ -470,6 +494,7 @@ grep -Eq '^stop .*veloray-subscriptions.service' "$HOST_ROOT/service-calls"
 unset TEST_SUBSCRIPTIONS_ACTIVE
 pass independent-subscriptions-controller-lifecycle
 export TEST_SUBSCRIPTIONS_ACTIVE=1
+bash "$HOST_ROOT/usr/local/bin/velorayctl" start >"$TEST_ROOT/host-result" 2>&1
 : >"$HOST_ROOT/service-calls"
 printf 'RESTORE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" restore "$HOST_ROOT/recovery.tar.gz" >"$TEST_ROOT/host-result" 2>&1
 grep -Fxq 'stop veloray-subscriptions.service' "$HOST_ROOT/service-calls"
@@ -607,5 +632,48 @@ ln -sfn "$slot/binary-official-test" "$slot/current"
 printf '{"tag":"v1.2.3","source":"official"}\n' >"$slot/active.json"
 host_install
 grep -Fq official-core "$HOST_ROOT/usr/local/bin/xray";pass panel-upgrade-preserves-official-core-choice
+export PATH="$bootstrap_test_path"
+# Recovery resolves the actual administrator before asking for credentials.
+export PATH="$HOST_ROOT/usr/local/bin:$TEST_ROOT/host-tools:$bootstrap_test_path"
+export TEST_CURRENT_ADMIN=renamed-owner
+printf '\n' | env -u VELORAY_ADMIN_PASSWORD bash "$HOST_ROOT/usr/local/bin/velorayctl" reset >"$TEST_ROOT/host-result" 2>&1
+grep -Fq 'Administrator: renamed-owner' "$TEST_ROOT/host-result";pass reset-detects-renamed-administrator
+export TEST_ADMIN_RESOLVE_FAIL=1
+rm -f "$HOST_ROOT/password-reset"
+if printf '\n' | env -u VELORAY_ADMIN_PASSWORD bash "$HOST_ROOT/usr/local/bin/velorayctl" reset >"$TEST_ROOT/host-result" 2>&1;then echo 'Ambiguous administrator accepted' >&2;exit 1;fi
+test ! -f "$HOST_ROOT/password-reset"
+if grep -Fq 'Password:' "$TEST_ROOT/host-result";then exit 1;fi
+pass reset-rejects-ambiguous-account-before-password
+unset TEST_ADMIN_RESOLVE_FAIL TEST_CURRENT_ADMIN
+export TEST_STUCK_UNIT=xray.service
+if printf 'REMOVE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall >"$TEST_ROOT/host-result" 2>&1;then echo 'Live core removed' >&2;exit 1;fi
+test -x "$HOST_ROOT/usr/local/bin/veloray";test -f "$HOST_ROOT/database"
+pass uninstall-refuses-to-remove-running-core
+unset TEST_STUCK_UNIT
+printf 'REMOVE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall --purge >"$TEST_ROOT/host-result" 2>&1
+test -f "$HOST_ROOT/database";test -f "$HOST_ROOT/etc/veloray/veloray.env"
+pass purge-needs-separate-confirmation
+# A custom database must never be dropped by the native uninstall helper.
+cp "$HOST_ROOT/etc/veloray/veloray.env" "$TEST_ROOT/env-before-purge"
+printf '\nDATABASE_URL=postgres://custom.invalid/shared\n' >>"$HOST_ROOT/etc/veloray/veloray.env"
+if printf 'PURGE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall --purge >"$TEST_ROOT/host-result" 2>&1;then echo 'Custom database purged' >&2;exit 1;fi
+test -f "$HOST_ROOT/database";test -f "$HOST_ROOT/admin"
+cp "$TEST_ROOT/env-before-purge" "$HOST_ROOT/etc/veloray/veloray.env"
+pass purge-rejects-custom-database
+export TEST_BACKUP_FAIL=1
+if printf 'PURGE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall --purge >"$TEST_ROOT/host-result" 2>&1;then echo 'Purge continued without backup' >&2;exit 1;fi
+test -f "$HOST_ROOT/database";test -f "$HOST_ROOT/admin";test -d "$HOST_ROOT/etc/veloray"
+unset TEST_BACKUP_FAIL
+pass purge-requires-successful-backup
+printf 'PURGE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall --purge >"$TEST_ROOT/host-result" 2>&1
+test ! -f "$HOST_ROOT/database";test ! -f "$HOST_ROOT/role";test ! -d "$HOST_ROOT/etc/veloray"
+test ! -d "$HOST_ROOT/var/lib/veloray-agent";test ! -d "$HOST_ROOT/var/lib/veloray-cores"
+find "$HOST_ROOT/var/lib/veloray/backups" -name 'pre-purge-*.tar.gz' | read -r backup
+pass purge-removes-local-state-and-keeps-private-backup
+# The bootstrapper reinstalls bundled cores before calling install-panel.sh.
+for core in xray sing-box;do printf '#!/usr/bin/env bash\nexit 0\n' >"$HOST_ROOT/usr/local/bin/$core";chmod +x "$HOST_ROOT/usr/local/bin/$core";done
+host_install
+test -f "$HOST_ROOT/admin";test -f "$HOST_ROOT/database";test -f "$HOST_ROOT/role"
+pass reinstall-after-purge-is-fresh
 export PATH="$bootstrap_test_path"
 printf '%s installer checks passed.\n' "$passed"

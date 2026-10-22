@@ -48,6 +48,12 @@ sudo veloray update
 
 Updates follow `main` after **that exact commit passes CI**. The updater verifies the pinned installer, creates a private backup, runs health checks and attempts application/service rollback if installation fails. Existing users, encryption keys and traffic records are preserved. Database restore remains an explicit operation.
 
+### Removal and reinstall
+
+`sudo veloray uninstall` stops and removes the services and program files while **keeping users, VPN configurations, keys and backups**. Reinstalling reuses this data. `sudo veloray reset` detects the current administrator even after a username change; use `sudo veloray admin-list` and `sudo veloray reset USERNAME` when multiple administrators exist.
+
+For a fresh installation, `sudo veloray uninstall --purge` requires typing **PURGE** and a successful private recovery backup before deleting the installer-managed local database, configuration and keys. Backups are kept. Custom databases require manual removal.
+
 ### Server console
 
 ```bash
@@ -62,6 +68,7 @@ A compact management menu provides service status, logs, domain/port changes, SS
 ```bash
 sudo veloray status
 sudo veloray doctor
+sudo veloray admin-list
 sudo veloray reset
 sudo veloray domain panel.example.com
 sudo veloray port 23456

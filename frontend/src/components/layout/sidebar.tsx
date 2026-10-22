@@ -1,8 +1,6 @@
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
 import { can, useSession } from "@/lib/session";
 import { useLocale, t } from "@/lib/i18n";
-import { ChevronLeft, Star, X } from "lucide-react";
+import { ChevronLeft, ExternalLink, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { VeloRayWordmark } from "@/components/brand/veloray-mark";
 import { FaIcon } from "@/components/ui/fa-icon";
@@ -84,23 +82,6 @@ export function Sidebar({
 }) {
   useLocale();
   const session = useSession();
-  const [stars, setStars] = useState<number | null>(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    void api<{ stars: number | null }>("/project", {
-      signal: controller.signal,
-    })
-      .then((data) => {
-        if (!controller.signal.aborted)
-          setStars(
-            typeof data.stars === "number" && Number.isFinite(data.stars)
-              ? data.stars
-              : null,
-          );
-      })
-      .catch(() => {});
-    return () => controller.abort();
-  }, []);
   const access: Record<string, string> = {
     dashboard: "dashboard.read",
     clients: "clients.read",
@@ -115,25 +96,7 @@ export function Sidebar({
   };
   const body = (compact: boolean) => (
     <>
-      <a
-        className="project-stars"
-        href="https://github.com/ParsaZali/VeloRay"
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label={t(
-          "Star VeloRay on GitHub",
-          "ستاره دادن به VeloRay در گیت‌هاب",
-        )}
-      >
-        <Star size={14} />
-        {!compact && (
-          <>
-            <span>GitHub</span>
-            <strong>{stars === null ? "—" : stars.toLocaleString()}</strong>
-          </>
-        )}
-      </a>
-      <div className="flex h-12 shrink-0 items-center justify-between px-4">
+      <div className="flex h-14 shrink-0 items-center justify-between px-4">
         <VeloRayWordmark compact={compact} />
         <button
           aria-label={t("Close menu")}
@@ -179,10 +142,10 @@ export function Sidebar({
                         setMobileOpen(false);
                       }}
                       className={cn(
-                        "group flex h-[31px] w-full min-w-0 items-center rounded-md text-[13px] font-medium transition",
+                        "group flex h-8 w-full min-w-0 items-center rounded-md text-[13px] font-medium transition",
                         compact ? "justify-center px-0" : "gap-2.5 px-2.5",
                         active
-                          ? "sidebar-current bg-[var(--surface-2)] text-[var(--fg)]"
+                          ? "sidebar-current bg-[color-mix(in_srgb,var(--brand)_9%,var(--sidebar))] text-[var(--brand)]"
                           : "text-[var(--muted-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--fg)]",
                       )}
                     >
@@ -191,7 +154,7 @@ export function Sidebar({
                         className={cn(
                           "text-[12px] transition-colors",
                           active
-                            ? "text-[var(--fg)]"
+                            ? "text-[var(--brand)]"
                             : "text-[var(--muted-strong)] group-hover:text-[var(--fg)]",
                         )}
                       />
@@ -205,13 +168,25 @@ export function Sidebar({
           </div>
         ))}
       </nav>
-      <div className="border-t border-[var(--border-subtle)] p-1.5">
+      <div className="sidebar-footer flex h-16 shrink-0 items-center gap-1 border-t border-[var(--border-subtle)] px-3">
+        {!compact && (
+          <a
+            href="https://github.com/ParsaZali/VeloRay"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="VeloRay GitHub"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-2 text-[var(--muted-strong)] hover:text-[var(--brand)]"
+          >
+            <VeloRayWordmark />
+            <ExternalLink className="ml-auto h-3 w-3 shrink-0 text-[var(--muted)]" />
+          </a>
+        )}
         <button
           aria-label={
             compact ? t("Expand navigation") : t("Collapse navigation")
           }
           onClick={() => setCollapsed(!collapsed)}
-          className="hidden h-8 w-full items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-2)] lg:flex"
+          className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-2)] lg:flex"
         >
           <ChevronLeft
             className={cn(
@@ -228,7 +203,7 @@ export function Sidebar({
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 hidden border-r border-[var(--border)] bg-[var(--sidebar)] lg:flex lg:flex-col transition-[width] duration-200",
-          collapsed ? "w-[68px]" : "w-[224px]",
+          collapsed ? "w-[68px]" : "w-[240px]",
         )}
       >
         {body(collapsed)}

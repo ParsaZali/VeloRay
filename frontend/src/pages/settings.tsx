@@ -98,7 +98,7 @@ const defaults: AppSettings = {
   api_keys_enabled: true,
   api_key_default_days: 90,
   audit_retention_days: 90,
-  accent: "blue",
+  accent: "emerald",
   telegram_enabled: false,
   telegram_locale: "en",
   telegram_allow_changes: false,
@@ -530,25 +530,6 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                           }
                           placeholder={t("https://...")}
                         />
-                      </Field>
-                      <Field label={t("Accent")}>
-                        <Select
-                          className="input"
-                          value={cfg.accent}
-                          onChange={(e) => {
-                            set("accent", e.target.value);
-                            document.documentElement.dataset.accent =
-                              e.target.value;
-                          }}
-                        >
-                          {["emerald", "blue", "violet", "rose", "amber"].map(
-                            (x) => (
-                              <option key={x} value={x}>
-                                {x}
-                              </option>
-                            ),
-                          )}
-                        </Select>
                       </Field>
                       <Field label={t("Dashboard refresh")}>
                         <Select

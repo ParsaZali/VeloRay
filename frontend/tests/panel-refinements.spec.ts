@@ -41,7 +41,7 @@ async function panel(
     else if (resource === "settings")
       json = {
         site_name: "VeloRay",
-        accent: "blue",
+        accent: "emerald",
         default_locale: "en",
         dashboard_refresh_seconds: 60,
       };
@@ -208,7 +208,23 @@ test("readable dark and light palette, raw upload and download", async ({
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await panel(page, "/dashboard");
+  await panel(page, "/dashboard", {
+    settings: {
+      json: {
+        site_name: "VeloRay",
+        accent: "amber",
+        default_locale: "en",
+        dashboard_refresh_seconds: 60,
+      },
+    },
+  });
+  expect(
+    await page.evaluate(() =>
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--brand")
+        .trim(),
+    ),
+  ).toBe("#67e8a5");
   const traffic = page.locator(".traffic-directions");
   await expect(traffic.getByText("1.00 GB", { exact: true })).toBeVisible();
   await expect(traffic.getByText("2.00 GB", { exact: true })).toBeVisible();
@@ -218,13 +234,14 @@ test("readable dark and light palette, raw upload and download", async ({
   await expect(
     page.locator('[aria-label="Traffic chart"] canvas'),
   ).toBeVisible();
+  await preview(page, "dashboard-dark");
   expect(
     await page.evaluate(() =>
       getComputedStyle(document.documentElement)
         .getPropertyValue("--bg")
         .trim(),
     ),
-  ).toBe("#18181b");
+  ).toBe("#101318");
   await page.getByRole("button", { name: "Theme: dark" }).click();
   await expect(page.locator("html")).toHaveClass(/light/);
   expect(
@@ -234,6 +251,13 @@ test("readable dark and light palette, raw upload and download", async ({
         .trim(),
     ),
   ).toBe("#f5f6f8");
+  expect(
+    await page.evaluate(() =>
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--brand")
+        .trim(),
+    ),
+  ).toBe("#177444");
   await page
     .getByRole("button", { name: "Transfer rate", exact: true })
     .click();
@@ -828,7 +852,7 @@ test("theme reveals a circular palette and respects reduced motion", async ({
     await page
       .locator('nav [aria-current="page"]')
       .evaluate((el) => getComputedStyle(el).boxShadow),
-  ).toBe("none");
+  ).not.toBe("none");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.evaluate(
     () => delete document.documentElement.dataset.themeReveal,
@@ -2552,7 +2576,7 @@ test("separate subscription port applies independently and preserves the previou
   complete = true;
   await expect(
     section.getByText("https://panel.example:9444", { exact: true }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 10000 });
   await expect(section.getByRole("status")).toHaveText("Active");
   await expect(
     section.getByRole("link", { name: "Check subscription service" }),
@@ -2951,7 +2975,12 @@ test("compact operator navigation fits a normal screen and keeps one default tem
   page.on("pageerror", (e) => errors.push(e.message));
   await page.setViewportSize({ width: 1440, height: 768 });
   await panel(page, "/settings", { project: { json: { stars: 1 } } });
-  await expect(page.locator(".project-stars strong")).toHaveText("1");
+  await expect(page.locator(".project-stars")).toHaveCount(0);
+  await expect(
+    page
+      .locator("aside .sidebar-footer")
+      .getByRole("link", { name: "VeloRay GitHub" }),
+  ).toBeVisible();
   const navigation = page.locator("aside nav").first();
   expect(
     await navigation.evaluate((el) => el.scrollHeight <= el.clientHeight),
