@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test, expect, type Page } from "@playwright/test";
@@ -41,7 +41,7 @@ async function panel(
     else if (resource === "settings")
       json = {
         site_name: "VeloRay",
-        accent: "emerald",
+        accent: "blue",
         default_locale: "en",
         dashboard_refresh_seconds: 60,
       };
@@ -224,7 +224,7 @@ test("readable dark and light palette, raw upload and download", async ({
         .getPropertyValue("--bg")
         .trim(),
     ),
-  ).toBe("#101318");
+  ).toBe("#18181b");
   await page.getByRole("button", { name: "Theme: dark" }).click();
   await expect(page.locator("html")).toHaveClass(/light/);
   expect(
@@ -2934,4 +2934,195 @@ test("client connection check runs the chosen delivery host and displays measure
   await expect(dialog.getByRole("status")).toContainText(
     "Connection successful · 81 ms 204",
   );
+});
+
+async function preview(page: Page, name: string) {
+  if (!process.env.VELORAY_SCREENSHOTS) return;
+  mkdirSync(process.env.VELORAY_SCREENSHOTS, { recursive: true });
+  await page.screenshot({
+    path: join(process.env.VELORAY_SCREENSHOTS, `${name}.png`),
+    animations: "disabled",
+  });
+}
+test("compact operator navigation fits a normal screen and keeps one default template", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 1440, height: 768 });
+  await panel(page, "/settings", { project: { json: { stars: 1 } } });
+  await expect(page.locator(".project-stars strong")).toHaveText("1");
+  const navigation = page.locator("aside nav").first();
+  expect(
+    await navigation.evaluate((el) => el.scrollHeight <= el.clientHeight),
+  ).toBe(true);
+  await expect(
+    page.getByText(
+      "Runtime policy, subscriptions, automation, security and host health.",
+    ),
+  ).toHaveCount(0);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(page.locator(".settings-status")).toBeVisible();
+  await preview(page, "settings-dark");
+  await page.getByRole("button", { name: "Theme: dark" }).click();
+  await expect(page.locator("html")).toHaveClass(/light/);
+  await preview(page, "settings-light");
+  await page
+    .locator(".settings-nav")
+    .getByRole("button", { name: "Subscription", exact: true })
+    .click();
+  await page.getByLabel("Template", { exact: true }).click();
+  await expect(
+    page.getByRole("option", { name: "Simple subscription page", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: "Custom HTML file", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("option")).toHaveCount(2);
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByLabel("Subscription path", { exact: true }),
+  ).toBeVisible();
+  expect(errors).toEqual([]);
+});
+test("core manager enables official downloads and tracks a selected version job", async ({
+  page,
+}) => {
+  await panel(page, "/dashboard");
+  let enabled = false,
+    installing = false,
+    installed = false,
+    requested: any;
+  await page.route("**/api/nodes/1/core-*/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.includes("core-releases")) {
+      await route.fulfill({
+        json: {
+          releases: [
+            {
+              tag: "v26.3.27",
+              sha256: "a".repeat(64),
+              url: "https://github.com/XTLS/Xray-core/releases/tag/v26.3.27",
+            },
+          ],
+        },
+      });
+      return;
+    }
+    if (url.pathname.includes("core-policy"))
+      enabled = route.request().postDataJSON().enabled;
+    if (url.pathname.includes("core-install")) {
+      requested = route.request().postDataJSON();
+      installing = true;
+    }
+    const state = {
+      managed: true,
+      enabled,
+      cores: {
+        xray: {
+          tag: installed ? "v26.3.27" : "bundled",
+          source: installed ? "official" : "bundled",
+          sha256: "b".repeat(64),
+          can_rollback: installed,
+          user_ip_attribution: true,
+        },
+      },
+      job: installing
+        ? { core: "xray", tag: "v26.3.27", state: "running" }
+        : installed
+          ? { core: "xray", tag: "v26.3.27", state: "success" }
+          : undefined,
+    };
+    await route.fulfill({ json: state });
+    if (installing) {
+      installing = false;
+      installed = true;
+    }
+  });
+  await page.getByRole("button", { name: "Cores", exact: true }).click();
+  const manager = page.locator(".core-manager");
+  await manager
+    .getByRole("button", { name: "Check releases", exact: true })
+    .click();
+  await expect(
+    manager.getByRole("button", { name: "Install version", exact: true }),
+  ).toBeDisabled();
+  await manager.getByLabel("Allow official core downloads").click();
+  await expect(
+    manager.getByLabel("Allow official core downloads"),
+  ).toBeChecked();
+  page.once("dialog", (dialog) => dialog.accept());
+  await manager
+    .getByRole("button", { name: "Install version", exact: true })
+    .click();
+  await expect(
+    manager.getByText("Core version changed successfully."),
+  ).toBeVisible();
+  expect(requested).toEqual({ core: "xray", tag: "v26.3.27", rollback: false });
+  await expect(
+    manager.getByRole("button", { name: "Rollback", exact: true }),
+  ).toBeEnabled();
+});
+test("login preview and subscription tabs stay accessible on mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.route("**/api/**", (route) => {
+    if (route.request().url().includes("auth/me"))
+      return route.fulfill({ status: 401, json: { detail: "unauthorized" } });
+    return route.fulfill({ json: { enabled: false } });
+  });
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Login to your account" }),
+  ).toBeVisible();
+  await preview(page, "login");
+  const file = process.env.VELORAY_TEST_SIMPLE_PORTAL_HTML;
+  test.skip(!file, "render fixture required");
+  await page.route("**/subscription-preview", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: readFileSync(file!, "utf8"),
+    }),
+  );
+  await page.route("**/sub/**", (route) =>
+    route.fulfill({
+      json: {
+        points: [
+          {
+            at: "2026-10-21T00:00:00Z",
+            bytes: 1048576,
+            upload_bytes: 262144,
+            download_bytes: 786432,
+          },
+          {
+            at: "2026-10-22T00:00:00Z",
+            bytes: 2097152,
+            upload_bytes: 524288,
+            download_bytes: 1572864,
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto("/subscription-preview");
+  await page.setViewportSize({ width: 900, height: 1150 });
+  await expect(page.locator("#traffic-chart")).toBeVisible();
+  await preview(page, "subscription");
+  const tabs = page.getByRole("tab");
+  await tabs.nth(1).click();
+  await expect(page.locator("#profile-search")).toBeVisible();
+  await expect(page.locator(".connection")).toBeHidden();
+  await tabs.nth(1).press("ArrowRight");
+  await expect(page.locator(".app-cards")).toBeVisible();
+  await tabs.nth(2).press("Home");
+  await expect(page.locator(".connection")).toBeVisible();
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  }
 });

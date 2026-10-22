@@ -10,9 +10,11 @@ vr_step 'Prepare node services' 'آماده‌سازی سرویس‌های نو�
 arch="$(uname -m)";case "$arch" in x86_64) arch=amd64;;aarch64|arm64) arch=arm64;;*) exit 1;;esac
 [[ -x "bin/linux-$arch/veloray-agent" ]]||{ echo 'Build the agent first or use a release archive.' >&2;exit 1; }
 (cd "bin/linux-$arch" && sha256sum -c SHA256SUMS) >>"$VELORAY_INSTALL_LOG" 2>&1
-vr_packages openssl curl jq unzip ca-certificates iproute2
-if [[ -n "${VELORAY_XRAY_DIRECTORY:-}" || ! -x /usr/local/bin/xray ]];then vr_run bash scripts/xray-install.sh;fi
-if [[ -n "${VELORAY_SINGBOX_DIRECTORY:-}" ]];then vr_run bash scripts/singbox-install.sh;elif [[ ! -x /usr/local/bin/sing-box ]];then echo 'Use the complete VeloRay runtime package to install sing-box.' >&2;exit 1;fi
+vr_packages openssl curl jq unzip ca-certificates iproute2 python3
+if [[ -f /etc/veloray-node/agent.env ]];then vr_run systemctl stop veloray-agent.service;fi
+if ! vr_core_is_official xray && [[ -n "${VELORAY_XRAY_DIRECTORY:-}" || ! -x /usr/local/bin/xray ]];then vr_run bash scripts/xray-install.sh;fi
+if vr_core_is_official singbox;then :;elif [[ -n "${VELORAY_SINGBOX_DIRECTORY:-}" ]];then vr_run bash scripts/singbox-install.sh;elif [[ ! -x /usr/local/bin/sing-box ]];then echo 'Use the complete VeloRay runtime package to install sing-box.' >&2;exit 1;fi
+vr_prepare_managed_cores
 install -d -m 0750 /etc/veloray-node
 install -d -m 0700 /var/lib/veloray-agent
 install -d -m 0755 /usr/local/etc/xray
@@ -25,7 +27,8 @@ else
  [[ "$VELORAY_PUBLIC_HOST" =~ ^[a-zA-Z0-9.:-]+$ ]]||exit 2
  VELORAY_AGENT_TOKEN="${VELORAY_AGENT_TOKEN:-$(openssl rand -hex 32)}"
  [[ ${#VELORAY_AGENT_TOKEN} -ge 32 ]]||exit 2
- port="${VELORAY_AGENT_PORT:-9191}"
+ if [[ -z "${VELORAY_AGENT_PORT:-}" && -t 0 ]];then read -rp "Agent port [Enter = random]: " VELORAY_AGENT_PORT;fi
+ port="${VELORAY_AGENT_PORT:-$(vr_random_port)}"
  [[ "$port" =~ ^[0-9]+$ ]]&&((port>0&&port<65536&&port!=10085))||exit 2
  install -d -m 0700 /etc/veloray-node/tls
  san="DNS:$VELORAY_PUBLIC_HOST";[[ "$VELORAY_PUBLIC_HOST" != *:* && ! "$VELORAY_PUBLIC_HOST" =~ ^[0-9.]+$ ]]||san="IP:$VELORAY_PUBLIC_HOST"
@@ -44,6 +47,8 @@ VELORAY_AGENT_STATE=/var/lib/veloray-agent/state.json
 ENV
  chmod 0600 /etc/veloray-node/agent.env
 fi
+sed -i '/^VELORAY_CORE_DIRECTORY=/d' /etc/veloray-node/agent.env
+printf 'VELORAY_CORE_DIRECTORY=/var/lib/veloray-cores\n' >>/etc/veloray-node/agent.env
 # Bootstrap with no public listeners; the panel deploys the requested inbounds.
 if [[ ! -f /usr/local/etc/xray/config.json ]];then
  cat >/usr/local/etc/xray/config.json <<'JSON'

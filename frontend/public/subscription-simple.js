@@ -14,6 +14,25 @@
       try { localStorage.setItem("veloray.sub.theme.v1", select.value); } catch {}
     });
   }
+  const tabs = [...document.querySelectorAll("[data-sub-tab]")];
+  function selectTab(tab, focus = false) {
+    tabs.forEach(item => { const active = item === tab; item.setAttribute("aria-selected", String(active)); item.tabIndex = active ? 0 : -1; });
+    document.querySelectorAll("[data-sub-panel]").forEach(panel => { panel.hidden = panel.dataset.subPanel !== tab.dataset.subTab; });
+    if (focus) tab.focus();
+  }
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => selectTab(tab));
+    tab.addEventListener("keydown", event => {
+      let next;
+      const direction = root.dir === "rtl" ? -1 : 1;
+      if (event.key === "ArrowRight") next = (index + direction + tabs.length) % tabs.length;
+      if (event.key === "ArrowLeft") next = (index - direction + tabs.length) % tabs.length;
+      if (event.key === "Home") next = 0;
+      if (event.key === "End") next = tabs.length - 1;
+      if (next !== undefined) { event.preventDefault(); selectTab(tabs[next], true); }
+    });
+  });
+  if (tabs[0]) selectTab(tabs[0]);
   const time = document.getElementById("expiry");
   if (time?.dateTime) {
     const date = new Date(time.dateTime);

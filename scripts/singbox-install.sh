@@ -2,7 +2,9 @@
 set -Eeuo pipefail
 [[ -n "${VELORAY_SINGBOX_DIRECTORY:-}" && -f "$VELORAY_SINGBOX_DIRECTORY/SHA256SUMS" ]]||{ echo 'A verified sing-box runtime directory is required.' >&2;exit 1; }
 (cd "$VELORAY_SINGBOX_DIRECTORY" && sha256sum -c SHA256SUMS)
-install -m 0755 "$VELORAY_SINGBOX_DIRECTORY/sing-box" /usr/local/bin/sing-box
+candidate_binary="$(mktemp /usr/local/bin/.veloray-sing-box.XXXXXX)"
+install -m 0755 "$VELORAY_SINGBOX_DIRECTORY/sing-box" "$candidate_binary"
+mv -Tf "$candidate_binary" /usr/local/bin/sing-box
 install -d -m 0755 /usr/local/etc/sing-box
 if [[ ! -f /usr/local/etc/sing-box/config.json ]];then
  cat >/usr/local/etc/sing-box/config.json <<'JSON'

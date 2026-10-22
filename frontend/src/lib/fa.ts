@@ -1,4 +1,6 @@
 const entries = `
+Cores|هسته‌ها
+
 AmneziaWG testing can interrupt this peer's active connections. Use a separate test account.|تست AmneziaWG ممکن است اتصال‌های فعال همین کاربر را قطع کند. بهتر است از حساب جداگانه برای تست استفاده کنید.
 
 Test connection|تست اتصال

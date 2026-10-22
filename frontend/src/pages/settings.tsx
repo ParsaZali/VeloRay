@@ -76,6 +76,7 @@ const defaults: AppSettings = {
   traffic_history_days: 30,
   dashboard_refresh_seconds: 30,
   subscription_enabled: true,
+  subscription_path: "/sub/",
   subscription_show_apps: true,
   subscription_show_qr: true,
   subscription_show_connection_uri: true,
@@ -97,7 +98,7 @@ const defaults: AppSettings = {
   api_keys_enabled: true,
   api_key_default_days: 90,
   audit_retention_days: 90,
-  accent: "emerald",
+  accent: "blue",
   telegram_enabled: false,
   telegram_locale: "en",
   telegram_allow_changes: false,
@@ -373,9 +374,6 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
     <div className="settings-page space-y-6">
       <PageHeader
         title={t("Settings")}
-        description={t(
-          "Runtime policy, subscriptions, automation, security and host health.",
-        )}
         actions={
           <Button variant="outline" onClick={load}>
             {t("Refresh")}
@@ -391,7 +389,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
           {msg}
         </div>
       )}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="settings-status">
         <Info
           icon="code-branch"
           label={t("VeloRay version")}
@@ -537,7 +535,11 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                         <Select
                           className="input"
                           value={cfg.accent}
-                          onChange={(e) => set("accent", e.target.value)}
+                          onChange={(e) => {
+                            set("accent", e.target.value);
+                            document.documentElement.dataset.accent =
+                              e.target.value;
+                          }}
                         >
                           {["emerald", "blue", "violet", "rose", "amber"].map(
                             (x) => (
@@ -589,17 +591,15 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                     <CardContent className="grid gap-4 sm:grid-cols-2">
                       <div className="settings-section-title sm:col-span-2">
                         <h3>{t("Subscription page", "صفحهٔ اشتراک")}</h3>
-                        <p>
-                          {t(
-                            "Choose the page customers see when they open their subscription link.",
-                            "صفحه‌ای را انتخاب کنید که مشتری با باز کردن لینک اشتراک می‌بیند.",
-                          )}
-                        </p>
                       </div>
                       <Field label={t("Template")}>
                         <Select
                           className="input"
-                          value={cfg.subscription_template}
+                          value={
+                            cfg.subscription_template === "custom"
+                              ? "custom"
+                              : "default"
+                          }
                           onChange={(e) =>
                             set("subscription_template", e.target.value)
                           }
@@ -607,16 +607,27 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                           <option value="default">
                             {t("Simple subscription page")}
                           </option>
-                          <option value="dashboard">
-                            {t("Modern dashboard")}
-                          </option>
                           <option value="custom">
                             {t("Custom HTML file")}
                           </option>
-                          <option value="compact">
-                            {t("Classic compact portal")}
-                          </option>
                         </Select>
+                      </Field>
+                      <Field label={t("Subscription path", "مسیر اشتراک")}>
+                        <Input
+                          className="input"
+                          dir="ltr"
+                          value={cfg.subscription_path}
+                          placeholder="/sub/"
+                          onChange={(e) =>
+                            set("subscription_path", e.target.value)
+                          }
+                        />
+                        <span className="field-hint">
+                          {t(
+                            "Leave empty for /TOKEN. Changing this path changes existing links.",
+                            "برای /TOKEN خالی بگذارید. تغییر مسیر، آدرس لینک‌های قبلی را عوض می‌کند.",
+                          )}
+                        </span>
                       </Field>
                       <SubscriptionOptions
                         cfg={cfg}
@@ -1422,19 +1433,11 @@ function Info({
 }) {
   useLocale();
   return (
-    <Card>
-      <CardContent className="flex items-center gap-3 p-4">
-        <div className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--border)] bg-[var(--surface-2)]">
-          <FaIcon icon={icon} />
-        </div>
-        <div className="min-w-0">
-          <div className="text-[9px] uppercase tracking-wider text-[var(--muted)]">
-            {label}
-          </div>
-          <div className="mt-1 truncate text-[12px] font-semibold">{value}</div>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="settings-status-item">
+      <FaIcon icon={icon} />
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
 function Toggle({
@@ -1453,9 +1456,7 @@ function Toggle({
     <label className="group flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3.5 transition hover:border-[var(--border-strong)]">
       <div>
         <div className="text-[13px] font-semibold">{label}</div>
-        <p className="mt-1 text-[12px] leading-relaxed text-[var(--muted)]">
-          {text}
-        </p>
+        <span className="sr-only">{text}</span>
       </div>
       <span
         className={`relative h-6 w-11 shrink-0 rounded-full border transition ${checked ? "border-[var(--brand)] bg-[var(--brand)]" : "border-[var(--border-strong)] bg-[var(--surface-3)]"}`}

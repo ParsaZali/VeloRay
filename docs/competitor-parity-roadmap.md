@@ -69,6 +69,16 @@ See [fallbacks and balancing](fallbacks-and-balancing.md) for limits and verific
 - [x] Xray outbound balancing, routing group selection, prefix preview and atomic revision-checked deployment.
 - [x] Final merged routing references, inherited outbounds and dependent-group deletion protection.
 
+## Delivered operator experience slice
+
+- [x] One-command installation, domain/IP prompts, random free public ports and generated administrator credentials.
+- [x] Automatic domain certificate request with local-HTTPS fallback and root-only install results.
+- [x] Compact navigation, cached GitHub stars, restrained settings/login UI and lazy React routes.
+- [x] One default subscription page with themed icons/tabs, custom HTML selection and configurable/root token paths.
+- [x] Optional manual core downloads from official GitHub releases, SHA-256 verification, configuration checks, journal recovery and previous-binary rollback.
+
+See [core versions](core-versions.md) for sing-box user-IP compatibility and container limits.
+
 ## Stage 0 — safety and baseline
 - [x] Establish reproducible green CI on main (Go tests/race, web build,
       browser smoke tests, dependency scan, install smoke tests).

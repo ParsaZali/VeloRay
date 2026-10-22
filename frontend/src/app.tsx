@@ -1,23 +1,8 @@
-import { OperationsPage } from "@/pages/operations";
-import { SubscriptionPoliciesPage } from "@/pages/subscription-policies";
-import { CustomersPage, ServicesPage } from "@/pages/customers";
-import { ProfilesPage } from "@/pages/profiles";
-import { OutboundsPage, RoutingPage } from "@/pages/network";
 import { SessionContext, can } from "@/lib/session";
 import { useLocale, t } from "@/lib/i18n";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Shell } from "@/components/layout/shell";
 import type { RouteKey } from "@/components/layout/sidebar";
-import { Dashboard as Dashboard } from "@/pages/dashboard";
-import { NodesPage as NodesPage } from "@/pages/nodes";
-import { InboundsPage as InboundsPage } from "@/pages/inbounds";
-import { ImportsPage as ImportsPage } from "@/pages/imports";
-import { ClientsPage as ClientsPage } from "@/pages/clients";
-import { SecurityPage as SecurityPage } from "@/pages/security";
-import { SettingsPage as SettingsPage } from "@/pages/settings";
-import { XrayPage as XrayPage } from "@/pages/xray";
-import { ApiDocsPage as ApiDocsPage } from "@/pages/api-docs";
-import { AdminPage as AdminPage } from "@/pages/admin";
 import { LoginPage } from "@/pages/login";
 import {
   api,
@@ -27,6 +12,78 @@ import {
   type Session,
 } from "@/lib/api";
 import { VeloRayMark } from "@/components/brand/veloray-mark";
+
+const OperationsPage = lazy(() =>
+  import("@/pages/operations").then((module) => ({
+    default: module.OperationsPage,
+  })),
+);
+const SubscriptionPoliciesPage = lazy(() =>
+  import("@/pages/subscription-policies").then((module) => ({
+    default: module.SubscriptionPoliciesPage,
+  })),
+);
+const CustomersPage = lazy(() =>
+  import("@/pages/customers").then((module) => ({
+    default: module.CustomersPage,
+  })),
+);
+const ServicesPage = lazy(() =>
+  import("@/pages/customers").then((module) => ({
+    default: module.ServicesPage,
+  })),
+);
+const ProfilesPage = lazy(() =>
+  import("@/pages/profiles").then((module) => ({
+    default: module.ProfilesPage,
+  })),
+);
+const OutboundsPage = lazy(() =>
+  import("@/pages/network").then((module) => ({
+    default: module.OutboundsPage,
+  })),
+);
+const RoutingPage = lazy(() =>
+  import("@/pages/network").then((module) => ({ default: module.RoutingPage })),
+);
+const Dashboard = lazy(() =>
+  import("@/pages/dashboard").then((module) => ({ default: module.Dashboard })),
+);
+const NodesPage = lazy(() =>
+  import("@/pages/nodes").then((module) => ({ default: module.NodesPage })),
+);
+const InboundsPage = lazy(() =>
+  import("@/pages/inbounds").then((module) => ({
+    default: module.InboundsPage,
+  })),
+);
+const ImportsPage = lazy(() =>
+  import("@/pages/imports").then((module) => ({ default: module.ImportsPage })),
+);
+const ClientsPage = lazy(() =>
+  import("@/pages/clients").then((module) => ({ default: module.ClientsPage })),
+);
+const SecurityPage = lazy(() =>
+  import("@/pages/security").then((module) => ({
+    default: module.SecurityPage,
+  })),
+);
+const SettingsPage = lazy(() =>
+  import("@/pages/settings").then((module) => ({
+    default: module.SettingsPage,
+  })),
+);
+const XrayPage = lazy(() =>
+  import("@/pages/xray").then((module) => ({ default: module.XrayPage })),
+);
+const ApiDocsPage = lazy(() =>
+  import("@/pages/api-docs").then((module) => ({
+    default: module.ApiDocsPage,
+  })),
+);
+const AdminPage = lazy(() =>
+  import("@/pages/admin").then((module) => ({ default: module.AdminPage })),
+);
 
 const meta: Record<RouteKey, [string, string]> = {
   operations: ["Operations", ""],
@@ -41,7 +98,7 @@ const meta: Record<RouteKey, [string, string]> = {
   routing: ["Routing", ""],
   inbounds: ["Inbounds", "Ports, protocols and connection security"],
   nodes: ["Nodes", "Local server and remote VeloRay agents"],
-  xray: ["Xray Core", "Service health and configuration"],
+  xray: ["Cores", "Service health and configuration"],
   security: ["Security", "Administrator 2FA and account protection"],
   api: ["API", "REST endpoints and automation reference"],
   settings: ["Settings", "Panel defaults and server information"],
@@ -122,7 +179,7 @@ export default function App() {
       .then((s) => {
         if (!localStorage.getItem("veloray-locale"))
           setLocale(s.default_locale === "fa" ? "fa" : "en");
-        document.documentElement.dataset.accent = s.accent || "emerald";
+        document.documentElement.dataset.accent = s.accent || "blue";
         document.title = `${s.site_name || "VeloRay"}`;
       })
       .catch(() => {});

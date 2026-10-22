@@ -32,4 +32,12 @@ func operationsAPISpec(paths, schemas Data) {
 		"put": Data{"summary": "Request a separate HTTPS subscription port; links move only after successful listener application", "requestBody": body("SubscriptionEndpointInput"), "responses": Data{"202": Data{"description": "Queued; poll GET until ready"}, "400": Data{"description": "Reserved port or local inbound conflict"}, "403": Data{"description": "Superuser administrator scope required"}, "409": Data{"description": "Stale revision or manual deployment"}}},
 	}
 
+    paths["/api/project"] = Data{"get":Data{"summary":"Authenticated project metadata with cached official GitHub star count; null when unavailable","responses":responses}}
+    schemas["CorePolicyInput"] = object(Data{"enabled":boolean})
+    schemas["CoreInstallInput"] = object(Data{"core":Data{"enum":[]any{"xray","singbox"}},"tag":Data{"type":"string","maxLength":64},"rollback":boolean})
+    paths["/api/nodes/{id}/core-manager"] = Data{"parameters":param,"get":Data{"summary":"Superuser-only managed core capability, policy, binary metadata and background job status","responses":responses}}
+    paths["/api/nodes/{id}/core-releases"] = Data{"parameters":append(param,Data{"name":"core","in":"query","required":true,"schema":Data{"enum":[]any{"xray","singbox"}}}),"get":Data{"summary":"Stable official GitHub releases with SHA-256 asset metadata","responses":responses}}
+    paths["/api/nodes/{id}/core-policy"] = Data{"parameters":param,"post":Data{"summary":"Enable or disable manual official downloads; no automatic update schedule","requestBody":body("CorePolicyInput"),"responses":responses}}
+    paths["/api/nodes/{id}/core-install"] = Data{"parameters":param,"post":Data{"summary":"Queue verified core replacement or previous-version rollback","requestBody":body("CoreInstallInput"),"responses":Data{"202":Data{"description":"Queued; poll core-manager until success or error"},"403":Data{"description":"Superuser administrator required"},"502":Data{"description":"Agent rejected update or is unavailable"}}}}
+
 }

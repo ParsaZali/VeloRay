@@ -233,6 +233,11 @@ func (s *Server) roleAuthorize(a Actor, method, path string) error {
 			return fail(403, "administrator read access required")
 		}
 		return nil
+	case "project":
+		if method == http.MethodGet {
+			return nil
+		}
+		return fail(405, "method not allowed")
 	case "openapi":
 		resource = "api"
 	case "overview", "events":

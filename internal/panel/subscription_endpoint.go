@@ -30,7 +30,7 @@ func (s *Server) subscriptionURL(ctx context.Context, q Query, token string) (st
 	if err != nil {
 		return "", err
 	}
-	return subscriptionOrigin(s.Config, cfg) + "/sub/" + token, nil
+	return subscriptionOrigin(s.Config, cfg) + subscriptionBasePath(cfg) + token, nil
 }
 func validateSubscriptionPort(c Config, port int64) error {
 	if port < 1 || port > 65535 {

@@ -179,46 +179,52 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <main
-      className="min-h-screen bg-[var(--bg)] text-[var(--fg)]"
+      className="login-page min-h-screen bg-[var(--bg)] text-[var(--fg)]"
       lang={locale}
       dir={rtl ? "rtl" : "ltr"}
     >
       <div className="flex min-h-screen w-full flex-col justify-between p-5 sm:p-6">
         <header className="flex w-full items-center justify-between">
-          <button
-            type="button"
-            onClick={toggleLocale}
-            className="inline-flex h-9 min-w-9 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--card)] px-2.5 text-[11px] font-medium text-[var(--muted-strong)] shadow-sm transition hover:bg-[var(--surface-2)] hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-            aria-label="Change login language"
-          >
-            {locale === "en" ? "Persian" : "انگلیسی"}
-          </button>
+          <a href="/" className="login-brand">
+            <VeloRayMark />
+            VeloRay
+          </a>
+          <div className="login-tools">
+            <button
+              type="button"
+              onClick={toggleLocale}
+              className="inline-flex h-9 min-w-9 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--card)] px-2.5 text-[11px] font-medium text-[var(--muted-strong)] shadow-sm transition hover:bg-[var(--surface-2)] hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+              aria-label="Change login language"
+            >
+              {locale === "en" ? "Persian" : "انگلیسی"}
+            </button>
 
-          <button
-            type="button"
-            onClick={(event) => {
-              const rect = event.currentTarget.getBoundingClientRect();
-              setTheme(resolved === "dark" ? "light" : "dark", {
-                x: rect.left + rect.width / 2,
-                y: rect.top + rect.height / 2,
-              });
-            }}
-            className="grid h-9 w-9 place-items-center rounded-md border border-[var(--border)] bg-[var(--card)] text-[var(--muted-strong)] shadow-sm transition hover:bg-[var(--surface-2)] hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-            aria-label="Toggle theme"
-          >
-            {resolved === "dark" ? (
-              <Sun className="h-4 w-4" />
-            ) : (
-              <Moon className="h-4 w-4" />
-            )}
-          </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                setTheme(resolved === "dark" ? "light" : "dark", {
+                  x: rect.left + rect.width / 2,
+                  y: rect.top + rect.height / 2,
+                });
+              }}
+              className="grid h-9 w-9 place-items-center rounded-md border border-[var(--border)] bg-[var(--card)] text-[var(--muted-strong)] shadow-sm transition hover:bg-[var(--surface-2)] hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+              aria-label="Toggle theme"
+            >
+              {resolved === "dark" ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
+            </button>
+          </div>
         </header>
 
         <section className="flex w-full flex-1 items-center justify-center py-8 sm:py-12">
-          <div className="w-full max-w-[340px]">
+          <div className="login-card w-full max-w-[380px]">
             <div className="flex flex-col items-center gap-2 text-center">
-              <div className="mb-1 grid h-20 w-20 place-items-center drop-shadow-[0_14px_28px_rgba(90,142,235,.12)]">
-                <VeloRayMark className="h-20 w-20" />
+              <div className="login-badge">
+                <LogIn size={20} />
               </div>
               <h1 className="mt-2 text-2xl font-semibold tracking-[-.025em] text-[var(--fg)]">
                 {formTitle}

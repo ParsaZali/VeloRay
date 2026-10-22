@@ -1,3 +1,4 @@
+import { CoreManager } from "@/components/core-manager";
 import { Textarea } from "@/components/ui/controls";
 import { Select } from "@/components/ui/controls";
 import { t } from "@/lib/i18n";
@@ -206,7 +207,7 @@ export function XrayPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("Xray Core")}
+        title={t("Cores", "هسته‌ها")}
         description={t(
           "Service health, connection configuration and deployment.",
         )}
@@ -289,6 +290,7 @@ export function XrayPage() {
           );
         })}
       </div>
+      {nodeId && <CoreManager key={nodeId} nodeId={nodeId} />}
       {msg && (
         <div
           role="status"
@@ -347,7 +349,7 @@ export function XrayPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ports.ports.map((p, index) => (
+                  {(ports.ports || []).map((p, index) => (
                     <tr
                       key={`${p.tag}-${p.network}-${p.port}-${index}`}
                       className="border-t border-[var(--border)]"
@@ -382,7 +384,7 @@ export function XrayPage() {
                   ))}
                 </tbody>
               </table>
-              {ports.ports.length === 0 && (
+              {(ports.ports || []).length === 0 && (
                 <p className="text-[12px] text-[var(--muted)]">
                   {t("No configured IP listeners.")}
                 </p>

@@ -177,6 +177,9 @@ func (m *Manager) inspectPorts(ctx context.Context, raw []byte) ([]PortCheck, er
 }
 
 func (m *Manager) singOnlineIPs(ctx context.Context) (map[string]map[string]int64, error) {
+	if m.coreRecord().Source == "official" {
+		return nil, fmt.Errorf("official sing-box does not expose per-user IP attribution")
+	}
 	out := map[string]map[string]int64{}
 	req, _ := http.NewRequestWithContext(ctx, "GET", "http://127.0.0.1:10087/connections", nil)
 	client := http.Client{Timeout: 2 * time.Second}
@@ -223,6 +226,7 @@ func splitCore(raw []byte) ([]byte, []byte, error) {
 	sing := cfg["_singbox"]
 	delete(cfg, "_singbox")
 	delete(cfg, "_native")
+	delete(cfg, "_singbox_user_ips_required")
 	x, e := json.Marshal(cfg)
 	if len(x) == 0 {
 		return nil, nil, fmt.Errorf("empty configuration")

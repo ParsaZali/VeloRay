@@ -20,6 +20,7 @@ import (
 var panelProcessStartedAt = time.Now()
 
 type Server struct {
+	project      projectCache
 	EmailSend    func(context.Context, string, []string, []byte) error
 	alertMu      sync.Mutex
 	alertCursor  string
@@ -73,7 +74,14 @@ func requestLogPath(r *http.Request) string {
 	if strings.HasPrefix(r.URL.Path, "/sub/") {
 		return "/sub/[redacted]"
 	}
-	return r.URL.Path
+	parts := strings.Split(r.URL.Path, "/")
+	for index, part := range parts {
+		if subscriptionTokenPattern.MatchString(part) {
+			parts[index] = "[redacted]"
+			return strings.Join(parts[:index+1], "/")
+		}
+	}
+	return strings.Join(parts, "/")
 }
 
 func (s *Server) respond(w http.ResponseWriter, r *http.Request, out any, status int, e error) {
@@ -117,23 +125,7 @@ func (s *Server) Handler() http.Handler {
 				writeJSON(w, 500, Data{"detail": "Internal server error"})
 			}
 		}()
-		if strings.HasPrefix(r.URL.Path, "/sub/") {
-			if !s.Config.SubscriptionOnly && s.Store != nil {
-				cfg, err := settings(r.Context(), s.Store.Pool)
-				if err != nil {
-					s.respond(w, r, nil, 0, err)
-					return
-				}
-				if origin := subscriptionOrigin(s.Config, cfg); origin != strings.TrimRight(s.Config.PublicURL, "/") {
-					if r.Method != "GET" && r.Method != "HEAD" {
-						writeJSON(w, 405, Data{"detail": "method not allowed"})
-						return
-					}
-					http.Redirect(w, r, origin+r.URL.RequestURI(), http.StatusTemporaryRedirect)
-					return
-				}
-			}
-			s.subscription(w, r)
+		if s.routeSubscription(w, r) {
 			return
 		}
 		if s.serveSubscriptionAsset(w, r) {

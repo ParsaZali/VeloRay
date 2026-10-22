@@ -12,7 +12,7 @@ import (
 func TestSubscriptionErrorAndPanicLogsOmitBearerPath(t *testing.T) {
 	for _, panicCase := range []bool{false, true} {
 		var log bytes.Buffer
-		s := &Server{Logger: slog.New(slog.NewJSONHandler(&log, nil))}
+		s := &Server{Store: &Store{}, Logger: slog.New(slog.NewJSONHandler(&log, nil))}
 		token := "synthetic-private-subscription-token"
 		r := httptest.NewRequest("GET", "/sub/"+token+"/assets/private.js", nil)
 		w := httptest.NewRecorder()

@@ -88,7 +88,12 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 405, Data{"detail": "method not allowed"})
 		return
 	}
-	token := strings.TrimPrefix(r.URL.Path, "/sub/")
+	cfg, e := settings(r.Context(), s.Store.Pool)
+	if e != nil {
+		s.respond(w, r, nil, 0, e)
+		return
+	}
+	token := strings.TrimPrefix(r.URL.Path, subscriptionBasePath(cfg))
 	assetPath := ""
 	if before, after, found := strings.Cut(token, "/assets/"); found {
 		token, assetPath = before, after
@@ -98,11 +103,6 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	cfg, e := settings(ctx, s.Store.Pool)
-	if e != nil {
-		s.respond(w, r, nil, 0, e)
-		return
-	}
 	if !flag(cfg, "subscription_enabled") || flag(cfg, "maintenance_mode") {
 		writeJSON(w, 503, Data{"detail": "Subscriptions are temporarily unavailable"})
 		return
@@ -198,7 +198,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Subscription-Userinfo", fmt.Sprintf("upload=0; download=%d; total=%d; expire=%d", num(c, "used_traffic_bytes"), num(c, "traffic_limit_bytes"), exp))
 	w.Header().Set("Profile-Title", "base64:"+base64.StdEncoding.EncodeToString([]byte(str(cfg, "site_name")+" · "+str(c, "name"))))
 	w.Header().Set("Profile-Update-Interval", fmt.Sprint(num(cfg, "subscription_update_interval_hours")))
-	w.Header().Set("Profile-Web-Page-URL", subscriptionOrigin(s.Config, cfg)+"/sub/"+token+"?format=portal")
+	w.Header().Set("Profile-Web-Page-URL", subscriptionOrigin(s.Config, cfg)+subscriptionBasePath(cfg)+token+"?format=portal")
 	for key, field := range map[string]string{"Support-URL": "support_url", "Announce-URL": "announcement_url"} {
 		if str(cfg, field) != "" {
 			w.Header().Set(key, str(cfg, field))
@@ -460,7 +460,7 @@ func (s *Server) portal(w http.ResponseWriter, r *http.Request, c, i, n, cfg Dat
 		}
 		details = safeDetails
 	}
-	url := subscriptionOrigin(s.Config, cfg) + "/sub/" + str(c, "subscription_token")
+	url := subscriptionOrigin(s.Config, cfg) + subscriptionBasePath(cfg) + str(c, "subscription_token")
 	used, limit := num(c, "used_traffic_bytes"), num(c, "traffic_limit_bytes")
 	expiry := "No expiry"
 	if t, e := timestamp(c, "expires_at"); e == nil {
