@@ -37,7 +37,7 @@ func TestIntegrationAdministratorRecoveryAfterRename(t *testing.T) {
 	if err = s.Store.AdminReset(ctx, "staff", "replacement-password-2026"); err == nil {
 		t.Fatal("administrator recovery accepted non-administrator")
 	}
-	if err = s.Store.Bootstrap(ctx, s.Config, "second", "second-password-2026"); err != nil {
+	if err = s.Store.Bootstrap(ctx, s.Config, "second", "another-strong-password-2026"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Store.AdministratorName(ctx, "missing", false); err == nil {
