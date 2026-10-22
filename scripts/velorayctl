@@ -49,7 +49,8 @@ summary() {
   state="$(systemctl is-active "$unit" 2>/dev/null)"||true
   label="${state:-unknown}"
   if [[ "${VELORAY_LANGUAGE:-en}" == fa ]];then case "$state" in active) label=فعال;;inactive) label=خاموش;;failed) label=خطا;;activating) label=درحال‌راه‌اندازی;;esac;fi
-  printf '  %-22s %s\n' "${unit%.service}" "$label"
+  printf '  %-22s ' "${unit%.service}"
+  case "$state" in active) vr_color 32 "$label";;failed) vr_color 31 "$label";;*) vr_color 33 "$label";;esac;printf '\n'
  done
 }
 doctor() {
@@ -57,13 +58,13 @@ doctor() {
  local units=("$WEB" "$AGENT" xray.service sing-box.service postgresql.service nginx.service)
  if subscription_wanted;then units+=("$SUBSCRIPTIONS");fi
  for unit in "${units[@]}";do
-  if systemctl is-active --quiet "$unit";then printf '  ✓ %s\n' "$unit";else printf '  ✗ %s\n' "$unit";failed=1;fi
+  if systemctl is-active --quiet "$unit";then vr_success "$unit" "$unit";else vr_failure "$unit" "$unit";failed=1;fi
  done
- if vr_run nginx -t;then vr_say '  ✓ HTTPS configuration' '  ✓ پیکربندی HTTPS';else vr_say '  ✗ HTTPS configuration' '  ✗ پیکربندی HTTPS';failed=1;fi
- if body="$(curl -fsS --max-time 5 http://127.0.0.1:8610/api/health 2>>"$VELORAY_INSTALL_LOG")" && jq -e '.status=="ok"' <<<"$body" >/dev/null 2>&1;then vr_say '  ✓ Panel and database' '  ✓ پنل و پایگاه داده';else vr_say '  ✗ Panel or database is unavailable' '  ✗ پنل یا پایگاه داده در دسترس نیست';failed=1;fi
- if body="$(curl -fsS --max-time 10 -H "Authorization: Bearer $VELORAY_LOCAL_NODE_TOKEN" http://127.0.0.1:9191/health 2>>"$VELORAY_INSTALL_LOG")" && jq -e '.status=="ok" and .xray.installed==true and .xray.running==true' <<<"$body" >/dev/null 2>&1;then vr_say '  ✓ Agent and Xray runtime' '  ✓ نود و سرویس Xray';else vr_say '  ✗ Xray is stopped or the agent is unavailable; run veloray repair' '  ✗ سرویس Xray خاموش است یا نود پاسخ نمی‌دهد؛ دستور veloray repair را اجرا کنید';failed=1;fi
- if body="$(curl -fsS --max-time 15 -H "Authorization: Bearer $VELORAY_LOCAL_NODE_TOKEN" http://127.0.0.1:9191/xray/stats 2>>"$VELORAY_INSTALL_LOG")" && jq -e '.accounting=="durable-v1" and (.ledger_id|type=="string" and length>0)' <<<"$body" >/dev/null 2>&1;then vr_say '  ✓ Persistent traffic accounting' '  ✓ ثبت پایدار مصرف ترافیک';else vr_say '  ✗ Traffic accounting API is unavailable' '  ✗ رابط ثبت ترافیک در دسترس نیست';failed=1;fi
- if vr_ports_check;then vr_say '  ✓ VPN listener ports' '  ✓ پورت‌های اتصال VPN';else failed=1;fi
+ if vr_run nginx -t;then vr_success 'HTTPS configuration' 'پیکربندی HTTPS';else vr_failure 'HTTPS configuration' 'پیکربندی HTTPS';failed=1;fi
+ if body="$(curl -fsS --max-time 5 http://127.0.0.1:8610/api/health 2>>"$VELORAY_INSTALL_LOG")" && jq -e '.status=="ok"' <<<"$body" >/dev/null 2>&1;then vr_success 'Panel and database' 'پنل و پایگاه داده';else vr_failure 'Panel or database is unavailable' 'پنل یا پایگاه داده در دسترس نیست';failed=1;fi
+ if body="$(curl -fsS --max-time 10 -H "Authorization: Bearer $VELORAY_LOCAL_NODE_TOKEN" http://127.0.0.1:9191/health 2>>"$VELORAY_INSTALL_LOG")" && jq -e '.status=="ok" and .xray.installed==true and .xray.running==true' <<<"$body" >/dev/null 2>&1;then vr_success 'Agent and Xray runtime' 'نود و سرویس Xray';else vr_failure 'Xray is stopped or the agent is unavailable; run veloray repair' 'سرویس Xray خاموش است یا نود پاسخ نمی‌دهد؛ دستور veloray repair را اجرا کنید';failed=1;fi
+ if body="$(curl -fsS --max-time 15 -H "Authorization: Bearer $VELORAY_LOCAL_NODE_TOKEN" http://127.0.0.1:9191/xray/stats 2>>"$VELORAY_INSTALL_LOG")" && jq -e '.accounting=="durable-v1" and (.ledger_id|type=="string" and length>0)' <<<"$body" >/dev/null 2>&1;then vr_success 'Persistent traffic accounting' 'ثبت پایدار مصرف ترافیک';else vr_failure 'Traffic accounting API is unavailable' 'رابط ثبت ترافیک در دسترس نیست';failed=1;fi
+ if vr_ports_check;then vr_success 'VPN listener ports' 'پورت‌های اتصال VPN';else failed=1;fi
  if ((failed));then vr_diagnostics;vr_say "Inspect: $VELORAY_INSTALL_LOG" "گزارش عیب‌یابی: $VELORAY_INSTALL_LOG";return 1;fi
  vr_say 'All checks passed.' 'همهٔ بررسی‌ها موفق بود.'
 }
@@ -74,34 +75,23 @@ menu() {
   summary
   cat <<'MENU'
 
-  SERVICES
-   1  Service status
-   2  Panel address
-   3  Restart services
-   4  Start services
+  SERVICES                         ACCESS
+   1  Service status                7  Reset administrator password
+   2  Panel address                 8  Change domain or IP
+   3  Restart services              9  Change panel port
+   4  Start services               10  HTTPS certificate
    5  Stop services
    6  View logs
 
-  CONFIGURATION
-   7  Reset administrator password
-   8  Change domain or IP
-   9  Change panel port
-  10  HTTPS certificate
-
-  MAINTENANCE
-  11  Create backup
-  12  Restore backup
-  13  Schedule daily backups
+  MAINTENANCE                      NETWORK
+  11  Create backup                19  Inspect VPN ports
+  12  Restore backup               20  Change inbound port
+  13  Daily backups                21  List inbounds
   14  Health check
   15  Recover Xray
   16  Update VeloRay
   17  Uninstall VeloRay
   18  Automatic updates
-
-  NETWORK
-  19  Inspect VPN ports
-  20  Change inbound port
-  21  List inbounds
 
    0  Exit
 MENU
@@ -111,7 +101,7 @@ MENU
   case "$selection" in
    0) return 0;;1) operation=(status);;2) operation=(url);;3) operation=(restart);;4) operation=(start);;5) operation=(stop);;
    6) read -rp "$(vr_text 'Log [web/agent/xray/install]: ' 'گزارش [web/agent/xray/install]: ')" value;operation=(logs "${value:-web}");;
-   7) read -rp "$(vr_text 'Username [admin]: ' 'نام کاربری [admin]: ')" value;operation=(reset "${value:-admin}");;
+   7) username="${VELORAY_ADMIN_USERNAME:-admin}";read -rp "$(vr_text "Username [$username]: " "نام کاربری [$username]: ")" value;operation=(reset "${value:-$username}");;
    8) read -rp "$(vr_text 'New domain or IP: ' 'دامنه یا آی‌پی جدید: ')" value;operation=(domain "$value");;
    9) read -rp "$(vr_text 'New port: ' 'پورت جدید: ')" value;operation=(port "$value");;
    10) read -rp "$(vr_text 'Certificate email: ' 'ایمیل گواهی: ')" value;operation=(ssl "$value");;
@@ -194,14 +184,20 @@ case "$command" in
  "$0" doctor
  ;;
  reset|admin-reset)
- export VELORAY_ADMIN_USERNAME="${1:-admin}"
+ export VELORAY_ADMIN_USERNAME="${1:-${VELORAY_ADMIN_USERNAME:-admin}}"
  if [[ -z "${VELORAY_ADMIN_PASSWORD:-}" ]];then
-  read -rsp "$(vr_text 'New password (12+ characters): ' 'رمز جدید (حداقل ۱۲ کاراکتر): ')" VELORAY_ADMIN_PASSWORD;printf '\n'
-  read -rsp "$(vr_text 'Confirm password: ' 'تکرار رمز جدید: ')" confirmation;printf '\n'
-  [[ "$VELORAY_ADMIN_PASSWORD" == "$confirmation" ]]||{ vr_say 'Passwords do not match.' 'رمزها یکسان نیستند.' >&2;exit 2; }
+  read -rsp "$(vr_text 'New password [Enter = random]: ' 'رمز جدید [Enter = تصادفی]: ')" VELORAY_ADMIN_PASSWORD||true;printf '\n'
+  generated_password=false
+  if [[ -z "$VELORAY_ADMIN_PASSWORD" ]];then
+   VELORAY_ADMIN_PASSWORD="$(openssl rand -hex 16)";generated_password=true
+  else
+   read -rsp "$(vr_text 'Confirm password: ' 'تکرار رمز جدید: ')" confirmation;printf '\n'
+   [[ "$VELORAY_ADMIN_PASSWORD" == "$confirmation" ]]||{ vr_failure 'Passwords do not match.' 'رمزها یکسان نیستند.' >&2;exit 2; }
+  fi
  fi
  export VELORAY_ADMIN_PASSWORD
  if reset_output="$(veloray reset-password 2>&1)";then vr_say "Password changed for $VELORAY_ADMIN_USERNAME. Existing sessions were revoked." "رمز $VELORAY_ADMIN_USERNAME تغییر کرد و نشست‌های قبلی بسته شد.";else unset VELORAY_ADMIN_PASSWORD;printf '%s\n' "$reset_output" | tee -a "$VELORAY_INSTALL_LOG" >&2;exit 1;fi
+ [[ "${generated_password:-false}" != true ]]||printf '  Password: %s\n' "$VELORAY_ADMIN_PASSWORD"
  unset VELORAY_ADMIN_PASSWORD confirmation;;
  domain|port) [[ $# -eq 1 ]]||exit 2
  old_origin="$VELORAY_PUBLIC_URL";old_host="$VELORAY_PUBLIC_HOST";old_port="$VELORAY_PANEL_PORT"

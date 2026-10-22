@@ -423,6 +423,9 @@ func metered(p string) bool {
 	return oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "tuic", "naive", "snell", "shadowtls", "mtproto", "amneziawg")
 }
 func validateSettings(d Data) error {
+	if err := validateSubscriptionPath(str(d, "subscription_path")); err != nil {
+		return err
+	}
 	if e := validateSMTP(d); e != nil {
 		return e
 	}

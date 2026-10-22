@@ -2,6 +2,83 @@
 # Shared host operations. Sourcing this file never changes services or data.
 vr_text() { if [[ "${VELORAY_INSTALL_LANG:-${VELORAY_LANGUAGE:-en}}" == fa ]];then printf '%s' "$2";else printf '%s' "$1";fi; }
 vr_say() { vr_text "$1" "$2";printf '\n'; }
+vr_color() {
+ local color="$1";shift
+ if [[ -t 1 && "${TERM:-dumb}" != dumb && -z "${NO_COLOR:-}" ]];then printf '\033[%sm%s\033[0m' "$color" "$*";else printf '%s' "$*";fi
+}
+vr_success() { vr_color 32 "  ✓ $(vr_text "$1" "$2")";printf '\n'; }
+vr_warn() { vr_color 33 "  ! $(vr_text "$1" "$2")";printf '\n'; }
+vr_failure() { vr_color 31 "  ✗ $(vr_text "$1" "$2")";printf '\n'; }
+vr_random_port() {
+ python3 - "$@" <<'PY'
+import secrets, socket, sys
+reserved = {80, 5432, 8610, 8611, 8612, 9191, 10085, 10086, 10087, *map(int, sys.argv[1:])}
+for _ in range(300):
+    port = 1024 + secrets.randbelow(64512)
+    if port in reserved:
+        continue
+    tcp, udp = socket.socket(), socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        tcp.bind(('0.0.0.0', port)); udp.bind(('0.0.0.0', port))
+        print(port)
+        break
+    except OSError:
+        pass
+    finally:
+        tcp.close(); udp.close()
+else:
+    raise SystemExit('Cannot find a free port')
+PY
+}
+vr_setup_initial() {
+ local answer host_kind
+ if [[ -z "${VELORAY_PUBLIC_HOST:-}" ]];then
+  if [[ -t 0 ]];then
+   read -rp "$(vr_text 'Do you have a domain pointing to this server? [Y/n]: ' 'دامنه‌ای که به این سرور وصل باشد دارید؟ [Y/n]: ')" answer
+   case "${answer,,}" in n|no) read -rp "$(vr_text 'Server public IP: ' 'آی‌پی عمومی سرور: ')" VELORAY_PUBLIC_HOST;;*) read -rp "$(vr_text 'Domain: ' 'دامنه: ')" VELORAY_PUBLIC_HOST;;esac
+  else
+   vr_failure 'Set VELORAY_PUBLIC_HOST for unattended installation.' 'برای نصب خودکار VELORAY_PUBLIC_HOST را مشخص کنید.' >&2;return 2
+  fi
+ fi
+ [[ "$VELORAY_PUBLIC_HOST" =~ ^[a-zA-Z0-9.:-]+$ ]]||{ vr_failure 'Invalid host.' 'دامنه یا آی‌پی نامعتبر است.' >&2;return 2; }
+ if [[ -z "${VELORAY_PANEL_PORT:-}" && -t 0 ]];then read -rp "$(vr_text 'Panel port [Enter = random]: ' 'پورت پنل [Enter = تصادفی]: ')" VELORAY_PANEL_PORT;fi
+ VELORAY_PANEL_PORT="${VELORAY_PANEL_PORT:-$(vr_random_port)}"
+ [[ "$VELORAY_PANEL_PORT" =~ ^[0-9]+$ ]]&&((VELORAY_PANEL_PORT>0&&VELORAY_PANEL_PORT<65536))&&[[ ! " 80 5432 8610 8611 8612 9191 10085 10086 10087 " =~ " $VELORAY_PANEL_PORT " ]]||{ echo 'Invalid or reserved panel port.' >&2;return 2; }
+ if [[ -z "${VELORAY_SUBSCRIPTION_PORT:-}" && -t 0 ]];then read -rp "$(vr_text 'Subscription port [Enter = random]: ' 'پورت اشتراک [Enter = تصادفی]: ')" VELORAY_SUBSCRIPTION_PORT;fi
+ VELORAY_SUBSCRIPTION_PORT="${VELORAY_SUBSCRIPTION_PORT:-$(vr_random_port "$VELORAY_PANEL_PORT")}"
+ [[ "$VELORAY_SUBSCRIPTION_PORT" =~ ^[0-9]+$ ]]&&((VELORAY_SUBSCRIPTION_PORT>0&&VELORAY_SUBSCRIPTION_PORT<65536))&&[[ ! " 80 5432 8610 8611 8612 9191 10085 10086 10087 $VELORAY_PANEL_PORT " =~ " $VELORAY_SUBSCRIPTION_PORT " ]]||{ echo 'Invalid or reserved subscription port.' >&2;return 2; }
+ host_kind="$(python3 - "$VELORAY_PUBLIC_HOST" <<'PY'
+import ipaddress,sys
+try: ipaddress.ip_address(sys.argv[1]);print('ip')
+except ValueError: print('domain')
+PY
+)"
+ if [[ "$host_kind" == domain ]];then
+  VELORAY_TLS_MODE="${VELORAY_TLS_MODE:-auto}"
+  if [[ -t 0 && -z "${VELORAY_ACME_EMAIL:-}" ]];then read -rp "$(vr_text 'Certificate email [optional]: ' 'ایمیل گواهی SSL [اختیاری]: ')" VELORAY_ACME_EMAIL;fi
+ else VELORAY_TLS_MODE=local;fi
+ [[ "$VELORAY_TLS_MODE" == auto || "$VELORAY_TLS_MODE" == local ]]||{ echo 'TLS mode must be auto or local.' >&2;return 2; }
+ export VELORAY_PUBLIC_HOST VELORAY_PANEL_PORT VELORAY_SUBSCRIPTION_PORT VELORAY_TLS_MODE
+}
+vr_core_is_official() { [[ -x "/var/lib/veloray-cores/$1/current" ]]&&jq -e '.source=="official"' "/var/lib/veloray-cores/$1/active.json" >/dev/null 2>&1; }
+vr_prepare_managed_cores() {
+ local core binary slot checksum target previous
+ install -d -m 0755 /var/lib/veloray-cores
+ for core in xray singbox;do
+  binary=/usr/local/bin/xray;[[ "$core" != singbox ]]||binary=/usr/local/bin/sing-box
+  [[ -x "$binary" ]]||continue
+  slot="/var/lib/veloray-cores/$core";install -d -m 0755 "$slot"
+  if [[ -L "$binary" && "$(readlink "$binary")" == "$slot/current" ]]&&vr_core_is_official "$core";then continue;fi
+  checksum="$(sha256sum "$binary" | cut -d' ' -f1)";target="$slot/binary-$checksum"
+  [[ -f "$target" ]]||install -m 0755 "$binary" "$target"
+  previous="$(readlink "$slot/current" 2>/dev/null||true)"
+  if [[ "$previous" == "$target" && -f "$slot/active.json" ]];then ln -sfn "$slot/current" "$binary";continue;fi
+  ln -sfn "$target" "$slot/current"
+  ln -sfn "$slot/current" "$binary"
+  jq -n --arg sha "$checksum" --arg previous "$previous" '{tag:"bundled",source:"bundled",sha256:$sha,previous_path:$previous,previous_tag:"bundled",previous_source:"bundled"}' >"$slot/active.json"
+  chmod 0644 "$slot/active.json"
+ done
+}
 vr_step() { VR_STEP="$(vr_text "$1" "$2")";printf '\n  • %s\n' "$VR_STEP"; }
 vr_log_init() {
  VR_OPERATION_STARTED="$(date --iso-8601=seconds)"
@@ -20,7 +97,7 @@ vr_run() { "$@" >>"$VELORAY_INSTALL_LOG" 2>&1; }
 vr_error() {
  local line="$1" status="${2:-1}"
  printf 'Failure: step=%s line=%s status=%s\n' "${VR_STEP:-operation}" "$line" "$status" >>"$VELORAY_INSTALL_LOG"
- vr_say "Failed: ${VR_STEP:-operation}." "مرحله ناموفق: ${VR_STEP:-عملیات}." >&2
+ vr_failure "Failed: ${VR_STEP:-operation}." "مرحله ناموفق: ${VR_STEP:-عملیات}." >&2
  vr_say "Details: sudo tail -n 60 $VELORAY_INSTALL_LOG" "جزئیات: sudo tail -n 60 $VELORAY_INSTALL_LOG" >&2
  exit "$status"
 }

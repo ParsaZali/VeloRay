@@ -158,6 +158,9 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 	if path == "clients/bulk" {
 		return s.bulkClients(w, r, a)
 	}
+	if path == "project" && r.Method == "GET" {
+		return s.projectInfo(ctx), 200, nil
+	}
 	if path == "subscription-endpoint" {
 		return s.subscriptionEndpointAPI(w, r, a)
 	}
@@ -832,6 +835,8 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request, kind string, id 
 	}
 	if kind == "nodes" {
 		switch action {
+		case "core-manager", "core-releases", "core-policy", "core-install":
+			return s.coreManagerAPI(w, r, d, action, a)
 		case "ports":
 			if r.Method != "GET" {
 				return nil, 0, fail(405, "method not allowed")

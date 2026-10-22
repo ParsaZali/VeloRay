@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="250" viewBox="0 0 1200 250" role="img" aria-labelledby="title desc">
+<title id="title">VeloRay</title><desc id="desc">An open source control panel for Xray, sing-box, MTProto and AmneziaWG.</desc>
+<rect width="1200" height="250" rx="12" fill="#18181b"/>
+<g transform="translate(74 66)" fill="none" stroke="#72d6a0" stroke-width="8" stroke-linejoin="round"><path d="M0 0h30l26 49L82 0h31L56 108Z"/><path d="m28 0 28 52L84 0" opacity=".45"/></g>
+<text x="230" y="119" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="61" font-weight="650" fill="#f4f4f5" letter-spacing="-2">VeloRay</text>
+<text x="233" y="159" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" fill="#a1a1aa">Your network. One control panel.</text>
+<rect x="898" y="77" width="220" height="94" rx="8" fill="#222225" stroke="#343438"/>
+<text x="918" y="110" font-family="Segoe UI,Arial,sans-serif" font-size="13" fill="#a1a1aa">XRAY · SING-BOX · NATIVE</text>
+<text x="918" y="144" font-family="Segoe UI,Arial,sans-serif" font-size="17" fill="#e4e4e7">Multi-core. Multi-node.</text>
+</svg>

@@ -13,7 +13,9 @@ elif [[ -n "${VELORAY_XRAY_DIRECTORY:-}" && -f "$VELORAY_XRAY_DIRECTORY/SHA256SU
 else
  echo 'Use a complete runtime package or supply VELORAY_XRAY_ARCHIVE and VELORAY_XRAY_SHA256.' >&2;exit 1
 fi
-install -m 0755 "$tmp/xray" /usr/local/bin/xray
+candidate_binary="$(mktemp /usr/local/bin/.veloray-xray.XXXXXX)"
+install -m 0755 "$tmp/xray" "$candidate_binary"
+mv -Tf "$candidate_binary" /usr/local/bin/xray
 install -d -m 0755 /usr/local/share/xray
 # Existing geo assets can contain operator-managed routing policy.
 for asset in geoip.dat geosite.dat;do

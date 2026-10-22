@@ -1,393 +1,181 @@
-<div align="center">
+[English](README.md) · [فارسی](README.fa.md)
 
-# VeloRay 1.0
+<p align="center"><img src="docs/media/veloray-banner.svg" alt="VeloRay — Your network. One control panel." width="100%"></p>
 
-**A server panel for connections, clients and distributed VPN infrastructure.**
+<p align="center">
+<a href="https://github.com/ParsaZali/VeloRay/actions/workflows/ci.yml"><img src="https://github.com/ParsaZali/VeloRay/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+<a href="https://github.com/ParsaZali/VeloRay"><img src="https://img.shields.io/badge/version-1.0-4e7fc0" alt="Version 1.0"></a>
+<a href="LICENSE"><img src="https://img.shields.io/github/license/ParsaZali/VeloRay" alt="License"></a>
+<a href="https://github.com/ParsaZali/VeloRay/stargazers"><img src="https://img.shields.io/github/stars/ParsaZali/VeloRay?style=flat" alt="GitHub stars"></a>
+<img src="https://img.shields.io/badge/React-19-61dafb?logo=react&amp;logoColor=white" alt="React 19">
+<img src="https://img.shields.io/badge/Go-1.26-00add8?logo=go&amp;logoColor=white" alt="Go 1.26">
+</p>
 
-Xray as the primary core. sing-box as the secondary core. One interface for both.
+**VeloRay is an open source control panel for Xray, sing-box and native MTProto/AmneziaWG services.** Manage users, nodes, subscriptions, routing and traffic policies from a compact interface with English/Persian support and light/dark themes.
 
-[Install](#installation) · [Features](#features) · [Subscriptions](#subscriptions) · [API](#api) · [Operations](#server-operations) · [Build](#development-and-verification)
+[Quick start](#quick-start) · [Screenshots](#screenshots) · [Features](#features) · [Protocols](#protocols) · [Documentation](#documentation)
 
-</div>
+## Quick start
 
-## Features
-
-| Area | Capabilities |
-|---|---|
-| Dashboard | Server resources, live client status, actual upload/download counters, dual-series traffic charts, transfer rate and time-range zoom |
-| Clients | Individual and batch creation, quotas, scheduled renewals, expiry, first-use activation, device limits, usage export, bulk actions |
-| Inbounds | Full-width directory, separate creation editor, protocol presets, custom selectors, port inspection, cloning between nodes, Xray VLESS/Trojan fallbacks |
-| Cores | Xray primary; sing-box secondary; configuration validation, durable traffic accounting and deployment recovery |
-| Outbounds | Built-in routes, node/core filters, guided proxy setup, protocol templates, duplicate and enable/disable actions |
-| Routing | Protected defaults, ordered rules, domain/IP/port/source/user matching, routing presets, sing-box selectors and Xray load balancing |
-| Subscriptions | Portable URI feeds, Base64, Clash/Mihomo, sing-box JSON, account metadata, browser portal and QR codes |
-| Announcements | Subscription announcement and announcement URL; editable in Settings |
-| SNI scanner | Node-side DNS and TLS 1.3 probes, custom domains, suggested domains, latency and certificate checks |
-| Accounts | Administrator, reseller, viewer and custom roles, inbound assignments, client and traffic budgets |
-| Security | Password policy, encrypted sensitive fields, scoped API keys, CSRF, administrator 2FA, optional pre-bound OIDC/GitHub/LDAPS login and audit history |
-| Migration | Bounded SQLite and relational JSON adapters, private preview, selection, port overrides and disabled imports |
-| Automation | Telegram controls, signed event outbox, independent webhook/Discord/email destinations, configurable account alerts, scheduled backups and REST API |
-| Operations | Isolated outbound health probes, failure/recovery alerts, private provider budgets, monthly raw-traffic cycles, structured diagnostics and CSV |
-| Interface | Dark and light themes, English and Persian, responsive layouts, local fonts, custom dropdowns, Gregorian/Jalali date picker and checkboxes |
-
-Client action menus stay above scrollable tables. SNI and configuration dialogs use bounded, responsive layouts. Theme changes reveal the new palette from the theme button, with reduced-motion and browser fallbacks.
-
-The product version is **1.0**. Maintenance updates retain this version until the project owner requests a version change. The frontend package uses the equivalent npm version `1.0.0`.
-
-New management and subscription capabilities are described in the
-[delivery guide](docs/subscription-customization.md),
-[3x-ui HTML compatibility guide](docs/legacy-subscription-templates.md),
-[customer guide](docs/customer-management.md),
-[external policy guide](docs/subscription-policies.md),
-[independent service guide](docs/independent-subscriptions.md),
-[External login and proxy guide](docs/external-login-and-proxies.md),
-[Geo asset browser](docs/geo-asset-browser.md),
-[LDAP directory login](docs/ldap-login.md),
-[OIDC/live dashboard guide](docs/oidc-and-live-dashboard.md) and
-[notification guide](docs/webhooks.md) and
-[operations/email guide](docs/operations-and-alerts.md). The [parity backlog](docs/competitor-parity-roadmap.md)
-records remaining architectural work; this release does not claim every feature
-of every competing panel.
-
-See the [fallback and balancing guide](docs/fallbacks-and-balancing.md) for network
-policy controls, native engine limits and verified behavior.
-
-## Installation
-
-For the full Docker/Compose stack, cloud-init first boot and Cloudflare DNS CLI,
-see the [container deployment guide](docs/container-deployment.md). The stack
-includes the panel, both cores, agent, PostgreSQL, independent subscriptions and
-automatic frontend HTTPS; it does not require host systemd or a Docker socket
-inside the application containers. See the [platform/database assessment](docs/platform-and-database-assessment.md)
-for the limits of Windows and alternate-database support.
-
-### Requirements
-
-- Ubuntu 24.04 with systemd and apt (currently the explicitly supported installation target).
-- `amd64` or `arm64` architecture.
-- Root access for service installation.
-- PostgreSQL. The installer can configure a local database.
-- A public IP or domain and available panel/VPN ports.
-
-### Install from GitHub
+Run as **root** on **Ubuntu 24.04**, on `amd64` or `arm64`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/install.sh -o /tmp/veloray-install.sh
-sudo bash /tmp/veloray-install.sh install --lang en
+bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/install.sh)
 ```
 
-The installer retrieves the project, verifies its ready-made runtime, configures PostgreSQL, installs the panel and agent, installs both cores and sets up HTTPS through Nginx. It asks for the public address and administrator password when needed.
+The installer takes you through the essentials:
 
-Use `--lang fa` for Persian installation prompts. The server management menu stays in English.
+1. Enter a domain pointing to the server, or use its public IP.
+2. Choose the panel and subscription ports. **Press Enter for random available ports.**
+3. For a domain, let the installer request a trusted TLS certificate. The email is optional.
+4. Open the printed address and sign in with the **generated username and password**.
 
-The default panel port is `8443`. Open the address printed after installation and sign in with the administrator account. Add an inbound before creating clients.
+PostgreSQL, both proxy cores, the agent, independent subscriptions and systemd services are configured automatically. The initial credentials are also saved in the root-only `/etc/veloray/install-result.env`. IP-only installs use a local TLS certificate. For domain certificate issuance, DNS must point to the server and HTTP port 80 must be reachable; a failed certificate request leaves local HTTPS available for recovery.
 
-### Install an extracted release
+For Persian prompts:
 
 ```bash
-cd VeloRay
-sudo bash install.sh install --lang en
+bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/install.sh) --lang fa
 ```
 
-Ready-made packages contain both Linux architectures. Go and Node.js are only required when building from source or when a source change invalidates the runtime manifest.
+No Go or Node.js installation is needed when using the verified runtime bundles. Available public ports are accepted without a Cloudflare CDN port filter.
 
-### Upgrade an existing installation
+### Update
 
 ```bash
-sudo veloray backup
 sudo veloray update
-sudo veloray doctor
 ```
 
-The updater checks the latest **ParsaZali/VeloRay** `main` commit and proceeds only after the exact commit passes GitHub Actions CI. It downloads the installer at the immutable commit, verifies its Git blob hash, creates a restricted pre-upgrade backup and performs a post-install health check. If installation fails, it attempts an application binary/service rollback and preserves the backup for manual database recovery. Schema changes are idempotent; a database rollback is **not** performed automatically.
+Updates follow `main` after **that exact commit passes CI**. The updater verifies the pinned installer, creates a private backup, runs health checks and attempts application/service rollback if installation fails. Existing users, encryption keys and traffic records are preserved. Database restore remains an explicit operation.
 
-#### Automatic updates from GitHub
-
-After deploying a version containing the auto-update feature, enable daily automatic checks on the server **once**:
-
-```bash
-sudo veloray auto-update enable
-sudo veloray auto-update status
-sudo veloray auto-update check
-```
-
-To stop the timer while retaining your current installation, run `sudo veloray auto-update disable`. To perform an immediate CI-verified update, run `sudo veloray auto-update run` (or `sudo veloray update`). The systemd timer checks once per day around 05:00 server time with a randomized delay. Updating does not require any future user action once this timer is enabled.
-
-This feature is **disabled by default**. It never applies untested commits, never performs unattended updates when GitHub CI status is unknown, and does not automatically restore PostgreSQL data after a failure. It follows `main`, so review permissions for everyone able to push to that branch. For a sensitive production environment, protecting `main` and requiring code review before merges is essential. You can monitor the installation under **Settings → System → Verified GitHub auto-update**. No administrator endpoint directly runs root update commands. See [the maintenance notes](docs/maintenance-audit.md).
-
-Previous frontend assets are retained during the switch so open browser sessions can finish loading their existing files.
-
-The second core requires the complete 1.0 runtime. Upgrade remote agents before assigning sing-box inbounds to them.
-
-## Getting started
-
-1. Open **Inbounds → New inbound**.
-2. Select the node, core, protocol, transport and security mode.
-3. Generate the required credentials and check the port.
-4. Create and deploy the inbound.
-5. Open **Clients → Add client**, select the inbound and set its policy.
-6. Give the client its subscription URL or connection URI.
-
-Changes affecting a node are validated by the relevant core before application. Failed deployments use operation journals and compensating rollback. Unavailable nodes retain pending recovery jobs.
-
-## Protocols and transports
-
-| Core | Inbound protocols | Transports |
-|---|---|---|
-| Xray | VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, HTTP, SOCKS, tunnel, TUN | TCP/raw, WebSocket, gRPC, XHTTP, HTTPUpgrade, mKCP, Hysteria2/QUIC where supported |
-| Secondary core | VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC v5, Snell v6, Naive TLS, ShadowTLS v3, HTTP, SOCKS | TCP/raw, WebSocket, gRPC, HTTPUpgrade, Hysteria2/QUIC where supported |
-
-Security modes include TLS and REALITY for supported combinations. The editor and backend reject incompatible combinations. Certificate and private-key paths must exist and be readable on the selected node. TUN and WireGuard need the appropriate host networking permissions.
-
-HTTP and SOCKS have no managed per-client quota accounting in this panel. Shadowsocks uses one managed client per inbound and inbound-level statistics.
-
-## Client policies
-
-### Traffic and multipliers
-
-**Used** is the amount charged against the quota. A multiplier of `3` means a 1 GiB transfer consumes 3 GiB of quota. The client directory displays this charged amount once, with `3x` beside it.
-
-The subscription's usage header uses the charged amount as well. **Overview** and **Top consumers** show actual transferred bytes without a multiplier. Traffic overview separates **Upload** and **Download**, with a separate chart series for each direction. Transfer rate uses the real bytes recorded in each five-minute interval. The chart has a custom time-range control with draggable handles, keyboard support and a full-range reset.
-
-Existing usage is retained during the upgrade. Traffic collected before directional accounting was available appears as **Earlier traffic**; its direction is not guessed. New transfers are recorded separately. Resetting an account's usage resets its current upload/download counters alongside its quota usage, while lifetime counters and retained traffic history remain intact.
-
-When the effective multiplier exceeds `1`, exported configuration names receive a suffix such as `2.0x`. The stored client name stays unchanged. Decimal multipliers support up to three decimal places. Negative values represent discounts: `-0.5` charges half of the transferred bytes.
-
-Persistent counters and fractional remainders preserve usage across polling and core restarts. Restore the agent's accounting state with the database when recovering from a backup.
-
-### Start after first use
-
-Enable **Start after first use** and enter the number of days. The account remains without a running expiry clock until VPN traffic or an authenticated online session is observed. Fetching a subscription or opening the browser portal does not start it. The first-use timestamp is retained, so later connections do not extend the expiry.
-
-### Devices
-
-Set **Devices** to the allowed number of concurrent source IPs. `0` means unlimited. When another IP is admitted beyond the limit, an earlier IP is denied for ten minutes. Shared accounts enforce one limit across their connections.
-
-The core exposes source IPs, not hardware identities. Devices behind the same NAT share one IP; a device changing networks can appear as another IP. Enforcement follows the five-second reconciliation loop. Applying routing policy restarts the affected core, so other connections on that core can briefly reconnect.
-
-### Connected IPs and registered devices
-
-Open a client’s action menu and select **IP's** for current VPN source IPs, or **Device's** for devices registered through subscription downloads. IP lists refresh from native core telemetry and show node/inbound associations; stale or unavailable telemetry is reported explicitly.
-
-Device registration uses the optional `X-HWID` header, with `X-Device-OS`, `X-Ver-OS`, `X-Device-Model` and `User-Agent` metadata. First and latest subscription downloads are recorded, with one entry per identifier across a shared account. Browser portal visits, HEAD requests and failed downloads do not register devices. Apps without HWID remain compatible but cannot populate this list. Registered devices are not an online-device count, and their metadata is reported by the client app. The existing Devices limit still controls concurrent source IPs.
-
-### Renewals and shared accounts
-
-Quota renewal resets charged usage on the configured interval. Expiry and quota exhaustion disable the account. Imported shared accounts retain one quota, expiry and subscription across their connections.
-
-## Outbounds and routing
-
-Select a node and core to see its built-in outbounds and custom entries. Xray starts with `direct` and `blocked`; sing-box starts with `direct`. Node configuration patches are reflected in the Xray defaults. Built-in entries can be inspected; custom entries can be edited, duplicated, enabled, disabled or deleted.
-
-Create outbounds with a unique tag. Configure server address, port, credentials, TLS, SNI and common transports through the guided form. **Advanced configuration** retains access to the native JSON and preserves extra settings when guided fields are edited. All submitted settings are checked by the running core.
-
-Routing displays Xray's protected panel API route and each core's default route. Custom rules have a numeric priority; lower values are evaluated first, with creation order resolving equal priorities. Templates cover private IP blocking, BitTorrent blocking and direct HTTPS; Xray also offers an ad-domain template using its bundled geosite database. Templates are applied only when you save them.
-
-Use domain, IP, port, source or user match controls and select the destination outbound. Domain entries use the native matching format, such as `domain:example.com` for Xray or `example.com` as a sing-box domain suffix. Ports accept individual values and ranges such as `443,8000-9000`:
-
-
-- Xray uses `outboundTag`, `domain`, `ip`, `source`, `user` and `port`.
-- The secondary core uses `outbound`, `domain_suffix`, `ip_cidr`, `source_ip_cidr`, `auth_user` and `port`.
-
-sing-box blocking uses `action: "reject"`; it does not require a `blocked` outbound. Protocol and domain matching automatically enables a sniff action before custom rules on that core.
-
-Rules and outbounds are isolated by node and core. Xray reserves `api`, `direct` and `blocked`. Internal device enforcement rules precede user-created rules. Dependencies are validated before deployment.
-
-## Subscriptions
-
-The default browser page is now a simple light/dark page. Settings → Subscription also offers the previous dashboard, the compact page, or a custom HTML file. File paths, local assets, client configuration templates, delivery hosts, HWID admission and the compatibility report are documented in [Subscription customization](docs/subscription-customization.md).
-
-The subscription endpoint uses a separate HTTPS port from administration. Set
-it in **Settings → Subscription → Separate subscription port**. Native installs
-pick an available initial port starting at `8444`; Docker defaults to `8444`.
-Links move after successful listener application; existing `/sub/` links on the
-panel port redirect to the applied port. Open the chosen TCP port in the host
-and provider firewalls. See [independent subscriptions](docs/independent-subscriptions.md).
-
-Each subscription URL carries a private token:
-
-```text
-https://YOUR_HOST:SUBSCRIPTION_PORT/sub/TOKEN
-```
-
-| Format | URL suffix | Content |
-|---|---|---|
-| Auto | none | Browser portal or detected client feed |
-| Base64 | `?format=base64` | Encoded portable connection URIs |
-| Raw | `?format=raw` | Plain connection URIs |
-| Clash/Mihomo | `?format=clash` | YAML-compatible JSON with proxies, a group and a rule |
-| Secondary-core JSON | `?format=singbox` | Outbound profile and selector |
-| Metadata | `?format=json` | Account policy and connection details |
-| WireGuard | `?format=wireguard` | WireGuard profile when available |
-
-Clash/Mihomo and sing-box user agents select their respective formats automatically. Other URI clients, including V2Box, receive the Base64 feed by default. Use explicit format URLs when an app does not send a recognizable user agent.
-
-Feeds include `Subscription-Userinfo`, `Profile-Title`, `Profile-Update-Interval`, `Profile-Web-Page-URL`, and configured `Support-URL`, `Announce` and `Announce-URL` headers. Announcement text is Base64 encoded. Configure announcements and portal options in **Settings → Subscription** or **General** as presented in the panel.
-
-The browser portal keeps usage, expiry, subscription formats and a QR code in a compact layout. Connection URIs and app information expand on demand. Settings reports database connectivity independently of host metrics, and its Uptime counter starts with the panel process.
-
-Protocol, transport and header support vary between app releases. Export formats reject configurations that cannot be represented. Announcement rendering depends on the app's support for these headers.
-
-## SNI scanner
-
-Click the rocket inside **Server name**. Scan one or more domains, or use **Find SNI** to test the built-in candidate list from the chosen node.
-
-Probes verify public DNS addresses, certificate hostname validation, a TLS 1.3 handshake using X25519, negotiated ALPN and response time. The fastest successful result is listed first. Private and loopback destinations are excluded. A successful probe establishes TLS reachability from that node; it does not measure reachability from every client network.
-
-## Remote nodes
-
-```bash
-sudo bash /tmp/veloray-install.sh node --lang en
-```
-
-The node installer prints its agent token and certificate fingerprint. Add the node in the panel with its public host, agent URL and token. Remote agents require HTTPS. Use a trusted certificate or the configured CA bundle; restrict the agent port to the panel server.
-
-| Service | Default address |
-|---|---|
-| HTTPS panel | public `8443` |
-| Web backend | `127.0.0.1:8610` |
-| Agent | `127.0.0.1:9191` on the local node |
-| Xray statistics | `127.0.0.1:10085` |
-| Secondary statistics | `127.0.0.1:10086` |
-| Secondary connection controller | `127.0.0.1:10087` |
-
-Statistics and connection-controller ports remain local. Remote agents use their configured HTTPS listen address.
-
-## API
-
-Open **API** to create keys, select a scope, set expiry, revoke keys or reset them. A full key is returned once at creation or reset; subsequent reads contain only its prefix. Reset immediately invalidates the previous token. Tokens are hashed in the database.
-
-| Scope | Access |
-|---|---|
-| Read | Read endpoints allowed by the owner's permissions |
-| Write | Allowed read/write endpoints, excluding administrator-only operations |
-| Admin | Administrator endpoints when owned by an administrator |
-
-```bash
-curl -H "Authorization: Bearer $VELO_API_KEY" https://YOUR_PANEL/api/clients/
-```
-
-The key owner's role, assigned inbounds and client ownership still apply. Browser sessions use CSRF tokens; bearer API calls use their key scopes.
-
-| Resource | Operations |
-|---|---|
-| `/api/clients/` | List, create; patch/delete by ID; batch, bulk, toggle, reset-usage |
-| `/api/inbounds/` | List, create; patch/delete by ID; clone |
-| `/api/outbounds/` | List, create; patch/delete by ID |
-| `/api/routing_rules/` | List, create; patch/delete by ID |
-| `/api/nodes/` | List, create; probe, deploy, ports, config preview/validation, core status/restart, SNI scan |
-| `/api/admin/users/` | Administrator account management |
-| `/api/admin/api-keys/` | Key management; `POST /:id/reset` rotates a key |
-| `/api/settings` | Settings |
-| `/api/openapi` | OpenAPI schema for the principal CRUD resources |
-
-Lists are paginated using `limit` and `offset`. See the in-panel reference for additional action endpoints.
-
-## Import data
-
-Open **Settings → Import data**. Choose the destination node and a SQLite backup or a relational tables JSON export. Preview it, select supported entries, resolve port conflicts and acknowledge the review before committing.
-
-Imports initially save inbounds disabled. Review target-node certificates, ports and connection settings before activation. Unsupported entries show their reason and remain unavailable for selection. Passwords for source panel administrators are excluded.
-
-The parser accepts at most 64 MiB, 20,000 source records, 500 inbounds and 10,000 client connections per import. Compressed archives and SQL dumps are not direct import formats.
-
-For relational source databases:
-
-```bash
-python3 scripts/export-relational.py --output /private/path/migration.json
-python3 scripts/export-relational.py --sqlite /private/path/source.db --output /private/path/migration.json
-```
-
-The PostgreSQL exporter reads `SQLALCHEMY_DATABASE_URL` or `DATABASE_URL` and requires `psql`. Run it in the source environment with read access.
-
-## Server operations
+### Server console
 
 ```bash
 sudo veloray
 ```
 
-The English menu groups services, configuration, maintenance and networking in a vertical list. Commands also work directly:
+A compact management menu provides service status, logs, domain/port changes, SSL, password reset, backups, repair and updates. **Leave the new password empty to generate a random one.** Successful checks are green, warnings yellow and failures red when the terminal supports color. `NO_COLOR=1` disables colors.
+
+<details>
+<summary>Useful commands</summary>
 
 ```bash
 sudo veloray status
 sudo veloray doctor
-sudo veloray url
-sudo veloray restart
-sudo veloray logs web
-sudo veloray logs agent
-sudo veloray logs xray
-sudo veloray logs singbox
-sudo veloray reset admin
+sudo veloray reset
 sudo veloray domain panel.example.com
-sudo veloray port 8443
+sudo veloray port 23456
 sudo veloray ssl admin@example.com
 sudo veloray backup
-sudo veloray restore /path/to/backup.tar.gz
-sudo veloray backup-schedule daily
-sudo veloray ports
-sudo veloray inbounds
-sudo veloray inbound-port 1 2053
-sudo veloray update
+sudo veloray auto-update enable
 ```
 
-Backups include PostgreSQL, panel and node environment files, both core configurations, service definitions, certificates and agent accounting state. Keep backups private: they contain credentials. Restore into a compatible installation and run the health check afterward.
+To install a remote agent, use the same installer with `node`. Upgrade remote agents before assigning new core or native protocol features to them.
 
-Operation logs are stored under `/var/log/veloray`. Uninstall preserves configuration and database contents for recovery.
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/install.sh) node
+```
+
+</details>
+
+## Screenshots
+
+Screenshots use demonstration accounts, not production credentials.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/settings-dark.webp"><img src="docs/media/settings-light.webp" alt="Compact navigation and categorized VeloRay settings" width="100%"></picture>
+
+<details>
+<summary>Login and the default subscription page</summary>
+
+<img src="docs/media/login.webp" alt="VeloRay login with light/dark appearance and language selection" width="100%">
+<img src="docs/media/subscription.webp" alt="Default subscription page with quota, expiry, app formats, QR and traffic history" width="800">
+
+</details>
+
+## Features
+
+| Area | What you can manage |
+|---|---|
+| **Users & customers** | Shared accounts across nodes, quotas, expiry, first-use activation, scheduled renewal, IP/HWID limits, bulk actions and token rotation |
+| **Multi-node** | Local and remote agents, scoped deployments, listener inspection, configuration validation, journals and compensated rollback |
+| **Subscriptions** | A simple default page, custom HTML files, configurable URL paths, a separate HTTPS port, QR codes and app-specific exports |
+| **Core versions** | Opt-in manual downloads from official GitHub releases, verified SHA-256, version selection, configuration checks and previous-version rollback |
+| **Traffic** | Durable counters, actual upload/download history, quota multipliers, charts, usage CSV and outbound accounting |
+| **Network** | Guided inbounds/outbounds, routing rules, chaining, Xray fallbacks/balancing and sing-box selectors/URL-test groups |
+| **Connection tests** | Generated client credentials, delivery-host selection and node-side protocol/HTTPS probes |
+| **Accounts & access** | Superuser, reseller, viewer and custom roles, inbound assignment, scoped API keys and account budgets |
+| **Authentication** | Local passwords and 2FA, recovery codes, optional OIDC, GitHub OAuth, Telegram OIDC and LDAPS |
+| **Operations** | Health monitors, deployment diagnostics, hosting budgets, monthly traffic cycles, Prometheus and audit history |
+| **Automation** | Telegram controls, signed webhooks, Discord/SMTP notifications, event preferences and scheduled backups |
+| **Interface** | Responsive React pages, lazy loading, English/Persian, Gregorian/Jalali input, keyboard controls, local fonts and installable PWA |
+
+### Protocols
+
+| Engine | Managed protocols |
+|---|---|
+| **Xray** | VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, HTTP, SOCKS, tunnel and TUN |
+| **sing-box** | VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC v5, Snell v6, Naive TLS, ShadowTLS v3, HTTP and SOCKS |
+| **VeloRay Native** | MTProto/FakeTLS and AmneziaWG with per-user traffic, credentials, expiry and revocation |
+
+Transports include **TCP/raw, WebSocket, gRPC, XHTTP, HTTPUpgrade, mKCP and QUIC** where supported by the selected engine. TLS and REALITY are available for compatible combinations. The editor validates supported combinations instead of advertising unavailable ones.
+
+Native services support user changes without restarting unchanged sessions. Xray supports hot user addition on unchanged VLESS/VMess/Trojan listeners; other structural changes use validated restart. TUN/WireGuard may require host networking privileges. Native AmneziaWG uses a userspace stack for public TCP/UDP destinations. See the protocol guides for exact limits.
+
+### Subscriptions that fit your setup
+
+A browser opens the simple account page. VPN clients receive raw/Base64 links, Clash/Mihomo YAML, sing-box JSON or Xray JSON. Mixed accounts retain compatible connections and report omitted entries.
+
+```text
+https://vpn.example.com:23457/sub/USER_TOKEN
+https://vpn.example.com:23457/access/USER_TOKEN
+https://vpn.example.com:23457/USER_TOKEN
+```
+
+Set **Settings → Subscription → Subscription path** to `/sub/`, a custom path, or empty for a root-level token. Changing it changes existing subscription URLs; the user token stays the same. Set the independent HTTPS port in the same section. Customer links move to a new port after the listener has been successfully applied.
+
+Choose **Custom HTML file** to use your own page from `/etc/veloray/templates`. Template validation, local assets and fallback to the default page are built in. [Customization guide →](docs/subscription-customization.md)
+
+### Official core releases
+
+Open **Cores → Core versions**, enable official downloads, check releases and choose a version. Downloads come from **[XTLS/Xray-core](https://github.com/XTLS/Xray-core)** and **[SagerNet/sing-box](https://github.com/SagerNet/sing-box)**. Only stable assets with official GitHub SHA-256 metadata are offered. The current configuration is checked before replacement, counters are harvested, and an unsuccessful restart restores the previous executable.
+
+Downloads are manual; enabling them does not schedule automatic core changes. Panel updates preserve an explicitly selected official core. Per-user IP attribution in sing-box requires VeloRay's bundled build, so switching to an official binary is blocked while per-user IP caps are configured. Container deployments update their cores through their image. [Core management guide →](docs/core-versions.md)
+
+## Deployment options
+
+- **Native:** Ubuntu 24.04 + systemd, `amd64`/`arm64`, PostgreSQL.
+- **Docker Compose:** panel, agent, both cores, PostgreSQL, HTTPS proxy and independent subscriptions. Host CI covers Ubuntu 22.04/24.04.
+- **Cloud-init:** first-boot installation with commit/checksum verification and optional Cloudflare DNS configuration.
+
+[Container & cloud deployment →](docs/container-deployment.md) · [Platform/database scope →](docs/platform-and-database-assessment.md)
+
+## Documentation
+
+| Guide | Contents |
+|---|---|
+| [Customers and plans](docs/customer-management.md) | Shared accounts, policies, renewals and reseller budgets |
+| [Subscriptions](docs/subscription-customization.md) | Templates, delivery hosts, device admission and feeds |
+| [Independent subscriptions](docs/independent-subscriptions.md) | HTTPS ports and listener rollover |
+| [MTProto & AmneziaWG](docs/mtproto-and-amneziawg.md) | Native setup, exports, accounting and limitations |
+| [Core versions](docs/core-versions.md) | Official downloads, rollback and compatibility |
+| [Connection tests](docs/client-connection-tests.md) | Protocol checks and diagnostic limits |
+| [Routing & balancing](docs/fallbacks-and-balancing.md) | Fallbacks, selectors and safe deployment |
+| [Notifications](docs/webhooks.md) | Signed webhooks and event destinations |
+| [Operations](docs/operations-and-alerts.md) | Health checks, email and hosting budgets |
+| [Feature roadmap](docs/competitor-parity-roadmap.md) | Delivered features and remaining work |
+
+The authenticated **API** page contains the REST/OpenAPI reference. Server backups and operational logs stay private; subscription tokens are redacted from application request logs.
 
 ## Development and verification
 
-Go 1.26.10 (including the crypto/x509 security fix) and Node.js 22.12+ are used by the build workflow. Copy `.env.example` for local development and generate distinct secret and field keys. Use an isolated PostgreSQL database.
-
 ```bash
-go run ./cmd/veloray migrate
-go run ./cmd/veloray bootstrap
-go run ./cmd/veloray serve
-```
-
-```bash
-export VELORAY_TEST_DATABASE_URL='postgres://USER:PASSWORD@127.0.0.1:5432/veloray_test?sslmode=disable'
-go test -race ./... -count=1
+go test -race ./...
 go vet ./...
-cd frontend
-npm ci
-npm run format:check
-npm run build
-npm test
+cd frontend && npm ci && npm run format:check && npm run build
 ```
 
-Set `VELORAY_TEST_XRAY_BINARY` and `VELORAY_TEST_SINGBOX_BINARY` to run protocol-matrix tests against real core validators. Browser tests expect an isolated running panel and administrator credentials through `VELORAY_E2E_URL` and `VELORAY_E2E_PASSWORD`.
+CI also runs PostgreSQL integration tests, pinned-core protocol checks, Playwright UI/PWA tests, dependency checks, installer fixtures and actual Docker HTTPS/traffic/restart checks. Release archives for both architectures must match the source manifest.
 
-### Runtime packages
+Contributions are welcome. Include a clear behavior change and relevant tests; keep documentation aligned with the capabilities actually shipped. VeloRay is MIT licensed. Bundled engines and dependencies retain their own licenses and notices.
 
-```bash
-bash scripts/build-runtime.sh
-bash scripts/verify-runtime.sh
-python3 scripts/package-release.py
-```
-
-The build produces `runtime/linux-amd64.tar.xz` and `runtime/linux-arm64.tar.xz`, with SHA-256 checksums and source manifests. Modified source inputs cannot silently reuse an outdated runtime.
-
-The secondary executable is built from pinned upstream source with the statistics and connection APIs enabled. Its local connection metadata includes the authenticated user for device enforcement. The source archive, upstream license, GPL text and build recipe accompany the distributed runtime. Xray binaries and assets use pinned release checksums. Bundled dependency licenses are included in both runtime packages.
-
-Inter and Vazirmatn fonts are served locally. No font CDN is required.
-
-## License
-
-VeloRay is distributed under the repository's [LICENSE](LICENSE). Bundled cores, fonts and dependencies retain their own licenses and attribution.
-
-### Shared customer management and protocol extensions
-
-VeloRay 1.0 now includes multi-node Customers, Services and plans, shared encrypted
-Config profiles with reusable snippets and revision restore, calendar quota renewal,
-and token-free subscription history. Native sing-box forms support TUIC v5, Naive
-TLS inbound, Snell v6 and [ShadowTLS v3](docs/shadowtls.md) with authenticated
-Shadowsocks 2022 inside (TCP only); Xray JSON subscription export and live user additions
-on unchanged Xray listeners are available.
-
-See [customer management](docs/customer-management.md),
-[protocol and live-apply limits](docs/native-protocols-and-live-apply.md), and the
-[remaining feature backlog](docs/competitor-parity-roadmap.md). These additions do
-not claim completion of every competing panel feature.
-
-The panel also supports [PWA installation](docs/pwa.md) with static-only caching
-and a reconnect page; authenticated data and subscription URLs are never cached.
+If VeloRay is useful to you, **[give the project a star](https://github.com/ParsaZali/VeloRay)** or report a reproducible issue with sensitive information removed.

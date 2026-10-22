@@ -18,6 +18,7 @@ import (
 )
 
 type Server struct {
+	Updater                *CoreUpdater
 	NodeID, Version, Token string
 	Manager                *Manager
 	SingBox                *Manager
@@ -27,8 +28,21 @@ type Server struct {
 func (s Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	var coreMu sync.Mutex
+	if s.Updater != nil {
+		s.Updater.changeMu = &coreMu
+	}
 	var geo geoCatalog
 	validate := func(c context.Context, raw []byte) error {
+		var policy struct {
+			Required bool `json:"_singbox_user_ips_required"`
+		}
+		if json.Unmarshal(raw, &policy) != nil {
+			return errors.New("invalid configuration")
+		}
+		if policy.Required && s.Updater != nil && !s.Updater.SupportsUserIPs() {
+			return errors.New("per-user IP limits require the bundled sing-box core")
+		}
+
 		x, b, e := splitCore(raw)
 		if e != nil {
 			return e
@@ -92,6 +106,46 @@ func (s Server) Handler() http.Handler {
 			write(w, 200, out)
 		}
 	}
+	mux.HandleFunc("/cores/status", wrap(func(c context.Context, v map[string]json.RawMessage) (any, error) {
+		if s.Updater == nil {
+			return map[string]any{"managed": false, "enabled": false, "reason": "Core updates require managed systemd installation; update container images instead."}, nil
+		}
+		return s.Updater.Status(), nil
+	}, "GET"))
+	mux.HandleFunc("/cores/catalog", wrap(func(c context.Context, v map[string]json.RawMessage) (any, error) {
+		if s.Updater == nil {
+			return nil, errors.New("core manager unavailable")
+		}
+		var core string
+		_ = json.Unmarshal(v["core"], &core)
+		return s.Updater.Catalog(c, core)
+	}, "POST"))
+	mux.HandleFunc("/cores/policy", wrap(func(c context.Context, v map[string]json.RawMessage) (any, error) {
+		if s.Updater == nil {
+			return nil, errors.New("core manager unavailable")
+		}
+		var enabled bool
+		if json.Unmarshal(v["enabled"], &enabled) != nil {
+			return nil, errors.New("enabled is required")
+		}
+		err := s.Updater.SetEnabled(enabled)
+		return s.Updater.Status(), err
+	}, "POST"))
+	mux.HandleFunc("/cores/install", wrap(func(c context.Context, v map[string]json.RawMessage) (any, error) {
+		if s.Updater == nil {
+			return nil, errors.New("core manager unavailable")
+		}
+		var core, tag string
+		var rollback, required bool
+		_ = json.Unmarshal(v["core"], &core)
+		_ = json.Unmarshal(v["tag"], &tag)
+		_ = json.Unmarshal(v["rollback"], &rollback)
+		_ = json.Unmarshal(v["require_user_ips"], &required)
+		coreMu.Lock()
+		err := s.Updater.Start(core, tag, rollback, required)
+		coreMu.Unlock()
+		return s.Updater.Status(), err
+	}, "POST"))
 	mux.HandleFunc("/xray/geo-assets", wrap(func(c context.Context, v map[string]json.RawMessage) (any, error) {
 		var kind, query string
 		limit := 100
@@ -421,11 +475,18 @@ func Serve(ctx context.Context, version string) (serveErr error) {
 			}
 		}
 	}
+	var updater *CoreUpdater
+	if directory := os.Getenv("VELORAY_CORE_DIRECTORY"); directory != "" && mode == "systemd" {
+		updater, err = NewCoreUpdater(ctx, directory, map[string]*Manager{"xray": m, "singbox": second})
+		if err != nil {
+			return err
+		}
+	}
 	go m.Poll(ctx)
 	if second != nil {
 		go second.Poll(ctx)
 	}
-	s := &http.Server{Addr: listen, Handler: Server{NodeID: env("VELORAY_NODE_ID", "local"), Version: version, Token: token, Manager: m, SingBox: second, Native: native}.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 55 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
+	s := &http.Server{Addr: listen, Handler: Server{Updater: updater, NodeID: env("VELORAY_NODE_ID", "local"), Version: version, Token: token, Manager: m, SingBox: second, Native: native}.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 55 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
 	shutdown := make(chan struct{})
 	go func() {
 		defer close(shutdown)

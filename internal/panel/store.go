@@ -225,6 +225,9 @@ func settings(ctx context.Context, q Query) (Data, error) {
 	if err != nil {
 		return nil, err
 	}
+	if oneOf(str(d, "subscription_template"), "compact", "dashboard") {
+		d["subscription_template"] = "default"
+	}
 	return merge(defaultSettings(), d), nil
 }
 func saveSettings(ctx context.Context, q Query, d Data) error {

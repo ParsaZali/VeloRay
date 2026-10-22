@@ -28,7 +28,7 @@ def main():
         for name in sorted(names):
             path = Path(directory) / name
             relative = path.relative_to(project)
-            if name.endswith((".tsbuildinfo", ".pyc", ".pyo")) or (name.startswith(".env") and name != ".env.example"):
+            if name == ".git" or name.endswith((".tsbuildinfo", ".pyc", ".pyo")) or (name.startswith(".env") and name != ".env.example"):
                 continue
             if path.is_symlink():
                 raise SystemExit(f"Source package cannot contain symlinks: {relative}")

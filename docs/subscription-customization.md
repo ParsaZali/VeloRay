@@ -165,3 +165,9 @@ features. A PR/CI run does not install these changes on the production server.
 Lower-camel legacy variables, scoped info polling, local QR helpers and the three
 provided examples are supported by the [compatibility adapter](legacy-subscription-templates.md).
 Existing uppercase variables and native pages retain their existing behavior.
+
+## Subscription URL path
+
+`subscription_path` defaults to `/sub/`. Settings → Subscription accepts a custom slash-separated path or an empty value for root-level `/TOKEN` links. The path may contain letters, digits, underscores and hyphens; reserved API/static routes and traversal/control characters are rejected. These checks protect application routing without fixing the visible prefix. Token authorization, HWID admission, templates, local assets and all feed formats use the same resolver on both listeners.
+
+Changing the path changes previously issued URLs; tokens remain the same. Generated links, page headers, QR codes and same-origin history requests use the configured path. Custom-path tokens are redacted from application request logs. The UI offers one default built-in page and custom HTML; legacy saved built-in choices are normalized to the default page.

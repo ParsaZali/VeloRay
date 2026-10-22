@@ -268,6 +268,7 @@ export type AppSettings = {
   traffic_history_days: number;
   dashboard_refresh_seconds: number;
   subscription_enabled: boolean;
+  subscription_path: string;
   subscription_show_apps: boolean;
   subscription_show_qr: boolean;
   subscription_show_connection_uri: boolean;

@@ -593,5 +593,19 @@ pass recovery-after-port-change
 grep -Fq 'User=veloray-xray' "$HOST_ROOT/etc/systemd/system/xray.service"
 grep -Fq 'StartLimitBurst=3' "$HOST_ROOT/etc/systemd/system/xray.service";pass dedicated-runtime-account-and-restart-limit
 unset TEST_PORTS_CONFLICT
+# Real random-credential and managed-version branches against the disposable host.
+rm -f "$HOST_ROOT/admin"
+(unset VELORAY_ADMIN_PASSWORD;host_install)
+( source "$HOST_ROOT/etc/veloray/install-result.env";[[ "$USERNAME" == vr_* && ${#PASSWORD} -ge 32 ]] )
+[[ "$(stat -c %a "$HOST_ROOT/etc/veloray/install-result.env")" == 600 ]]
+pass generated-credentials-are-private
+printf '\n' | env -u VELORAY_ADMIN_PASSWORD bash "$HOST_ROOT/usr/local/bin/velorayctl" reset >"$TEST_ROOT/host-result" 2>&1
+grep -Eq 'Password: [a-f0-9]{32}' "$TEST_ROOT/host-result";pass empty-password-generates-random-secret
+slot="$HOST_ROOT/var/lib/veloray-cores/xray"
+printf '#!/usr/bin/env bash\necho official-core\n' >"$slot/binary-official-test";chmod 0755 "$slot/binary-official-test"
+ln -sfn "$slot/binary-official-test" "$slot/current"
+printf '{"tag":"v1.2.3","source":"official"}\n' >"$slot/active.json"
+host_install
+grep -Fq official-core "$HOST_ROOT/usr/local/bin/xray";pass panel-upgrade-preserves-official-core-choice
 export PATH="$bootstrap_test_path"
 printf '%s installer checks passed.\n' "$passed"

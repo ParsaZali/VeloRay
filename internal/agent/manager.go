@@ -274,6 +274,7 @@ type ledger struct {
 	Operations map[string]operation    `json:"operations"`
 }
 type Manager struct {
+	releaseSlot                                string
 	native                                     *nativeRuntime
 	probeMu                                    sync.Mutex
 	Binary, ConfigPath, ServiceName, StatePath string
@@ -369,6 +370,9 @@ func (m *Manager) status(ctx context.Context) Status {
 	version := ""
 	if len(fields) >= 2 {
 		version = strings.Join(fields[:2], " ")
+		if m.Core == "singbox" && len(fields) >= 3 {
+			version = strings.Join(fields[:3], " ")
+		}
 	}
 	a, e := m.Runtime.Run(ctx, "systemctl", "is-active", m.ServiceName)
 	state := strings.TrimSpace(string(a))

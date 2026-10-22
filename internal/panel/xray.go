@@ -263,6 +263,11 @@ func buildConfig(ctx context.Context, q Query, node Data, fieldKey ...string) (D
 	}
 	if sing != nil {
 		cfg["_singbox"] = sing
+		required, err := nodeNeedsSingIPs(ctx, q, num(node, "id"))
+		if err != nil {
+			return nil, err
+		}
+		cfg["_singbox_user_ips_required"] = required
 	}
 	native, e := buildNativeConfig(ctx, q, node)
 	if e != nil {

@@ -53,6 +53,7 @@ jobs:
           retention-days: 7
       - run: for script in install.sh scripts/*.sh scripts/velorayctl deploy/node/install.sh; do bash -n "$script"; done
       - run: bash scripts/test-auto-update.sh
+      - run: python3 scripts/test-setup.py
       - run: python3 scripts/test-deployment.py
       - run: |
           go build -buildvcs=false -o /tmp/veloray-cli ./cmd/veloray

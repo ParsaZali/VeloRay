@@ -62,8 +62,7 @@ find "$release/frontend" -type f -exec chmod 0644 {} +
 cp -a deploy scripts install.sh go.mod "$release/"
 mkdir -p "$release/bin/linux-$arch"
 cp -a "bin/linux-$arch/"* "$release/bin/linux-$arch/"
-if [[ -n "${VELORAY_XRAY_DIRECTORY:-}" || ! -x /usr/local/bin/xray ]];then vr_run bash scripts/xray-install.sh;fi
-if [[ -n "${VELORAY_SINGBOX_DIRECTORY:-}" ]];then vr_run bash scripts/singbox-install.sh;elif [[ ! -x /usr/local/bin/sing-box ]];then echo 'Use the complete VeloRay runtime package to install sing-box.' >&2;exit 1;fi
+
 vr_run systemctl enable --now postgresql nginx
 subscriptions_active=false
 if systemctl is-active --quiet veloray-subscriptions.service;then subscriptions_active=true;fi
@@ -84,10 +83,7 @@ if [[ -f /etc/veloray/veloray.env ]];then
  if $subscriptions_active;then vr_run systemctl stop veloray-subscriptions.service;fi
  systemctl stop veloray-web.service veloray-reconcile.timer veloray-reconcile.service 2>/dev/null||true
 else
- [[ -n "${VELORAY_PUBLIC_HOST:-}" ]]||read -rp "$(prompt 'Public host (domain or IP): ' 'دامنه یا آی‌پی عمومی: ')" VELORAY_PUBLIC_HOST
- [[ "$VELORAY_PUBLIC_HOST" =~ ^[a-zA-Z0-9.:-]+$ ]]||{ echo 'Invalid host.' >&2;exit 2; }
- VELORAY_PANEL_PORT="${VELORAY_PANEL_PORT:-8443}"
- [[ "$VELORAY_PANEL_PORT" =~ ^[0-9]+$ ]]&&((VELORAY_PANEL_PORT>0&&VELORAY_PANEL_PORT<65536&&VELORAY_PANEL_PORT!=8610&&VELORAY_PANEL_PORT!=9191&&VELORAY_PANEL_PORT!=10085))||{ echo 'Invalid or reserved panel port.' >&2;exit 2; }
+ vr_setup_initial
  public_url_host="$VELORAY_PUBLIC_HOST";[[ "$public_url_host" != *:* ]]||public_url_host="[$public_url_host]"
  dbpass="$(openssl rand -hex 32)"
  preserved="$(runuser -u postgres -- psql -tAc "SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='veloray') OR EXISTS(SELECT 1 FROM pg_database WHERE datname='veloray')")"
@@ -99,6 +95,8 @@ VELORAY_SECRET_KEY=$(openssl rand -hex 48)
 VELORAY_FIELD_KEY=$(openssl rand -hex 32)
 VELORAY_PUBLIC_HOST=$VELORAY_PUBLIC_HOST
 VELORAY_PANEL_PORT=$VELORAY_PANEL_PORT
+VELORAY_SUBSCRIPTION_PORT=$VELORAY_SUBSCRIPTION_PORT
+VELORAY_TLS_MODE=${VELORAY_TLS_MODE:-local}
 VELORAY_PUBLIC_URL=https://$public_url_host:$VELORAY_PANEL_PORT
 VELORAY_LISTEN=127.0.0.1:8610
 VELORAY_COOKIE_SECURE=true
@@ -118,6 +116,10 @@ ENV
  [[ "${POSTGRES_HOST:-}" != 127.0.1.0 ]]||export POSTGRES_HOST=127.0.0.1
  ensure_local_database
 fi
+if $existing;then vr_run systemctl stop veloray-agent.service;fi
+if ! vr_core_is_official xray && [[ -n "${VELORAY_XRAY_DIRECTORY:-}" || ! -x /usr/local/bin/xray ]];then vr_run bash scripts/xray-install.sh;fi
+if vr_core_is_official singbox;then :;elif [[ -n "${VELORAY_SINGBOX_DIRECTORY:-}" ]];then vr_run bash scripts/singbox-install.sh;elif [[ ! -x /usr/local/bin/sing-box ]];then echo 'Use the complete VeloRay runtime package to install sing-box.' >&2;exit 1;fi
+vr_prepare_managed_cores
 chown root:veloray /etc/veloray/veloray.env;chmod 0640 /etc/veloray/veloray.env
 # All changes below use the candidate binary. Keep the previous release for rollback.
 install -m 0755 "bin/linux-$arch/veloray" /usr/local/bin/veloray
@@ -146,13 +148,12 @@ if $existing;then
 fi
 has_admin="$(PGHOST="${POSTGRES_HOST:-127.0.0.1}" PGPORT="${POSTGRES_PORT:-5432}" PGUSER="${POSTGRES_USER:-veloray}" PGPASSWORD="$POSTGRES_PASSWORD" psql -tAc "SELECT EXISTS(SELECT 1 FROM vr_users WHERE data->>'is_superuser'='true')" "${POSTGRES_DB:-veloray}")"
 if [[ "${has_admin//[[:space:]]/}" != t ]];then
- export VELORAY_ADMIN_USERNAME="${VELORAY_ADMIN_USERNAME:-admin}"
- if [[ -z "${VELORAY_ADMIN_PASSWORD:-}" ]];then
-  read -rsp "$(prompt 'Administrator password (12+ characters): ' 'رمز مدیر (حداقل ۱۲ کاراکتر): ')" VELORAY_ADMIN_PASSWORD;printf '\n'
-  read -rsp "$(prompt 'Confirm password: ' 'تکرار رمز: ')" confirmation;printf '\n'
-  [[ "$VELORAY_ADMIN_PASSWORD" == "$confirmation" ]]||{ vr_say 'Passwords do not match.' 'رمزها یکسان نیستند.' >&2;exit 2; }
- fi
- export VELORAY_ADMIN_PASSWORD
+ export VELORAY_ADMIN_USERNAME="${VELORAY_ADMIN_USERNAME:-vr_$(openssl rand -hex 4)}"
+ export VELORAY_ADMIN_PASSWORD="${VELORAY_ADMIN_PASSWORD:-$(openssl rand -hex 16)}"
+ vr_run veloray set-env VELORAY_ADMIN_USERNAME "$VELORAY_ADMIN_USERNAME"
+ credentials_file=/etc/veloray/install-result.env
+ (umask 077;printf 'PANEL_URL=%q\nUSERNAME=%q\nPASSWORD=%q\n' "$VELORAY_PUBLIC_URL" "$VELORAY_ADMIN_USERNAME" "$VELORAY_ADMIN_PASSWORD" >"$credentials_file")
+ chmod 0600 "$credentials_file"
  vr_run veloray bootstrap
  unset VELORAY_ADMIN_PASSWORD
 fi
@@ -174,6 +175,7 @@ VELORAY_XRAY_BINARY=/usr/local/bin/xray
 VELORAY_XRAY_CONFIG=/usr/local/etc/xray/config.json
 VELORAY_XRAY_SERVICE=xray.service
 VELORAY_AGENT_STATE=/var/lib/veloray-agent/state.json
+VELORAY_CORE_DIRECTORY=/var/lib/veloray-cores
 ENV
 chmod 0600 /etc/veloray-node/agent.env
 install -m 0644 deploy/systemd/{veloray-web,veloray-agent,veloray-subscriptions,veloray-subscription-endpoint,xray}.service /etc/systemd/system/
@@ -219,7 +221,24 @@ if [[ "${VELORAY_INSTALL_COMMIT:-}" =~ ^[a-f0-9]{40}$ ]];then
  printf '%s\n' "$VELORAY_INSTALL_COMMIT" >/var/lib/veloray/installed-commit
  chmod 0644 /var/lib/veloray/installed-commit
 fi
-vr_say 'Installation completed. All health checks passed.' 'نصب کامل شد و تمام بررسی‌های سلامت موفق بود.'
+if [[ "${VELORAY_TLS_MODE:-local}" == auto && ! -f "/etc/letsencrypt/live/$VELORAY_PUBLIC_HOST/fullchain.pem" ]];then
+ vr_step 'Issue domain certificate' 'دریافت گواهی دامنه'
+ certificate_args=(--register-unsafely-without-email)
+ [[ -z "${VELORAY_ACME_EMAIL:-}" ]]||certificate_args=(--email "$VELORAY_ACME_EMAIL")
+ if vr_run certbot certonly --webroot --webroot-path /var/lib/veloray-acme --preferred-challenges http --agree-tos --non-interactive "${certificate_args[@]}" -d "$VELORAY_PUBLIC_HOST";then
+  vr_run veloray render-nginx
+  vr_success 'Trusted HTTPS certificate installed.' 'گواهی معتبر HTTPS نصب شد.'
+ else
+  vr_warn 'Certificate issuance failed. Check domain DNS and port 80, then run veloray ssl EMAIL. Local HTTPS remains available.' 'صدور SSL ناموفق بود؛ DNS دامنه و پورت ۸۰ را بررسی کنید و veloray ssl EMAIL را اجرا کنید. HTTPS محلی فعال است.'
+ fi
+fi
+vr_success 'Installation completed. All health checks passed.' 'نصب کامل شد و تمام بررسی‌های سلامت موفق بود.'
+if [[ -n "${credentials_file:-}" ]];then
+ source "$credentials_file"
+ printf '\n  Username: %s\n  Password: %s\n' "$USERNAME" "$PASSWORD"
+ vr_say "Saved privately: $credentials_file" "ذخیره خصوصی: $credentials_file"
+ unset PASSWORD
+fi
 printf '\n  %s\n' "$VELORAY_PUBLIC_URL"
 vr_say 'Management menu: sudo veloray' 'منوی مدیریت: sudo veloray'
 vr_say 'Administrator password: sudo veloray reset' 'تغییر رمز مدیر: sudo veloray reset'

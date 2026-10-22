@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
 import { can, useSession } from "@/lib/session";
 import { useLocale, t } from "@/lib/i18n";
-import { ChevronLeft, ExternalLink, X } from "lucide-react";
+import { ChevronLeft, Star, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { VeloRayWordmark } from "@/components/brand/veloray-mark";
 import { FaIcon } from "@/components/ui/fa-icon";
@@ -24,12 +26,9 @@ export type RouteKey =
   | "imports";
 const groups = [
   {
-    label: "Overview",
-    items: [{ key: "dashboard", label: "Dashboard", icon: "gauge-high" }],
-  },
-  {
     label: "Management",
     items: [
+      { key: "dashboard", label: "Dashboard", icon: "gauge-high" },
       { key: "customers", label: "Customers", icon: "users" },
       { key: "services", label: "Services and plans", icon: "layer-group" },
       { key: "clients", label: "Clients", icon: "users" },
@@ -53,7 +52,7 @@ const groups = [
         label: "Subscription policies",
         icon: "link",
       },
-      { key: "xray", label: "Xray Core", icon: "microchip" },
+      { key: "xray", label: "Cores", icon: "microchip" },
     ],
   },
   {
@@ -85,6 +84,23 @@ export function Sidebar({
 }) {
   useLocale();
   const session = useSession();
+  const [stars, setStars] = useState<number | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    void api<{ stars: number | null }>("/project", {
+      signal: controller.signal,
+    })
+      .then((data) => {
+        if (!controller.signal.aborted)
+          setStars(
+            typeof data.stars === "number" && Number.isFinite(data.stars)
+              ? data.stars
+              : null,
+          );
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
   const access: Record<string, string> = {
     dashboard: "dashboard.read",
     clients: "clients.read",
@@ -99,7 +115,25 @@ export function Sidebar({
   };
   const body = (compact: boolean) => (
     <>
-      <div className="flex h-16 items-center justify-between px-4">
+      <a
+        className="project-stars"
+        href="https://github.com/ParsaZali/VeloRay"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={t(
+          "Star VeloRay on GitHub",
+          "ستاره دادن به VeloRay در گیت‌هاب",
+        )}
+      >
+        <Star size={14} />
+        {!compact && (
+          <>
+            <span>GitHub</span>
+            <strong>{stars === null ? "—" : stars.toLocaleString()}</strong>
+          </>
+        )}
+      </a>
+      <div className="flex h-12 shrink-0 items-center justify-between px-4">
         <VeloRayWordmark compact={compact} />
         <button
           aria-label={t("Close menu")}
@@ -110,15 +144,15 @@ export function Sidebar({
         </button>
       </div>
       <div className="mx-3 h-px bg-[var(--border-subtle)]" />
-      <nav className="scrollbar-none flex-1 overflow-y-auto px-3 py-4">
+      <nav className="scrollbar-none flex-1 overflow-y-auto px-2.5 py-2">
         {groups.map((g) => (
-          <div key={g.label} className="mb-5">
+          <div key={g.label} className="mb-2 last:mb-0">
             {!compact && (
-              <div className="mb-1.5 px-2 text-[10px] font-medium text-[var(--muted)]">
+              <div className="mb-1 px-2 text-[10px] font-medium text-[var(--muted)]">
                 {t(g.label)}
               </div>
             )}
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {g.items
                 .filter(
                   (item) =>
@@ -145,7 +179,7 @@ export function Sidebar({
                         setMobileOpen(false);
                       }}
                       className={cn(
-                        "group flex h-9 w-full min-w-0 items-center rounded-md text-[13px] font-medium transition",
+                        "group flex h-[31px] w-full min-w-0 items-center rounded-md text-[13px] font-medium transition",
                         compact ? "justify-center px-0" : "gap-2.5 px-2.5",
                         active
                           ? "sidebar-current bg-[var(--surface-2)] text-[var(--fg)]"
@@ -171,18 +205,7 @@ export function Sidebar({
           </div>
         ))}
       </nav>
-      <div className="border-t border-[var(--border-subtle)] p-3">
-        {!compact && (
-          <a
-            href="https://github.com/ParsaZali/VeloRay"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mb-2 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[var(--muted-strong)] transition hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
-          >
-            <VeloRayWordmark />
-            <ExternalLink className="ml-auto h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
-          </a>
-        )}
+      <div className="border-t border-[var(--border-subtle)] p-1.5">
         <button
           aria-label={
             compact ? t("Expand navigation") : t("Collapse navigation")
@@ -205,7 +228,7 @@ export function Sidebar({
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 hidden border-r border-[var(--border)] bg-[var(--sidebar)] lg:flex lg:flex-col transition-[width] duration-200",
-          collapsed ? "w-[68px]" : "w-[252px]",
+          collapsed ? "w-[68px]" : "w-[224px]",
         )}
       >
         {body(collapsed)}
