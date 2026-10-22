@@ -30,19 +30,41 @@ def request(method, path, body=None, authenticated=True, status=200, port=443):
             headers["X-CSRFToken"] = cookies["csrftoken"].value
     if body is not None:
         headers["Content-Type"] = "application/json"
-    connection.request(method, path, json.dumps(body) if body is not None else None, headers)
-    response = connection.getresponse()
-    raw = response.read()
-    if authenticated:
-        for name, value in response.getheaders():
-            if name.lower() == "set-cookie":
-                cookies.load(value)
-    assert response.status == status, f"unexpected HTTP status {response.status}, expected {status}"
-    connection.close()
     try:
-        return json.loads(raw)
-    except ValueError:
-        return raw
+        connection.request(method, path, json.dumps(body) if body is not None else None, headers)
+        response = connection.getresponse()
+        raw = response.read()
+        if authenticated:
+            for name, value in response.getheaders():
+                if name.lower() == "set-cookie":
+                    cookies.load(value)
+        assert response.status == status, f"unexpected HTTP status {response.status}, expected {status}"
+        try:
+            return json.loads(raw)
+        except ValueError:
+            return raw
+    finally:
+        connection.close()
+
+
+def wait_subscription_endpoint(port):
+    # A port switch reloads HTTPS listeners. A read that lands on a draining
+    # connection can be reset before any response; poll again within the same
+    # deadline. HTTP/authentication/assertion failures still fail immediately,
+    # and mutating requests are never retried.
+    deadline = time.monotonic() + 90
+    while True:
+        try:
+            endpoint = request("GET", "/api/subscription-endpoint")
+        except (OSError, http.client.HTTPException):
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.2)
+            continue
+        if endpoint["status"] == "ready" and endpoint["applied_port"] == port:
+            return endpoint
+        assert time.monotonic() < deadline, endpoint
+        time.sleep(1)
 
 
 deadline = time.monotonic() + 90
@@ -58,14 +80,7 @@ request("GET", "/api/auth/csrf")
 password = (Path(os.environ["VELORAY_SECRET_DIRECTORY"]) / "admin_password").read_text().strip()
 request("POST", "/api/auth/login", {"username": "admin", "password": password})
 assert request("GET", "/api/auth/me")["is_superuser"]
-deadline = time.monotonic() + 90
-while True:
-    endpoint = request("GET", "/api/subscription-endpoint")
-    if endpoint["status"] == "ready":
-        assert endpoint["applied_port"] == 8444
-        break
-    assert time.monotonic() < deadline, endpoint
-    time.sleep(1)
+endpoint = wait_subscription_endpoint(8444)
 node = next(row for row in request("GET", "/api/nodes") if row["is_local"])
 inbound = request("POST", "/api/inbounds", {"name": "docker-test", "node": node["id"], "core": "xray", "protocol": "vless", "transport": "raw", "security": "none", "flow": "", "listen": "127.0.0.1", "port": 18443, "enabled": True}, status=201)
 client = request("POST", "/api/clients", {"name": "docker-test", "inbound": inbound["id"], "traffic_limit_bytes": 1048576, "enabled": True}, status=201)
@@ -82,13 +97,7 @@ request("GET", "/api/settings", authenticated=False, status=404, port=8444)
 request("PUT", "/api/subscription-endpoint", {"port": 8612, "revision": endpoint["revision"]}, status=400)
 request("PUT", "/api/subscription-endpoint", {"port": 18443, "revision": endpoint["revision"]}, status=400)
 request("PUT", "/api/subscription-endpoint", {"port": 19444, "revision": endpoint["revision"]}, status=202)
-deadline = time.monotonic() + 90
-while True:
-    endpoint = request("GET", "/api/subscription-endpoint")
-    if endpoint["status"] == "ready" and endpoint["applied_port"] == 19444:
-        break
-    assert time.monotonic() < deadline, endpoint
-    time.sleep(1)
+endpoint = wait_subscription_endpoint(19444)
 client = request("GET", f"/api/clients/{client['id']}")
 assert urlsplit(client["subscription_url"]).port == 19444
 assert b"vless://" in request("GET", path + "?format=raw", authenticated=False, port=19444)
