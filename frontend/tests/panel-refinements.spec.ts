@@ -852,7 +852,7 @@ test("theme reveals a circular palette and respects reduced motion", async ({
     await page
       .locator('nav [aria-current="page"]')
       .evaluate((el) => getComputedStyle(el).boxShadow),
-  ).not.toBe("none");
+  ).toBe("none");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.evaluate(
     () => delete document.documentElement.dataset.themeReveal,
@@ -2968,7 +2968,7 @@ async function preview(page: Page, name: string) {
     animations: "disabled",
   });
 }
-test("compact operator navigation fits a normal screen and keeps one default template", async ({
+test("original sidebar keeps its grouping, footer and usable expanded/collapsed navigation", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -2982,9 +2982,32 @@ test("compact operator navigation fits a normal screen and keeps one default tem
       .getByRole("link", { name: "VeloRay GitHub" }),
   ).toBeVisible();
   const navigation = page.locator("aside nav").first();
-  expect(
-    await navigation.evaluate((el) => el.scrollHeight <= el.clientHeight),
-  ).toBe(true);
+  for (const group of ["Overview", "Management", "Infrastructure", "System"])
+    await expect(navigation.getByText(group, { exact: true })).toBeVisible();
+  await navigation
+    .getByRole("button", { name: "Settings", exact: true })
+    .scrollIntoViewIfNeeded();
+  await expect(
+    navigation.getByRole("button", { name: "Settings", exact: true }),
+  ).toBeInViewport();
+  await page
+    .getByRole("button", { name: "Collapse navigation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Expand navigation", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Expand navigation", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Expand navigation", exact: true })
+    .click();
+  await expect(
+    page
+      .locator("aside .sidebar-footer")
+      .getByRole("link", { name: "VeloRay GitHub" }),
+  ).toBeVisible();
   await expect(
     page.getByText(
       "Runtime policy, subscriptions, automation, security and host health.",
@@ -2992,6 +3015,10 @@ test("compact operator navigation fits a normal screen and keeps one default tem
   ).toHaveCount(0);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(page.locator(".settings-status")).toBeVisible();
+  await navigation.evaluate((el) => {
+    el.scrollTop = 0;
+  });
+  await page.mouse.move(1300, 90);
   await preview(page, "settings-dark");
   await page.getByRole("button", { name: "Theme: dark" }).click();
   await expect(page.locator("html")).toHaveClass(/light/);

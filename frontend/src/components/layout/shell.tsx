@@ -46,7 +46,7 @@ export function Shell({
       />
       <div
         className="shell-content min-h-screen"
-        style={{ "--nav-width": collapsed ? "68px" : "240px" } as CSSProperties}
+        style={{ "--nav-width": collapsed ? "68px" : "252px" } as CSSProperties}
       >
         <Header
           title={title}
