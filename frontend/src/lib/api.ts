@@ -192,7 +192,19 @@ export type InboundItem = {
   client_count: number;
   supports_clients: boolean;
 };
+export type ClientInboundOption = Pick<
+  InboundItem,
+  | "id"
+  | "name"
+  | "node_name"
+  | "protocol"
+  | "core"
+  | "enabled"
+  | "supports_clients"
+> & { supports_batch?: boolean; usage_metered?: boolean };
 export type ClientItem = {
+  frozen?: boolean;
+  freeze_until?: string;
   hwid_limit?: number;
   device_limit: number;
   device_count: number;

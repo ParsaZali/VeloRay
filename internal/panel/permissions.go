@@ -24,7 +24,7 @@ func permissions(u Data) []string {
 	}
 	switch str(u, "role") {
 	case "reseller":
-		out := []string{"resellers.read", "commerce.read", "commerce.write", "dashboard.read", "clients.read", "clients.write", "clients.delete", "inbounds.read", "traffic.read", "settings.read", "api.read", "outbounds.read", "routing_rules.read"}
+		out := []string{"resellers.read", "commerce.read", "commerce.write", "dashboard.read", "clients.read", "clients.write", "clients.delete", "traffic.read", "settings.read"}
 		if flag(u, "can_delegate") && num(u, "max_subresellers") > 0 {
 			out = append(out, "resellers.write")
 		}
@@ -276,7 +276,12 @@ func (s *Server) roleAuthorize(a Actor, method, path string) error {
 		resource = "api"
 	case "overview", "events":
 		resource = "dashboard"
-	case "traffic-history", "outbound-traffic":
+	case "traffic-history":
+		resource = "traffic"
+	case "outbound-traffic":
+		if !permitted(a.User, "nodes.read") {
+			return fail(403, "node access is required for outbound traffic")
+		}
 		resource = "traffic"
 	case "system-info":
 		resource = "nodes"
@@ -284,9 +289,6 @@ func (s *Server) roleAuthorize(a Actor, method, path string) error {
 		if !flag(a.User, "is_superuser") || a.Scope != "admin" {
 			return fail(403, "administrator access required")
 		}
-		return nil
-	}
-	if resource == "inbounds" && method == http.MethodGet && permitted(a.User, "clients.read") {
 		return nil
 	}
 	operation := "read"
@@ -317,24 +319,35 @@ func (s *Server) overviewForActor(ctx context.Context, a Actor) (Data, error) {
 	if e != nil {
 		return nil, e
 	}
-	out := Data{"nodes_total": 0, "nodes_online": 0, "clients_total": len(clients), "clients_active": 0, "clients_expiring_7d": 0, "traffic_used_bytes": int64(0), "traffic_upload_bytes": int64(0), "traffic_download_bytes": int64(0), "traffic_raw_bytes": int64(0), "traffic_limit_bytes": int64(0), "inbounds_total": len(array(a.User, "allowed_inbounds")), "protocols": []any{}}
+	out := Data{"nodes_total": 0, "nodes_online": 0, "clients_total": 0, "clients_active": 0, "clients_expiring_7d": 0, "traffic_used_bytes": int64(0), "traffic_upload_bytes": int64(0), "traffic_download_bytes": int64(0), "traffic_raw_bytes": int64(0), "traffic_limit_bytes": int64(0), "inbounds_total": len(array(a.User, "allowed_inbounds")), "protocols": []any{}}
 	seen := map[string]bool{}
 	for _, c := range clients {
+		key := accountKey(c)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out["clients_total"] = num(out, "clients_total") + 1
 		if active(c, time.Now()) {
 			out["clients_active"] = num(out, "clients_active") + 1
 			if expires, err := timestamp(c, "expires_at"); err == nil && time.Until(expires) < 7*24*time.Hour {
 				out["clients_expiring_7d"] = num(out, "clients_expiring_7d") + 1
 			}
 		}
-		key := accountKey(c)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
 		for output, field := range map[string]string{"traffic_used_bytes": "used_traffic_bytes", "traffic_raw_bytes": "raw_used_traffic_bytes", "traffic_upload_bytes": "raw_upload_traffic_bytes", "traffic_download_bytes": "raw_download_traffic_bytes", "traffic_limit_bytes": "traffic_limit_bytes"} {
 			out[output] = num(out, output) + num(c, field)
 		}
 	}
+	_, allocated, e := ownAllocation(ctx, s.Store.Pool, num(a.User, "id"))
+	if e != nil {
+		return nil, e
+	}
+	reservedClients, reservedTraffic, e := capacityReservations(ctx, s.Store.Pool, num(a.User, "id"), 0)
+	if e != nil {
+		return nil, e
+	}
+	out["max_clients"], out["traffic_budget_bytes"] = num(a.User, "max_clients"), num(a.User, "traffic_budget_bytes")
+	out["allocated_traffic_bytes"], out["reserved_clients"], out["reserved_traffic_bytes"] = allocated, reservedClients, reservedTraffic
 	return out, nil
 }
 func (s *Server) trafficHistoryForActor(ctx context.Context, r *http.Request, a Actor) ([]Data, error) {

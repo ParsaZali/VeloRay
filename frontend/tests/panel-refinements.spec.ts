@@ -100,7 +100,7 @@ async function panel(
         revision: "a".repeat(64),
         observatory_configured: false,
       };
-    else if (resource === "inbounds" || resource.startsWith("admin/"))
+    else if (resource === "inbounds" || resource === "clients/inbound-options" || resource === "services" || resource.startsWith("admin/"))
       json = [];
     else if (resource === "health")
       json = {
@@ -583,8 +583,9 @@ test("client IP and registered device dialogs on desktop and mobile", async ({
         default_locale: "en",
         default_expiry_days: 30,
       };
-    else if (path === "/api/inbounds")
+    else if (path === "/api/inbounds" || path === "/api/clients/inbound-options")
       json = [{ id: 1, name: "main", supports_clients: true }];
+    else if (path === "/api/services") json = [];
     else if (path === "/api/clients")
       json = [
         {
@@ -1200,6 +1201,7 @@ async function managementPanel(page: Page, path: string) {
   });
   const data: Record<string, any[]> = {
     customers: [],
+    clients: [],
     services: [],
     profiles: [],
     snippets: [],
@@ -1207,6 +1209,7 @@ async function managementPanel(page: Page, path: string) {
   };
   await panel(page, path, {
     inbounds: { json: [inbound(1, "North"), inbound(2, "South")] },
+    "clients/inbound-options": { json: [inbound(1, "North"), inbound(2, "South")] },
     ...Object.fromEntries(Object.keys(data).map((k) => [k, { json: [] }])),
   });
   await page.route("**/api/**", async (route) => {
@@ -1215,6 +1218,10 @@ async function managementPanel(page: Page, path: string) {
         .replace(/\/$/, ""),
       [kind, id, action] = resource.split("/"),
       rows = data[kind];
+    if (resource === "clients/inbound-options") {
+      await route.fulfill({ json: [inbound(1, "North"), inbound(2, "South")] });
+      return;
+    }
     if (!rows) {
       await route.fallback();
       return;
@@ -1270,7 +1277,7 @@ async function managementPanel(page: Page, path: string) {
   await expect(page.getByRole("status", { name: "Loading…" })).toHaveCount(0);
   return data;
 }
-test("services and customers keep shared policy and managed fields in CRUD forms", async ({
+test("services keep plan defaults and managed fields in CRUD forms", async ({
   page,
 }) => {
   const data = await managementPanel(page, "/services");
@@ -1287,38 +1294,7 @@ test("services and customers keep shared policy and managed fields in CRUD forms
   await expect(dialog).toHaveCount(0);
   expect(data.services[0].defaults.traffic_limit_bytes).toBe(10 * 1073741824);
   expect(data.services[0].defaults.renewal_period).toBe("month");
-  await page.getByRole("button", { name: "Customers", exact: true }).click();
-  await page.getByRole("button", { name: "Add customer", exact: true }).click();
-  dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Name", { exact: true }).fill("Shared buyer");
-  await dialog.getByLabel("Standard", { exact: true }).check();
-  await dialog.getByRole("combobox", { name: "Apply plan defaults" }).click();
-  await page.getByRole("option", { name: "Standard", exact: true }).click();
-  await expect(dialog.getByLabel("Traffic quota (GiB)")).toHaveValue("10");
-  await dialog.getByLabel("Edge 2 · South · vless").check();
-  await dialog.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(dialog).toHaveCount(0);
-  expect(data.customers[0].service_ids).toEqual([1]);
-  expect(data.customers[0].inbound_ids).toEqual([2]);
-  expect(data.customers[0].hwid_limit).toBe(2);
-  await page
-    .getByRole("button", { name: "Edit Shared buyer", exact: true })
-    .click();
-  await page
-    .getByRole("dialog")
-    .getByLabel("Note", { exact: true })
-    .fill("Keeps usage and token");
-  const request = page.waitForRequest(
-    (r) => r.method() === "PATCH" && r.url().includes("/customers/1"),
-  );
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Save", exact: true })
-    .click();
-  const body = (await request).postDataJSON();
-  expect(body.used_traffic_bytes).toBeUndefined();
-  expect(body.subscription_token).toBeUndefined();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+
 });
 test("profile editor supports reusable snippets, node assignment and history", async ({
   page,
@@ -1361,9 +1337,9 @@ test("management forms remain usable at 390px with a light theme", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await managementPanel(page, "/customers");
+  await managementPanel(page, "/services");
   await page.evaluate(() => document.documentElement.classList.remove("dark"));
-  await page.getByRole("button", { name: "Add customer", exact: true }).click();
+  await page.getByRole("button", { name: "Add service", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   expect(
     await page.evaluate(
@@ -1374,89 +1350,11 @@ test("management forms remain usable at 390px with a light theme", async ({
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
-test("customer service filtering and bulk edits preserve selection and require explicit fields", async ({
-  page,
-}) => {
-  const data = await managementPanel(page, "/customers");
-  data.services.push(
-    { id: 1, name: "North plan", inbound_ids: [1], defaults: {} },
-    { id: 2, name: "South plan", inbound_ids: [2], defaults: {} },
-  );
-  data.customers.push(
-    ...[
-      { id: 1, name: "Alice", service_ids: [1] },
-      { id: 2, name: "Bob", service_ids: [2] },
-      { id: 3, name: "Cora", service_ids: [1] },
-    ].map((c) => ({
-      ...c,
-      note: "",
-      inbound_ids: [1],
-      enabled: true,
-      used_traffic_bytes: 123,
-      traffic_limit_bytes: 1073741824,
-      connections: [{}],
-    })),
-  );
-  await page.reload();
-  await expect(
-    page.getByRole("heading", { name: "Alice", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("combobox", { name: "Filter by service" }).click();
-  await page.getByRole("option", { name: "North plan", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Bob", exact: true }),
-  ).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "Select visible", exact: true })
-    .click();
-  await page.getByRole("combobox", { name: "Filter by service" }).click();
-  await page.getByRole("option", { name: "All services", exact: true }).click();
-  await expect(
-    page.getByRole("checkbox", { name: "Select Bob", exact: true }),
-  ).not.toBeChecked();
-  await page
-    .getByRole("button", { name: "Bulk actions (2)", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("combobox", { name: "Action", exact: true }).click();
-  await page
-    .getByRole("option", { name: "Edit quota and access", exact: true })
-    .click();
-  const apply = dialog.getByRole("button", {
-    name: "Apply to selected",
-    exact: true,
-  });
-  await expect(apply).toBeDisabled();
-  await dialog.getByLabel("Replace traffic quota", { exact: true }).check();
-  await dialog.getByLabel("Traffic quota (GiB)").fill("5");
-  let calls = 0;
-  await page.route("**/api/customers/bulk", async (route) => {
-    calls++;
-    const body = route.request().postDataJSON();
-    expect(body.ids).toEqual([1, 3]);
-    expect(body.patch).toEqual({ traffic_limit_bytes: 5 * 1073741824 });
-    if (calls === 1) {
-      await route.fulfill({
-        status: 409,
-        json: { detail: "Node unavailable; changes rolled back" },
-      });
-      return;
-    }
-    for (const row of data.customers)
-      if (body.ids.includes(row.id)) Object.assign(row, body.patch);
-    await route.fulfill({ json: { count: 2, status: "applied" } });
-  });
-  await apply.click();
-  await expect(dialog.getByRole("alert")).toContainText("changes rolled back");
-  await expect(dialog).toBeVisible();
-  await apply.click();
-  await expect(dialog).toHaveCount(0);
-  expect(data.customers[0].used_traffic_bytes).toBe(123);
-  expect(data.customers[1].traffic_limit_bytes).toBe(1073741824);
-  expect(data.customers[2].traffic_limit_bytes).toBe(5 * 1073741824);
-  await expect(
-    page.getByRole("button", { name: "Bulk actions (0)", exact: true }),
-  ).toBeDisabled();
+test("removed customer URL redirects to the unified users screen", async ({ page }) => {
+  await managementPanel(page, "/customers");
+  await expect(page).toHaveURL(/\/clients$/);
+  await expect(page.getByRole("button", { name: "Customers", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add client", exact: true })).toBeVisible();
 });
 
 test("outbound traffic stays scoped to the selected core and handles unavailable telemetry", async ({
@@ -2104,7 +2002,8 @@ test("SMTP settings preserve write-only password and email endpoint recipient in
 test("Persian picker maps leap Esfand and Nowruz to Gregorian API values with keyboard navigation", async ({
   page,
 }) => {
-  await managementPanel(page, "/customers");
+  const data = await managementPanel(page, "/clients");
+  data.clients.push({ id: 1, account_id: 0, inbound: 1, name: "Calendar user", inbound_name: "Edge 1", node_name: "North", protocol: "vless", credential: "test-key", enabled: true, online: false, usage_metered: true, traffic_limit_bytes: 0, used_traffic_bytes: 0, raw_used_traffic_bytes: 0, traffic_multiplier: 1, expires_at: "2027-01-01T00:00:00Z", duration_days: 30, note: "" });
   await page.addInitScript(() =>
     localStorage.setItem("veloray-calendar", "persian"),
   );
@@ -2120,10 +2019,11 @@ test("Persian picker maps leap Esfand and Nowruz to Gregorian API values with ke
   expect(dates.leap.dates.at(-1)).toBe("2025-03-20");
   expect(dates.leap.next).toBe("2025-03-21");
   expect(dates.newYear.first).toBe("2025-03-21");
-  await page.getByRole("button", { name: "Add customer", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Customer", exact: true });
+  await page.getByRole("button", { name: "Actions for Calendar user", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit client", exact: true });
   await dialog
-    .getByRole("button", { name: "Expiry (UTC)", exact: true })
+    .getByRole("button", { name: "Expires at", exact: true })
     .click();
   const calendar = page.getByRole("dialog", {
     name: "Choose date",
@@ -2139,7 +2039,7 @@ test("Persian picker maps leap Esfand and Nowruz to Gregorian API values with ke
   expect(after).not.toBe(before);
   await page.keyboard.press("Enter");
   await expect(
-    dialog.getByRole("button", { name: "Expiry (UTC)", exact: true }),
+    dialog.getByRole("button", { name: "Expires at", exact: true }),
   ).not.toHaveText("Select date");
   await page.keyboard.press("Escape");
   await expect(calendar).toHaveCount(0);

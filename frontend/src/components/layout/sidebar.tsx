@@ -1,27 +1,11 @@
-import { can, useSession } from "@/lib/session";
+import { isReseller, useSession } from "@/lib/session";
+import { canVisit, type RouteKey } from "@/lib/navigation";
+export type { RouteKey } from "@/lib/navigation";
 import { useLocale, t } from "@/lib/i18n";
 import { ChevronLeft, ExternalLink, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { VeloRayWordmark } from "@/components/brand/veloray-mark";
 import { FaIcon } from "@/components/ui/fa-icon";
-export type RouteKey =
-  | "operations"
-  | "dashboard"
-  | "customers"
-  | "services"
-  | "subscription-policies"
-  | "profiles"
-  | "clients"
-  | "outbounds"
-  | "routing"
-  | "inbounds"
-  | "nodes"
-  | "xray"
-  | "security"
-  | "settings"
-  | "api"
-  | "accounts"
-  | "imports";
 const groups = [
   {
     label: "Overview",
@@ -30,7 +14,6 @@ const groups = [
   {
     label: "Management",
     items: [
-      { key: "customers", label: "Customers", icon: "users" },
       { key: "services", label: "Services and plans", icon: "layer-group" },
       { key: "clients", label: "Clients", icon: "users" },
       { key: "inbounds", label: "Inbounds", icon: "diagram-project" },
@@ -73,7 +56,6 @@ export function Sidebar({
   setCollapsed,
   mobileOpen,
   setMobileOpen,
-  isSuperuser = false,
 }: {
   route: RouteKey;
   setRoute: (r: RouteKey) => void;
@@ -81,22 +63,19 @@ export function Sidebar({
   setCollapsed: (v: boolean) => void;
   mobileOpen: boolean;
   setMobileOpen: (v: boolean) => void;
-  isSuperuser?: boolean;
 }) {
   useLocale();
   const session = useSession();
-  const access: Record<string, string> = {
-    dashboard: "dashboard.read",
-    clients: "clients.read",
-    customers: "clients.read",
-    services: "clients.read",
-    inbounds: "inbounds.read",
-    nodes: "nodes.read",
-    outbounds: "outbounds.read",
-    routing: "routing_rules.read",
-    xray: "xray.read",
-    api: "api.read",
-  };
+  const visibleGroups = groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => canVisit(session, item.key)),
+    }))
+    .filter((group) => group.items.length > 0);
+  const itemLabel = (key: RouteKey, label: string) =>
+    key === "services" && isReseller(session)
+      ? t("Sales & wallet", "فروش و کیف پول")
+      : t(label);
   const body = (compact: boolean) => (
     <>
       <div className="flex h-16 items-center justify-between px-4">
@@ -111,7 +90,7 @@ export function Sidebar({
       </div>
       <div className="mx-3 h-px bg-[var(--border-subtle)]" />
       <nav className="scrollbar-none flex-1 overflow-y-auto px-3 py-4">
-        {groups.map((g) => (
+        {visibleGroups.map((g) => (
           <div key={g.label} className="mb-5">
             {!compact && (
               <div className="mb-1.5 px-2 text-[10px] font-medium text-[var(--muted)]">
@@ -119,54 +98,45 @@ export function Sidebar({
               </div>
             )}
             <div className="space-y-1">
-              {g.items
-                .filter(
-                  (item) =>
-                    (![
-                      "accounts",
-                      "imports",
-                      "profiles",
-                      "subscription-policies",
-                      "operations",
-                    ].includes(item.key) ||
-                      isSuperuser) &&
-                    (!access[item.key] || can(session, access[item.key])),
-                )
-                .map((item) => {
-                  const active = route === item.key;
-                  return (
-                    <button
-                      key={item.key}
-                      aria-label={t(item.label)}
-                      aria-current={active ? "page" : undefined}
-                      title={compact ? t(item.label) : undefined}
-                      onClick={() => {
-                        setRoute(item.key);
-                        setMobileOpen(false);
-                      }}
+              {g.items.map((item) => {
+                const active = route === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    aria-label={itemLabel(item.key, item.label)}
+                    aria-current={active ? "page" : undefined}
+                    title={
+                      compact ? itemLabel(item.key, item.label) : undefined
+                    }
+                    onClick={() => {
+                      setRoute(item.key);
+                      setMobileOpen(false);
+                    }}
+                    className={cn(
+                      "group flex h-9 w-full min-w-0 items-center rounded-md text-[13px] font-medium transition",
+                      compact ? "justify-center px-0" : "gap-2.5 px-2.5",
+                      active
+                        ? "sidebar-current bg-[var(--surface-2)] text-[var(--fg)]"
+                        : "text-[var(--muted-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--fg)]",
+                    )}
+                  >
+                    <FaIcon
+                      icon={item.icon}
                       className={cn(
-                        "group flex h-9 w-full min-w-0 items-center rounded-md text-[13px] font-medium transition",
-                        compact ? "justify-center px-0" : "gap-2.5 px-2.5",
+                        "text-[12px] transition-colors",
                         active
-                          ? "sidebar-current bg-[var(--surface-2)] text-[var(--fg)]"
-                          : "text-[var(--muted-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--fg)]",
+                          ? "text-[var(--fg)]"
+                          : "text-[var(--muted-strong)] group-hover:text-[var(--fg)]",
                       )}
-                    >
-                      <FaIcon
-                        icon={item.icon}
-                        className={cn(
-                          "text-[12px] transition-colors",
-                          active
-                            ? "text-[var(--fg)]"
-                            : "text-[var(--muted-strong)] group-hover:text-[var(--fg)]",
-                        )}
-                      />
-                      {!compact && (
-                        <span className="truncate">{t(item.label)}</span>
-                      )}
-                    </button>
-                  );
-                })}
+                    />
+                    {!compact && (
+                      <span className="truncate">
+                        {itemLabel(item.key, item.label)}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         ))}

@@ -196,7 +196,7 @@ export function AdminPage() {
     }
   }
   async function remove(u: AdminUser) {
-    if (!confirm(tx("Delete administrator {0}?", u.username))) return;
+    if (!confirm(tx("Delete account {0}?", u.username))) return;
     try {
       await api(`/admin/users/${u.id}/`, { method: "DELETE" });
       await load();
@@ -570,7 +570,7 @@ export function AdminPage() {
       {editor && (
         <Dialog
           padded={false}
-          label={t("Administrator")}
+          label={t("Account", "حساب کاربری")}
           onClose={() => {
             if (!busy) setEditor(null);
           }}
@@ -687,6 +687,11 @@ export function AdminPage() {
                     setEditor({
                       ...editor,
                       role: e.target.value as Editor["role"],
+                      own_clients_only:
+                        e.target.value === "reseller" ||
+                        editor.own_clients_only,
+                      permissions:
+                        e.target.value === "custom" ? editor.permissions : [],
                     })
                   }
                 >
@@ -698,15 +703,22 @@ export function AdminPage() {
               </Field>
               {editor.role !== "administrator" && (
                 <>
-                  <Toggle
-                    label={t("Own clients only")}
-                    checked={
-                      editor.role === "reseller" || editor.own_clients_only
-                    }
-                    onChange={(v) =>
-                      setEditor({ ...editor, own_clients_only: v })
-                    }
-                  />
+                  {editor.role === "reseller" ? (
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-3 text-[12px] leading-6 sm:col-span-2">
+                      {t(
+                        "Resellers manage their own users, sales and wallet. Infrastructure and panel settings are restricted to administrators.",
+                        "ریسلر کاربران، فروش و کیف پول خودش را مدیریت می‌کند. اینباندها، هسته‌ها و تنظیمات زیرساخت در اختیار مدیر هستند.",
+                      )}
+                    </div>
+                  ) : (
+                    <Toggle
+                      label={t("Own clients only")}
+                      checked={editor.own_clients_only}
+                      onChange={(v) =>
+                        setEditor({ ...editor, own_clients_only: v })
+                      }
+                    />
+                  )}
                   <Field label={t("Client limit")}>
                     <Input
                       className="input"

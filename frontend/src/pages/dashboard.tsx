@@ -1,7 +1,7 @@
 import { ChartRange } from "@/components/chart-range";
 import { t } from "@/lib/i18n";
 import { useLocale, tx } from "@/lib/i18n";
-import { can, useSession } from "@/lib/session";
+import { can, isReseller, useSession } from "@/lib/session";
 import * as echarts from "echarts/core";
 import { LineChart } from "echarts/charts";
 import {
@@ -45,6 +45,11 @@ import { PageHeader } from "@/components/common/page-header";
 import { FaIcon } from "@/components/ui/fa-icon";
 
 type Overview = {
+  max_clients?: number;
+  allocated_traffic_bytes?: number;
+  traffic_budget_bytes?: number;
+  reserved_clients?: number;
+  reserved_traffic_bytes?: number;
   nodes_total: number;
   nodes_online: number;
   clients_total: number;
@@ -398,6 +403,7 @@ function TrafficChart({
 export function Dashboard() {
   useLocale();
   const session = useSession();
+  const reseller = isReseller(session);
   const [o, setO] = useState<Overview | null>(null),
     [nodes, setNodes] = useState<NodeItem[]>([]),
     [clients, setClients] = useState<ClientItem[]>([]),
@@ -564,7 +570,25 @@ export function Dashboard() {
           </a>
         </div>
       )}
-      {o && (o.inbounds_total === 0 || o.clients_total === 0) && (
+      {reseller && o?.clients_total === 0 && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+            <p className="text-[13px] text-[var(--muted-strong)]">
+              {t(
+                "Create your first user from your assigned connections.",
+                "اولین کاربر را با اتصال‌های واگذارشده به حسابت بساز.",
+              )}
+            </p>
+            <a
+              href="/clients"
+              className="text-[13px] font-medium text-[var(--brand)]"
+            >
+              {t("Add client")}
+            </a>
+          </CardContent>
+        </Card>
+      )}
+      {!reseller && o && (o.inbounds_total === 0 || o.clients_total === 0) && (
         <Card>
           <CardHeader>
             <CardTitle>{t("Set up your first connection")}</CardTitle>
@@ -607,75 +631,145 @@ export function Dashboard() {
           </CardContent>
         </Card>
       )}
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Metric
-          label={t("CPU")}
-          value={`${(sys?.cpu_percent ?? 0).toFixed(1)}%`}
-          note={`${sys?.cpu_count ?? 0} ${(sys?.cpu_count ?? 0) === 1 ? "Core" : "Cores"}`}
-          icon="microchip"
-          tone={(sys?.cpu_percent ?? 0) > 85 ? "amber" : "blue"}
-        />
-        <Metric
-          label={t("Memory")}
-          value={`${(sys?.memory_percent ?? 0).toFixed(1)}%`}
-          note={`${fmt(sys?.memory_used_bytes ?? 0)} / ${fmt(sys?.memory_total_bytes ?? 0)}`}
-          icon="memory"
-          tone={(sys?.memory_percent ?? 0) > 85 ? "amber" : "green"}
-        />
-        <Metric
-          label={t("Swap")}
-          value={`${(sys?.swap_percent ?? 0).toFixed(1)}%`}
-          note={
-            sys?.swap_total_bytes
-              ? `${fmt(sys.swap_used_bytes)} / ${fmt(sys.swap_total_bytes)}`
-              : t("Not configured")
-          }
-          icon="arrows-rotate"
-        />
-        <Metric
-          label={t("Disk")}
-          value={`${(sys?.disk_percent ?? 0).toFixed(1)}%`}
-          note={`${fmt(sys?.disk_used_bytes ?? 0)} / ${fmt(sys?.disk_total_bytes ?? 0)}`}
-          icon="hard-drive"
-          tone={(sys?.disk_percent ?? 0) > 85 ? "amber" : "blue"}
-        />
-      </section>
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-5">
-        <Metric
-          label={t("Active clients")}
-          value={String(o?.clients_active ?? 0)}
-          note={tx("{0} total · {1} disabled", o?.clients_total ?? 0, disabled)}
-          icon="users"
-          tone="green"
-        />
-        <Metric
-          label={t("Healthy nodes")}
-          value={`${o?.nodes_online ?? 0}/${o?.nodes_total ?? 0}`}
-          note={""}
-          icon="server"
-          tone="blue"
-        />
-        <Metric
-          label={t("Recorded traffic")}
-          value={fmt(o?.traffic_raw_bytes ?? 0)}
-          note={""}
-          icon="chart-area"
-        />
-        <Metric
-          label={t("Inbounds")}
-          value={String(o?.inbounds_total ?? 0)}
-          note={""}
-          icon="diagram-project"
-          tone="amber"
-        />
-        <Metric
-          label={t("Expiring soon")}
-          value={String(o?.clients_expiring_7d ?? 0)}
-          note={t("Within the next 7 days")}
-          icon="hourglass-half"
-          tone="amber"
-        />
-      </section>
+      {reseller ? (
+        <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <Metric
+            label={t("Total clients")}
+            value={String(o?.clients_total ?? 0)}
+            note={
+              o?.max_clients
+                ? tx(
+                    "{0} of {1} available user slots",
+                    Math.max(
+                      0,
+                      o.max_clients -
+                        (o.clients_total || 0) -
+                        (o.reserved_clients || 0),
+                    ),
+                    o.max_clients,
+                  )
+                : t("No account count limit", "بدون سقف تعداد کاربر")
+            }
+            icon="users"
+            tone="green"
+          />
+          <Metric
+            label={t("Active clients")}
+            value={String(o?.clients_active ?? 0)}
+            note={tx("{0} disabled", disabled)}
+            icon="user-check"
+            tone="green"
+          />
+          <Metric
+            label={t("Allocated traffic", "حجم تخصیص‌یافته")}
+            value={
+              (o?.allocated_traffic_bytes ?? 0) < 0
+                ? t("Unlimited")
+                : fmt(o?.allocated_traffic_bytes ?? 0)
+            }
+            note={
+              o?.traffic_budget_bytes
+                ? tx(
+                    "{0} remaining of {1}",
+                    fmt(
+                      Math.max(
+                        0,
+                        o.traffic_budget_bytes -
+                          (o.allocated_traffic_bytes || 0) -
+                          (o.reserved_traffic_bytes || 0),
+                      ),
+                    ),
+                    fmt(o.traffic_budget_bytes),
+                  )
+                : t("No traffic allocation limit", "بدون سقف تخصیص حجم")
+            }
+            icon="chart-area"
+          />
+          <Metric
+            label={t("Expiring soon")}
+            value={String(o?.clients_expiring_7d ?? 0)}
+            note={t("Within the next 7 days")}
+            icon="hourglass-half"
+            tone="amber"
+          />
+        </section>
+      ) : (
+        <>
+          <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <Metric
+              label={t("CPU")}
+              value={`${(sys?.cpu_percent ?? 0).toFixed(1)}%`}
+              note={`${sys?.cpu_count ?? 0} ${(sys?.cpu_count ?? 0) === 1 ? "Core" : "Cores"}`}
+              icon="microchip"
+              tone={(sys?.cpu_percent ?? 0) > 85 ? "amber" : "blue"}
+            />
+            <Metric
+              label={t("Memory")}
+              value={`${(sys?.memory_percent ?? 0).toFixed(1)}%`}
+              note={`${fmt(sys?.memory_used_bytes ?? 0)} / ${fmt(sys?.memory_total_bytes ?? 0)}`}
+              icon="memory"
+              tone={(sys?.memory_percent ?? 0) > 85 ? "amber" : "green"}
+            />
+            <Metric
+              label={t("Swap")}
+              value={`${(sys?.swap_percent ?? 0).toFixed(1)}%`}
+              note={
+                sys?.swap_total_bytes
+                  ? `${fmt(sys.swap_used_bytes)} / ${fmt(sys.swap_total_bytes)}`
+                  : t("Not configured")
+              }
+              icon="arrows-rotate"
+            />
+            <Metric
+              label={t("Disk")}
+              value={`${(sys?.disk_percent ?? 0).toFixed(1)}%`}
+              note={`${fmt(sys?.disk_used_bytes ?? 0)} / ${fmt(sys?.disk_total_bytes ?? 0)}`}
+              icon="hard-drive"
+              tone={(sys?.disk_percent ?? 0) > 85 ? "amber" : "blue"}
+            />
+          </section>
+          <section className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+            <Metric
+              label={t("Active clients")}
+              value={String(o?.clients_active ?? 0)}
+              note={tx(
+                "{0} total · {1} disabled",
+                o?.clients_total ?? 0,
+                disabled,
+              )}
+              icon="users"
+              tone="green"
+            />
+            <Metric
+              label={t("Healthy nodes")}
+              value={`${o?.nodes_online ?? 0}/${o?.nodes_total ?? 0}`}
+              note={""}
+              icon="server"
+              tone="blue"
+            />
+            <Metric
+              label={t("Recorded traffic")}
+              value={fmt(o?.traffic_raw_bytes ?? 0)}
+              note={""}
+              icon="chart-area"
+            />
+            <Metric
+              label={t("Inbounds")}
+              value={String(o?.inbounds_total ?? 0)}
+              note={""}
+              icon="diagram-project"
+              tone="amber"
+            />
+            <Metric
+              label={t("Expiring soon")}
+              value={String(o?.clients_expiring_7d ?? 0)}
+              note={t("Within the next 7 days")}
+              icon="hourglass-half"
+              tone="amber"
+            />
+          </section>
+        </>
+      )}
       <section className="grid gap-4 xl:grid-cols-[1.55fr_.65fr]">
         <Card>
           <CardHeader>
@@ -763,96 +857,104 @@ export function Dashboard() {
           </CardContent>
         </Card>
       </section>
-      <section className="grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-1">
-          <CardHeader>
-            <div>
-              <CardTitle>{t("Protocol mix")}</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {o?.protocols?.length ? (
-              o.protocols.map((p) => (
-                <div key={p.protocol}>
-                  <div className="flex justify-between text-[10px]">
-                    <span>{names[p.protocol] || p.protocol}</span>
-                    <span className="text-[var(--muted)]">{p.count}</span>
-                  </div>
-                  <div className="mt-1.5 h-1.5 rounded-full bg-[var(--surface-3)]">
-                    <div
-                      className="h-full rounded-full bg-[var(--brand)]"
-                      style={{
-                        width: `${Math.max(5, (p.count / maxProto) * 100)}%`,
-                      }}
-                    />
-                  </div>
+      <section className={`grid gap-4 ${reseller ? "" : "xl:grid-cols-3"}`}>
+        {!reseller && (
+          <>
+            <Card className="xl:col-span-1">
+              <CardHeader>
+                <div>
+                  <CardTitle>{t("Protocol mix")}</CardTitle>
                 </div>
-              ))
-            ) : (
-              <div className="py-8 text-center text-[11px] text-[var(--muted)]">
-                {t("No inbounds yet.")}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>{t("Nodes")}</CardTitle>
-            </div>
-            <Badge
-              tone={nodes.some((n) => n.status === "ok") ? "green" : "amber"}
-            >
-              {nodes.filter((n) => n.status === "ok").length} {t("online")}
-            </Badge>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="divide-y divide-[var(--border-subtle)]">
-              {nodes.length ? (
-                nodes.slice(0, 6).map((n) => (
-                  <div
-                    key={n.id}
-                    className="flex min-w-0 items-center gap-3 px-5 py-3.5"
-                  >
-                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-[var(--border)] bg-[var(--surface-2)]">
-                      <Server className="h-4 w-4 text-[var(--muted-strong)]" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="truncate text-[12px] font-semibold">
-                          {n.name}
-                        </span>
-                        {n.is_local && <Badge tone="blue">{t("Local")}</Badge>}
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {o?.protocols?.length ? (
+                  o.protocols.map((p) => (
+                    <div key={p.protocol}>
+                      <div className="flex justify-between text-[10px]">
+                        <span>{names[p.protocol] || p.protocol}</span>
+                        <span className="text-[var(--muted)]">{p.count}</span>
                       </div>
-                      <div className="mt-0.5 truncate text-[9px] text-[var(--muted)]">
-                        {n.public_host} ·{" "}
-                        {n.xray_version || t("Version pending")}
+                      <div className="mt-1.5 h-1.5 rounded-full bg-[var(--surface-3)]">
+                        <div
+                          className="h-full rounded-full bg-[var(--brand)]"
+                          style={{
+                            width: `${Math.max(5, (p.count / maxProto) * 100)}%`,
+                          }}
+                        />
                       </div>
                     </div>
-                    <Badge
-                      tone={
-                        n.status === "ok"
-                          ? "green"
-                          : n.status === "offline"
-                            ? "red"
-                            : "amber"
-                      }
-                    >
-                      {n.status}
-                    </Badge>
+                  ))
+                ) : (
+                  <div className="py-8 text-center text-[11px] text-[var(--muted)]">
+                    {t("No inbounds yet.")}
                   </div>
-                ))
-              ) : (
-                <div className="grid place-items-center px-5 py-12 text-center">
-                  <WifiOff className="mb-3 h-5 w-5 text-[var(--muted)]" />
-                  <div className="text-[12px] font-medium">
-                    {t("No nodes registered")}
-                  </div>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle>{t("Nodes")}</CardTitle>
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                <Badge
+                  tone={
+                    nodes.some((n) => n.status === "ok") ? "green" : "amber"
+                  }
+                >
+                  {nodes.filter((n) => n.status === "ok").length} {t("online")}
+                </Badge>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y divide-[var(--border-subtle)]">
+                  {nodes.length ? (
+                    nodes.slice(0, 6).map((n) => (
+                      <div
+                        key={n.id}
+                        className="flex min-w-0 items-center gap-3 px-5 py-3.5"
+                      >
+                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-[var(--border)] bg-[var(--surface-2)]">
+                          <Server className="h-4 w-4 text-[var(--muted-strong)]" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="truncate text-[12px] font-semibold">
+                              {n.name}
+                            </span>
+                            {n.is_local && (
+                              <Badge tone="blue">{t("Local")}</Badge>
+                            )}
+                          </div>
+                          <div className="mt-0.5 truncate text-[9px] text-[var(--muted)]">
+                            {n.public_host} ·{" "}
+                            {n.xray_version || t("Version pending")}
+                          </div>
+                        </div>
+                        <Badge
+                          tone={
+                            n.status === "ok"
+                              ? "green"
+                              : n.status === "offline"
+                                ? "red"
+                                : "amber"
+                          }
+                        >
+                          {n.status}
+                        </Badge>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="grid place-items-center px-5 py-12 text-center">
+                      <WifiOff className="mb-3 h-5 w-5 text-[var(--muted)]" />
+                      <div className="text-[12px] font-medium">
+                        {t("No nodes registered")}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
         <Card>
           <CardHeader>
             <div>

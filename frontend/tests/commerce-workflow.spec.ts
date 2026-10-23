@@ -42,7 +42,7 @@ async function workspace(page: Page) {
       json = [
         { id: 7, name: "Primary", note: "", inbound_ids: [1], defaults: {} },
       ];
-    else if (path === "inbounds")
+    else if (path === "inbounds" || path === "clients/inbound-options")
       json = [
         {
           id: 1,

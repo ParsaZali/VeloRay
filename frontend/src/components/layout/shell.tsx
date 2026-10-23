@@ -42,7 +42,6 @@ export function Shell({
         setCollapsed={change}
         mobileOpen={mobileOpen}
         setMobileOpen={setMobileOpen}
-        isSuperuser={!!user.is_superuser}
       />
       <div
         className="shell-content min-h-screen"

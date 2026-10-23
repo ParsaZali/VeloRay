@@ -1,6 +1,7 @@
 import { formatDate } from "@/lib/dates";
 import { FloatingMenu } from "@/components/common/floating-menu";
 import { ClientConnections } from "@/components/client-connections";
+import { CustomerFreeze } from "@/components/customer-freeze";
 import { Textarea } from "@/components/ui/controls";
 import { Select, Input } from "@/components/ui/controls";
 import { t } from "@/lib/i18n";
@@ -32,7 +33,7 @@ import {
   effectiveMultiplier,
   type AppSettings,
   type ClientItem,
-  type InboundItem,
+  type ClientInboundOption,
 } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,20 +68,26 @@ const expiry = (value: string | null) => {
   return tx("{0} days", days);
 };
 const clientState = (client: ClientItem) =>
-  client.enabled
-    ? client.online === true
-      ? t("Online")
-      : client.online === false
-        ? t("Offline")
-        : t("Unknown")
-    : client.disabled_reason === "quota"
-      ? t("Quota reached")
-      : client.disabled_reason === "expired"
-        ? t("Expired")
-        : t("Disabled");
+  client.frozen
+    ? t("Frozen", "فریز شده")
+    : client.enabled
+      ? client.online === true
+        ? t("Online")
+        : client.online === false
+          ? t("Offline")
+          : t("Unknown")
+      : client.disabled_reason === "quota"
+        ? t("Quota reached")
+        : client.disabled_reason === "expired"
+          ? t("Expired")
+          : t("Disabled");
 
 type Editor = {
   id?: number;
+  account_id?: number;
+  inbound_ids?: number[];
+  service_ids?: number[];
+  plan_id?: number;
   count?: string;
   name: string;
   inbound: string;
@@ -95,6 +102,33 @@ type Editor = {
   hwidLimit: string;
   startAfter: boolean;
 };
+type ServiceChoice = { id: number; name: string; inbound_ids: number[] };
+type ClientRow = ClientItem & { inbound_ids: number[] };
+function clientRows(items: ClientItem[]): ClientRow[] {
+  const groups = new Map<string, ClientRow>();
+  for (const item of items) {
+    const key = item.account_id
+      ? `account:${item.account_id}`
+      : `client:${item.id}`;
+    const current = groups.get(key);
+    if (!current) {
+      groups.set(key, { ...item, inbound_ids: [item.inbound] });
+      continue;
+    }
+    current.inbound_ids.push(item.inbound);
+    for (const field of ["node_name", "inbound_name", "protocol"] as const)
+      if (!current[field].split(" · ").includes(item[field]))
+        current[field] += ` · ${item[field]}`;
+    current.online =
+      current.online === true || item.online === true
+        ? true
+        : current.online === null || item.online === null
+          ? null
+          : false;
+    current.usage_metered = current.usage_metered && item.usage_metered;
+  }
+  return [...groups.values()];
+}
 const blank = (
   inbound = "",
   days = "30",
@@ -117,7 +151,8 @@ const blank = (
 export function ClientsPage() {
   useLocale();
   const session = useSession();
-  const [inbounds, setInbounds] = useState<InboundItem[]>([]),
+  const [inbounds, setInbounds] = useState<ClientInboundOption[]>([]),
+    [services, setServices] = useState<ServiceChoice[]>([]),
     [items, setItems] = useState<ClientItem[]>([]),
     [cfg, setCfg] = useState<AppSettings | null>(null),
     [query, setQuery] = useState(""),
@@ -130,6 +165,9 @@ export function ClientsPage() {
     [busy, setBusy] = useState(false),
     [menu, setMenu] = useState<number | null>(null);
   const [checkingClient, setCheckingClient] = useState<ClientItem | null>(null);
+  const [loadingEditor, setLoadingEditor] = useState(false);
+  const editorRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => editorRequest.current?.abort(), []);
   const [connections, setConnections] = useState<{
     client: ClientItem;
     kind: "ips" | "devices";
@@ -146,10 +184,11 @@ export function ClientsPage() {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [liveError, setLiveError] = useState(false);
   const load = async () => {
-    const [i, c, s] = await Promise.all([
-      api<InboundItem[]>("/inbounds/"),
+    const [i, c, s, plans] = await Promise.all([
+      api<ClientInboundOption[]>("/clients/inbound-options"),
       api<ClientItem[]>("/clients/"),
       api<AppSettings>("/settings"),
+      api<ServiceChoice[]>("/services"),
     ]);
     const clientInbounds = i.filter((x) => x.supports_clients !== false);
     setInbounds(clientInbounds);
@@ -157,6 +196,7 @@ export function ClientsPage() {
     setUpdatedAt(new Date());
     setLiveError(false);
     setCfg(s);
+    setServices(plans);
     return { i: clientInbounds, c };
   };
   useEffect(() => {
@@ -197,9 +237,10 @@ export function ClientsPage() {
       document.removeEventListener("visibilitychange", poll);
     };
   }, []);
+  const accounts = useMemo(() => clientRows(items), [items]);
   const filtered = useMemo(
     () =>
-      items.filter((c) => {
+      accounts.filter((c) => {
         const q = query.trim().toLowerCase();
         const text =
           `${c.name} ${c.inbound_name} ${c.node_name} ${c.credential}`.toLowerCase();
@@ -220,18 +261,19 @@ export function ClientsPage() {
             c.traffic_limit_bytes > 0 &&
             c.used_traffic_bytes / c.traffic_limit_bytes >= 0.8);
         const oki =
-          inboundFilter === "all" || String(c.inbound) === inboundFilter;
+          inboundFilter === "all" ||
+          c.inbound_ids.includes(Number(inboundFilter));
         return okq && oks && oki;
       }),
-    [items, query, status, inboundFilter],
+    [accounts, query, status, inboundFilter],
   );
   const total = useMemo(
       () =>
         distinctAccounts(items).reduce((a, c) => a + c.used_traffic_bytes, 0),
       [items],
     ),
-    active = items.filter((c) => c.enabled).length,
-    limited = items.filter((c) => c.traffic_limit_bytes > 0).length;
+    active = accounts.filter((c) => c.enabled).length,
+    limited = accounts.filter((c) => c.traffic_limit_bytes > 0).length;
   const allVisible =
     filtered.length > 0 && filtered.every((c) => selected.has(c.id));
   function toggleSelect(id: number) {
@@ -263,23 +305,19 @@ export function ClientsPage() {
     setTimeout(() => setCopied(null), 1200);
   }
   function openCreate() {
-    setEditor(
-      blank(
+    setEditor({
+      ...blank(
         inbounds[0] ? String(inbounds[0].id) : "",
         String(cfg?.default_client_days ?? 30),
         String(cfg?.default_traffic_gb ?? 0),
         String(cfg?.default_renewal_days ?? 0),
       ),
-    );
+      inbound_ids: inbounds[0] ? [inbounds[0].id] : [],
+      service_ids: [],
+    });
   }
   function openBatch() {
-    const first = inbounds.find(
-      (i) =>
-        i.protocol !== "shadowsocks" ||
-        ["2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm"].includes(
-          String(i.protocol_settings.method),
-        ),
-    );
+    const first = inbounds.find((i) => i.supports_batch !== false);
     setEditor({
       ...blank(
         String(first?.id || ""),
@@ -325,24 +363,60 @@ export function ClientsPage() {
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  function openEdit(c: ClientItem) {
-    setEditor({
-      id: c.id,
-      owner_id: c.owner_id,
-      name: c.name,
-      inbound: String(c.inbound),
-      limit: c.traffic_limit_bytes
-        ? String(Number((c.traffic_limit_bytes / 1024 ** 3).toFixed(2)))
-        : "0",
-      days: String(c.duration_days || 30),
-      devices: String(c.device_limit || 0),
-      hwidLimit: String(c.hwid_limit || 0),
-      startAfter: !!c.start_after_first_use,
-      expiry: toLocalInput(c.expires_at),
-      renewal: String(c.renewal_interval_days || 0),
-      multiplier: String(c.traffic_multiplier ?? 1),
-      note: (c as any).note || "",
-    });
+  async function openEdit(c: ClientItem) {
+    if (c.frozen) {
+      setMsg(
+        t(
+          "Resume the subscription before editing its policy.",
+          "برای ویرایش شرایط اشتراک، ابتدا آن را از فریز خارج کنید.",
+        ),
+      );
+      return;
+    }
+    editorRequest.current?.abort();
+    const controller = new AbortController();
+    editorRequest.current = controller;
+    setLoadingEditor(true);
+    try {
+      const shared = c.account_id
+        ? await api<{
+            inbound_ids: number[];
+            service_ids: number[];
+            plan_id?: number;
+          }>(`/customers/${c.account_id}`, { signal: controller.signal })
+        : null;
+      if (controller.signal.aborted) return;
+      setEditor({
+        id: c.id,
+        ...(shared
+          ? {
+              account_id: c.account_id,
+              inbound_ids: shared.inbound_ids,
+              service_ids: shared.service_ids || [],
+              plan_id: shared.plan_id || 0,
+            }
+          : {}),
+        owner_id: c.owner_id,
+        name: c.name,
+        inbound: String(c.inbound),
+        limit: c.traffic_limit_bytes
+          ? String(Number((c.traffic_limit_bytes / 1024 ** 3).toFixed(2)))
+          : "0",
+        days: String(c.duration_days || 30),
+        devices: String(c.device_limit || 0),
+        hwidLimit: String(c.hwid_limit || 0),
+        startAfter: !!c.start_after_first_use,
+        expiry: toLocalInput(c.expires_at),
+        renewal: String(c.renewal_interval_days || 0),
+        multiplier: String(c.traffic_multiplier ?? 1),
+        note: (c as any).note || "",
+      });
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setMsg(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (!controller.signal.aborted) setLoadingEditor(false);
+    }
   }
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -353,15 +427,28 @@ export function ClientsPage() {
       const selectedInbound = inbounds.find(
         (i) => String(i.id) === editor.inbound,
       );
-      const usageMetered =
-        !selectedInbound ||
-        !["http", "socks", "tunnel", "tun"].includes(selectedInbound.protocol);
+      const granted = new Set([
+        ...(editor.inbound_ids || []),
+        ...services
+          .filter((service) => editor.service_ids?.includes(service.id))
+          .flatMap((service) => service.inbound_ids),
+      ]);
+      const shared =
+        !!editor.account_id || granted.size > 1 || !!editor.service_ids?.length;
+      const usageMetered = shared
+        ? inbounds
+            .filter((inbound) => granted.has(inbound.id))
+            .every((inbound) => inbound.usage_metered !== false)
+        : !selectedInbound ||
+          !["http", "socks", "tunnel", "tun"].includes(
+            selectedInbound.protocol,
+          );
       const multiplier = Number(editor.multiplier);
       if (!Number.isFinite(multiplier) || editor.multiplier.trim() === "")
         throw new Error(t("Enter a valid traffic multiplier."));
       const body: any = {
         name: editor.name,
-        inbound: Number(editor.inbound),
+        inbound: editor.inbound_ids?.[0] ?? Number(editor.inbound),
         traffic_limit_bytes: usageMetered
           ? Math.round(Math.max(0, Number(editor.limit)) * 1024 ** 3)
           : 0,
@@ -378,6 +465,13 @@ export function ClientsPage() {
         start_after_first_use: editor.startAfter,
         duration_days: Number(editor.days) || 30,
       };
+      if (shared) {
+        delete body.inbound;
+        body.inbound_ids = editor.inbound_ids || [];
+        body.service_ids = editor.service_ids || [];
+        // Keep an existing plan without reapplying its changed defaults.
+        if (!editor.plan_id) body.plan_id = 0;
+      }
       if (editor.id) {
         body.expires_at =
           editor.startAfter &&
@@ -386,10 +480,15 @@ export function ClientsPage() {
             : editor.expiry
               ? new Date(editor.expiry).toISOString()
               : null;
-        await api(`/clients/${editor.id}/`, {
-          method: "PATCH",
-          body: JSON.stringify(body),
-        });
+        await api(
+          editor.account_id
+            ? `/customers/${editor.account_id}`
+            : `/clients/${editor.id}/`,
+          {
+            method: "PATCH",
+            body: JSON.stringify(body),
+          },
+        );
         setMsg(t("Client updated and Xray redeployed."));
       } else {
         const d = Math.max(0, Number(editor.days) || 0);
@@ -406,7 +505,7 @@ export function ClientsPage() {
             body: JSON.stringify(body),
           });
         } else
-          await api("/clients/", {
+          await api(shared ? "/customers" : "/clients/", {
             method: "POST",
             body: JSON.stringify(body),
           });
@@ -445,14 +544,38 @@ export function ClientsPage() {
   async function remove(c: ClientItem) {
     if (!confirm(tx("Delete {0}?", c.name))) return;
     try {
-      await api(`/clients/${c.id}/`, { method: "DELETE" });
+      await api(
+        c.account_id ? `/customers/${c.account_id}` : `/clients/${c.id}/`,
+        { method: "DELETE" },
+      );
       await refresh();
     } catch (e: any) {
       setMsg(e.message);
     }
   }
+  async function rotateSubscription(c: ClientItem) {
+    if (
+      !c.account_id ||
+      !confirm(
+        t(
+          "Replace this subscription link? All previous subscription links will stop working.",
+          "لینک ساب عوض شود؟ همهٔ لینک‌های قبلی این اشتراک غیرفعال می‌شوند.",
+        ),
+      )
+    )
+      return;
+    try {
+      await api(`/customers/${c.account_id}/rotate-token`, {
+        method: "POST",
+        body: "{}",
+      });
+      await refresh();
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : String(error));
+    }
+  }
   async function bulk(action: "enable" | "disable" | "reset" | "delete") {
-    const targets = items.filter((c) => selected.has(c.id));
+    const targets = accounts.filter((c) => selected.has(c.id));
     if (!targets.length) return;
     if (
       action === "delete" &&
@@ -465,7 +588,11 @@ export function ClientsPage() {
         throw new Error(t("Select up to 200 clients per operation."));
       await api("/clients/bulk", {
         method: "POST",
-        body: JSON.stringify({ ids: targets.map((c) => c.id), action }),
+        body: JSON.stringify({
+          ids: targets.map((c) => c.id),
+          action,
+          whole_accounts: true,
+        }),
       });
       setSelected(new Set());
       await refresh();
@@ -499,14 +626,7 @@ export function ClientsPage() {
               onClick={openBatch}
               disabled={
                 !can(session, "clients.write") ||
-                !inbounds.some(
-                  (i) =>
-                    i.protocol !== "shadowsocks" ||
-                    [
-                      "2022-blake3-aes-128-gcm",
-                      "2022-blake3-aes-256-gcm",
-                    ].includes(String(i.protocol_settings.method)),
-                )
+                !inbounds.some((i) => i.supports_batch !== false)
               }
             >
               <Users className="h-3.5 w-3.5" /> {t("Batch create")}
@@ -533,7 +653,7 @@ export function ClientsPage() {
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Mini
           title={t("Total clients")}
-          value={String(items.length)}
+          value={String(accounts.length)}
           detail={tx("{0} active", active)}
           icon="users"
         />
@@ -590,7 +710,9 @@ export function ClientsPage() {
               value={inboundFilter}
               onChange={(e) => setInboundFilter(e.target.value)}
             >
-              <option value="all">{t("All inbounds")}</option>
+              <option value="all">
+                {t("All connections", "همهٔ اتصال‌ها")}
+              </option>
               {inbounds.map((i) => (
                 <option key={i.id} value={i.id}>
                   {i.name}
@@ -658,7 +780,7 @@ export function ClientsPage() {
                     />
                   </th>
                   <th>{t("Client")}</th>
-                  <th>{t("Inbound")}</th>
+                  <th>{t("Connections", "اتصال‌ها")}</th>
                   <th>{t("Traffic")}</th>
                   <th>{t("Expiry")}</th>
                   <th>{t("Status")}</th>
@@ -709,7 +831,9 @@ export function ClientsPage() {
                           <span>{c.protocol?.toUpperCase()}</span>
                           <span>·</span>
                           <span>
-                            {t("ID")} {c.inbound}
+                            {c.inbound_ids.length > 1
+                              ? tx("{0} connections", c.inbound_ids.length)
+                              : `${t("ID")} ${c.inbound}`}
                           </span>
                         </div>
                       </td>
@@ -800,6 +924,15 @@ export function ClientsPage() {
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
                           </Button>
+                          {!!c.account_id && can(session, "clients.write") && (
+                            <CustomerFreeze
+                              id={c.account_id}
+                              name={c.name}
+                              frozen={c.frozen}
+                              until={c.freeze_until}
+                              onChanged={refresh}
+                            />
+                          )}
                         </div>
                       </td>
                       <td className="relative">
@@ -860,6 +993,20 @@ export function ClientsPage() {
                               reset(c);
                             }}
                           />
+                          {!!c.account_id && (
+                            <MenuItem
+                              icon="link"
+                              label={t(
+                                "Replace subscription link",
+                                "تغییر لینک ساب",
+                              )}
+                              disabled={!can(session, "clients.write")}
+                              onClick={() => {
+                                setMenu(null);
+                                void rotateSubscription(c);
+                              }}
+                            />
+                          )}
                           <div className="my-1 h-px bg-[var(--border)]" />
                           <MenuItem
                             icon="trash"
@@ -947,6 +1094,24 @@ export function ClientsPage() {
                     )}
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
+                    {!!c.account_id && can(session, "clients.write") && (
+                      <>
+                        <CustomerFreeze
+                          id={c.account_id}
+                          name={c.name}
+                          frozen={c.frozen}
+                          until={c.freeze_until}
+                          onChanged={refresh}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void rotateSubscription(c)}
+                        >
+                          {t("Replace subscription link", "تغییر لینک ساب")}
+                        </Button>
+                      </>
+                    )}
                     <Button size="sm" variant="outline" onClick={() => copy(c)}>
                       <Copy className="h-3.5 w-3.5" />
                       {t("Copy sub")}
@@ -1030,11 +1195,13 @@ export function ClientsPage() {
           editor={editor}
           setEditor={setEditor}
           inbounds={inbounds}
+          services={services}
           owners={owners}
           onSubmit={save}
           busy={busy}
         />
       )}
+      {loadingEditor && <p role="status">{t("Loading…")}</p>}
     </div>
   );
 }
@@ -1098,13 +1265,15 @@ function ClientModal({
   editor,
   setEditor,
   inbounds,
+  services,
   owners,
   onSubmit,
   busy,
 }: {
   editor: Editor;
   setEditor: (e: Editor | null) => void;
-  inbounds: InboundItem[];
+  inbounds: ClientInboundOption[];
+  services: ServiceChoice[];
   owners: import("@/lib/api").AdminUser[];
   onSubmit: (e: FormEvent) => void;
   busy: boolean;
@@ -1114,8 +1283,18 @@ function ClientModal({
   const set = (k: keyof Editor, v: string | number | boolean) =>
     setEditor({ ...editor, [k]: v });
   const ib = inbounds.find((i) => String(i.id) === editor.inbound);
+  const grants = new Set([
+    ...(editor.inbound_ids || []),
+    ...services
+      .filter((service) => editor.service_ids?.includes(service.id))
+      .flatMap((service) => service.inbound_ids),
+  ]);
   const usageMetered =
-    !ib || !["http", "socks", "tunnel", "tun"].includes(ib.protocol);
+    editor.inbound_ids !== undefined
+      ? inbounds
+          .filter((inbound) => grants.has(inbound.id))
+          .every((inbound) => inbound.usage_metered !== false)
+      : !ib || !["http", "socks", "tunnel", "tun"].includes(ib.protocol);
   return (
     <Dialog
       label={
@@ -1140,7 +1319,10 @@ function ClientModal({
                 : t("Add client")}
           </div>
           <div className="mt-1 text-[10px] text-[var(--muted)]">
-            {t("Changes are validated and deployed to Xray automatically.")}
+            {t(
+              "Changes are validated and applied automatically.",
+              "تغییرات خودکار بررسی و اعمال می‌شوند.",
+            )}
           </div>
         </div>
         <Button variant="ghost" size="icon" onClick={() => setEditor(null)}>
@@ -1178,34 +1360,101 @@ function ClientModal({
               </span>
             </label>
           )}
-          <label className="label sm:col-span-2">
-            {t("Inbound")}
-            <Select
-              className="input"
-              aria-label={t("Inbound")}
-              value={editor.inbound}
-              onChange={(e) => set("inbound", e.target.value)}
-              required
-            >
-              <option value="">{t("Select inbound")}</option>
-              {inbounds
-                .filter(
-                  (i) =>
-                    editor.count === undefined ||
-                    i.protocol !== "shadowsocks" ||
-                    [
-                      "2022-blake3-aes-128-gcm",
-                      "2022-blake3-aes-256-gcm",
-                    ].includes(String(i.protocol_settings.method)),
-                )
-                .map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.node_name} · {i.name} · {i.protocol.toUpperCase()}:
-                    {i.port}
-                  </option>
+          {editor.inbound_ids !== undefined ? (
+            <fieldset className="space-y-3 sm:col-span-2">
+              <legend className="label">{t("Connections", "اتصال‌ها")}</legend>
+              <div className="grid max-h-48 gap-2 overflow-y-auto rounded-md border border-[var(--border)] p-3">
+                {inbounds.map((inbound) => (
+                  <label
+                    key={inbound.id}
+                    className="flex items-center gap-2 text-[12px]"
+                  >
+                    <Input
+                      type="checkbox"
+                      checked={editor.inbound_ids!.includes(inbound.id)}
+                      onChange={(event) => {
+                        const ids = event.target.checked
+                          ? [...editor.inbound_ids!, inbound.id]
+                          : editor.inbound_ids!.filter(
+                              (id) => id !== inbound.id,
+                            );
+                        setEditor({
+                          ...editor,
+                          inbound_ids: ids,
+                          inbound: String(ids[0] || ""),
+                        });
+                      }}
+                    />
+                    <span>
+                      {inbound.name} · {inbound.node_name} ·{" "}
+                      {inbound.protocol.toUpperCase()}
+                    </span>
+                  </label>
                 ))}
-            </Select>
-          </label>
+              </div>
+              {services.length > 0 && (
+                <details>
+                  <summary className="cursor-pointer text-[12px] text-[var(--muted-strong)]">
+                    {t("Service groups", "گروه‌های سرویس")}
+                  </summary>
+                  <div className="mt-2 grid gap-2">
+                    {services.map((service) => (
+                      <label
+                        key={service.id}
+                        className="flex items-center gap-2 text-[12px]"
+                      >
+                        <Input
+                          type="checkbox"
+                          checked={
+                            editor.service_ids?.includes(service.id) || false
+                          }
+                          onChange={(event) =>
+                            setEditor({
+                              ...editor,
+                              service_ids: event.target.checked
+                                ? [...(editor.service_ids || []), service.id]
+                                : editor.service_ids?.filter(
+                                    (id) => id !== service.id,
+                                  ),
+                              plan_id:
+                                !event.target.checked &&
+                                editor.plan_id === service.id
+                                  ? 0
+                                  : editor.plan_id,
+                            })
+                          }
+                        />
+                        {service.name}
+                      </label>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </fieldset>
+          ) : (
+            <label className="label sm:col-span-2">
+              {t("Inbound")}
+              <Select
+                className="input"
+                aria-label={t("Inbound")}
+                value={editor.inbound}
+                onChange={(e) => set("inbound", e.target.value)}
+                required
+              >
+                <option value="">{t("Select inbound")}</option>
+                {inbounds
+                  .filter(
+                    (i) =>
+                      editor.count === undefined || i.supports_batch !== false,
+                  )
+                  .map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.node_name} · {i.name} · {i.protocol.toUpperCase()}
+                    </option>
+                  ))}
+              </Select>
+            </label>
+          )}
           {!usageMetered && (
             <div className="sm:col-span-2 rounded-lg border border-amber-500/20 bg-amber-500/8 px-3 py-2.5 text-[10px] leading-5 text-amber-600 dark:text-amber-400">
               {t(
@@ -1366,7 +1615,13 @@ function ClientModal({
           </Button>
           <Button
             type="submit"
-            disabled={busy || !editor.name || !editor.inbound}
+            disabled={
+              busy ||
+              !editor.name ||
+              (editor.inbound_ids !== undefined
+                ? grants.size === 0
+                : !editor.inbound)
+            }
           >
             {busy
               ? "Saving…"

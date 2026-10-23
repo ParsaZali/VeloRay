@@ -1268,3 +1268,11 @@ Object.assign(fa, {
   "subscription port is already reserved by a local inbound":
     "این پورت توسط یکی از اینباندهای همین سرور استفاده می‌شود.",
 });
+
+Object.assign(fa, {
+  "{0} connections": "{0} اتصال",
+  "{0} disabled": "{0} غیرفعال",
+  "{0} of {1} available user slots": "{0} ظرفیت آزاد از {1} کاربر",
+  "{0} remaining of {1}": "{0} باقی‌مانده از {1}",
+  "Delete account {0}?": "حساب {0} حذف شود؟",
+});

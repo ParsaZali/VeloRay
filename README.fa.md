@@ -135,7 +135,8 @@ https://vpn.example.com:23457/USER_TOKEN
 
 ## مستندات
 
-- [حساب مشتری و پلن‌ها](docs/customer-management.md)
+- [فضای ریسلر و محدودیت دسترسی](docs/reseller-workspace.md)
+- [کاربران و پلن‌ها](docs/customer-management.md)
 - [قالب و خروجی اشتراک](docs/subscription-customization.md)
 - [پورت مستقل ساب](docs/independent-subscriptions.md)
 - [MTProto و AmneziaWG](docs/mtproto-and-amneziawg.md)

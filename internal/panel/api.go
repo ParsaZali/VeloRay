@@ -26,6 +26,7 @@ var editable = map[string]string{
 func (s *Server) view(ctx context.Context, q Query, kind string, d Data) (Data, error) {
 	out := public(d)
 	if kind == "clients" {
+		addFreezeView(out, d)
 		out["device_count"] = len(obj(d, "_device_seen"))
 		out["device_limit"] = num(d, "device_limit")
 		out["start_after_first_use"] = flag(d, "start_after_first_use")
@@ -169,6 +170,9 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 	}
 	if path == "clients/bulk" {
 		return s.bulkClients(w, r, a)
+	}
+	if path == "clients/inbound-options" {
+		return s.clientInboundOptions(r, a)
 	}
 	if path == "project" && r.Method == "GET" {
 		return s.projectInfo(ctx), 200, nil
@@ -1315,7 +1319,10 @@ func (s *Server) bulkClients(w http.ResponseWriter, r *http.Request, a Actor) (a
 	if err != nil {
 		return nil, 0, err
 	}
-	if err = allowed(input, "ids action"); err != nil {
+	if err = allowed(input, "ids action whole_accounts"); err != nil {
+		return nil, 0, fail(400, err.Error())
+	}
+	if err = typed(input, Data{"whole_accounts": false}); err != nil {
 		return nil, 0, fail(400, err.Error())
 	}
 	action := str(input, "action")
@@ -1330,6 +1337,7 @@ func (s *Server) bulkClients(w http.ResponseWriter, r *http.Request, a Actor) (a
 	ids := []int64{}
 	nodes := []int64{}
 	seen := map[int64]bool{}
+	preparedPrincipals := map[int64]string{}
 	for _, value := range values {
 		number, ok := value.(json.Number)
 		if !ok {
@@ -1351,9 +1359,10 @@ func (s *Server) bulkClients(w http.ResponseWriter, r *http.Request, a Actor) (a
 		if err != nil {
 			return nil, 0, err
 		}
-		if action == "delete" && num(client, "_account") > 0 {
+		if action == "delete" && num(client, "_account") > 0 && !flag(input, "whole_accounts") {
 			return nil, 0, fail(409, "delete shared accounts through customers")
 		}
+		preparedPrincipals[id] = accountKey(client)
 		ids = append(ids, id)
 		nodes = append(nodes, related...)
 	}
@@ -1361,12 +1370,18 @@ func (s *Server) bulkClients(w http.ResponseWriter, r *http.Request, a Actor) (a
 	out, err := s.change(ctx, nodes, a, "clients.bulk-"+action, fmt.Sprintf("%d accounts", len(ids)), func(tx pgx.Tx) (any, error) {
 		principals := map[string]bool{}
 		for _, id := range ids {
+			if principals[preparedPrincipals[id]] {
+				continue
+			}
 			client, err := get(ctx, tx, "clients", id)
 			if err == nil {
 				err = clientAccess(a, client)
 			}
 			if err != nil {
 				return nil, err
+			}
+			if accountKey(client) != preparedPrincipals[id] {
+				return nil, fail(409, "account membership changed; retry")
 			}
 			related, err := clientNodes(ctx, tx, client)
 			if err != nil {
@@ -1379,12 +1394,19 @@ func (s *Server) bulkClients(w http.ResponseWriter, r *http.Request, a Actor) (a
 				continue
 			}
 			principals[accountKey(client)] = true
-			if action == "delete" && num(client, "_account") > 0 {
+			if action == "delete" && num(client, "_account") > 0 && !flag(input, "whole_accounts") {
 				return nil, fail(409, "delete shared accounts through customers")
 			}
 
 			if action == "delete" {
-				if _, err = tx.Exec(ctx, `DELETE FROM vr_clients WHERE id=$1`, id); err != nil {
+				if account := num(client, "_account"); account > 0 {
+					if _, err = tx.Exec(ctx, `DELETE FROM vr_clients WHERE account_id=$1`, account); err != nil {
+						return nil, err
+					}
+					if err = remove(ctx, tx, "customers", account); err != nil {
+						return nil, err
+					}
+				} else if _, err = tx.Exec(ctx, `DELETE FROM vr_clients WHERE id=$1`, id); err != nil {
 					return nil, err
 				}
 			} else {
@@ -1396,7 +1418,7 @@ func (s *Server) bulkClients(w http.ResponseWriter, r *http.Request, a Actor) (a
 				}
 			}
 		}
-		return Data{"count": len(ids), "status": "applied"}, nil
+		return Data{"count": len(ids), "account_count": len(principals), "status": "applied"}, nil
 	})
 	return out, 200, err
 }
