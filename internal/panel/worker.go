@@ -420,6 +420,9 @@ func (s *Server) maintain(ctx context.Context) error {
 	if _, err := s.Store.Pool.Exec(ctx, `DELETE FROM vr_passkey_challenges WHERE expires_at<now()`); err != nil {
 		return err
 	}
+	if _, err := s.Store.Pool.Exec(ctx, `DELETE FROM vr_subscription_probe_tickets WHERE expires_at<now(); DELETE FROM vr_connection_quality WHERE updated_at<now()-interval '1 day'`); err != nil {
+		return err
+	}
 	cfg, e := settings(ctx, s.Store.Pool)
 	if e != nil {
 		return e

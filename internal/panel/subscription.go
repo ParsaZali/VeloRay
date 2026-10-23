@@ -84,7 +84,8 @@ func clashConfig(c, i, n Data) (Data, error) {
 	return Data{"proxies": []any{v}, "proxy-groups": []any{Data{"name": "VeloRay", "type": "select", "proxies": []any{name}}}, "rules": []any{"MATCH,VeloRay"}}, nil
 }
 func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" && r.Method != "HEAD" {
+	diagnostics := r.URL.Query().Get("format") == "diagnostics"
+	if r.Method != "GET" && r.Method != "HEAD" && !(r.Method == "POST" && diagnostics) {
 		writeJSON(w, 405, Data{"detail": "method not allowed"})
 		return
 	}
@@ -122,7 +123,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		s.respond(w, r, nil, 0, e)
 		return
 	}
-	if assetPath == "" && r.Method == "GET" && !oneOf(r.URL.Query().Get("format"), "stats", "info", "qr") {
+	if assetPath == "" && r.Method == "GET" && !oneOf(r.URL.Query().Get("format"), "stats", "info", "qr", "diagnostics") {
 		history := &subscriptionHistoryWriter{ResponseWriter: w}
 		w = history
 		defer s.recordSubscriptionRequest(r, c, history)
@@ -177,7 +178,17 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if assetPath != "" {
+		if r.Method != "GET" && r.Method != "HEAD" {
+			writeJSON(w, 405, Data{"detail": "method not allowed"})
+			return
+		}
 		s.portalAsset(w, r, cfg, assetPath)
+		return
+	}
+	if diagnostics {
+		c = clone(c)
+		c["subscription_token"] = token
+		s.subscriptionDiagnostics(w, r, c, cfg, connections)
 		return
 	}
 	external, exportCfg, err := s.externalSubscription(ctx, c, cfg, r)
