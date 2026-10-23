@@ -18,7 +18,7 @@ This tracker distinguishes working features from planned integrations. Existing 
 | 12 | Supported live user add/change/removal | Planned; preserve full-deploy fallback |
 | 13 | Managed WARP lifecycle and routing | Planned |
 | 14 | Certificate fleet, DNS-01 wildcard and distribution | Planned |
-| 15 | GeoIP/Geosite verified update and rollback | Planned |
+| 15 | GeoIP/Geosite verified update and rollback | Available: opt-in official v2fly releases, bounded downloads, SHA-256 verification, complete Xray tag/config validation, atomic replacement, two-snapshot retention and crash/restart rollback; managed systemd agents |
 | 16 | Single-use agent enrollment and verification | Available: expiring/revocable one-use commands, pinned certificate and initial agent identity/core checks |
 | 17 | Canary/rolling core updates and rollback | Planned |
 | 18 | Bounded subscription freeze preserving duration | Available: 30-day annual allowance, manual/automatic bounded resume, preserved token and usage |

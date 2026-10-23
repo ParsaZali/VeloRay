@@ -146,6 +146,42 @@ func (s Server) Handler() http.Handler {
 		coreMu.Unlock()
 		return s.Updater.Status(), err
 	}, "POST"))
+	mux.HandleFunc("/geo/status", wrap(func(c context.Context, _ map[string]json.RawMessage) (any, error) {
+		if s.Updater == nil {
+			return map[string]any{"managed": false, "enabled": false}, nil
+		}
+		return s.Updater.GeoStatus(), nil
+	}, "GET"))
+	mux.HandleFunc("/geo/catalog", wrap(func(c context.Context, v map[string]json.RawMessage) (any, error) {
+		if s.Updater == nil {
+			return nil, errors.New("geo manager unavailable")
+		}
+		var kind string
+		if json.Unmarshal(v["kind"], &kind) != nil {
+			return nil, errors.New("geo kind is required")
+		}
+		return s.Updater.GeoCatalog(c, kind)
+	}, "POST"))
+	mux.HandleFunc("/geo/install", wrap(func(c context.Context, v map[string]json.RawMessage) (any, error) {
+		if s.Updater == nil {
+			return nil, errors.New("geo manager unavailable")
+		}
+		var kind, tag string
+		var rollback bool
+		if json.Unmarshal(v["kind"], &kind) != nil {
+			return nil, errors.New("geo kind is required")
+		}
+		if value, ok := v["tag"]; ok && json.Unmarshal(value, &tag) != nil {
+			return nil, errors.New("invalid geo release tag")
+		}
+		if value, ok := v["rollback"]; ok && json.Unmarshal(value, &rollback) != nil {
+			return nil, errors.New("rollback must be boolean")
+		}
+		coreMu.Lock()
+		err := s.Updater.StartGeo(kind, tag, rollback)
+		coreMu.Unlock()
+		return s.Updater.GeoStatus(), err
+	}, "POST"))
 	mux.HandleFunc("/xray/geo-assets", wrap(func(c context.Context, v map[string]json.RawMessage) (any, error) {
 		var kind, query string
 		limit := 100

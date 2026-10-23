@@ -20,8 +20,10 @@ func TestPanelRuntimeStartsWithPanelProcess(t *testing.T) {
 		t.Fatal("negative panel uptime")
 	}
 	server.StartedAt = time.Time{}
-	if num(server.panelRuntime(now), "uptime_seconds") > 60 {
-		t.Fatal("panel uptime used host boot time")
+	fallback := server.panelRuntime(now)
+	want := max(int64(0), int64(now.Sub(panelProcessStartedAt).Seconds()))
+	if num(fallback, "uptime_seconds") != want || str(fallback, "started_at") != stamp(panelProcessStartedAt) {
+		t.Fatal("panel uptime did not use the process start", fallback)
 	}
 }
 func TestIntegrationHealthReportsDatabaseAndPanelUptime(t *testing.T) {

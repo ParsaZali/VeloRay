@@ -883,6 +883,8 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request, kind string, id 
 		switch action {
 		case "core-manager", "core-releases", "core-policy", "core-install":
 			return s.coreManagerAPI(w, r, d, action, a)
+		case "geo-manager", "geo-releases", "geo-install":
+			return s.geoManagerAPI(w, r, d, action, a)
 		case "ports":
 			if r.Method != "GET" {
 				return nil, 0, fail(405, "method not allowed")

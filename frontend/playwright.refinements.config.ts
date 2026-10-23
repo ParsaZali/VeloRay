@@ -5,6 +5,7 @@ export default defineConfig({
     "panel-refinements.spec.ts",
     "commerce-workflow.spec.ts",
     "passkeys-workflow.spec.ts",
+    "geo-updates-workflow.spec.ts",
   ],
   workers: 1,
   retries: 0,

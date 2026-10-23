@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { useLocale } from "@/lib/i18n";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 let modalLocks = 0;
 let bodyOverflow = "";
 export function Dialog({
@@ -22,7 +22,7 @@ export function Dialog({
   const root = useRef<HTMLDivElement>(null),
     close = useRef(onClose);
   close.current = onClose;
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const el = root.current;
     if (!el) return;

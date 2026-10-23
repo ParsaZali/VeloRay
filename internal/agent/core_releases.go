@@ -76,6 +76,7 @@ type CoreUpdater struct {
 	Managers        map[string]*Manager
 	enabled         bool
 	job             coreJob
+	geoJob          geoUpdateJob
 	changeMu        *sync.Mutex
 }
 
@@ -149,6 +150,26 @@ func NewCoreUpdater(ctx context.Context, directory string, managers map[string]*
 		if err := m.recoverCore(ctx); err != nil {
 			return nil, fmt.Errorf("%s update recovery: %w", core, err)
 		}
+	}
+	for _, kind := range []string{"geoip", "geosite"} {
+		if err := u.recoverGeo(ctx, kind); err != nil {
+			return nil, fmt.Errorf("%s update recovery: %w", kind, err)
+		}
+	}
+	if raw, err := readBoundedGeoFile(filepath.Join(directory, "geo-job.json"), 65536); err == nil {
+		if err = json.Unmarshal(raw, &u.geoJob); err != nil {
+			return nil, err
+		}
+		if u.geoJob.State == "running" {
+			u.geoJob.State, u.geoJob.Error = "error", "Operation interrupted. Check the active geo asset before retrying."
+			u.geoJob.Finished = time.Now().UTC().Format(time.RFC3339)
+			raw, _ = json.Marshal(u.geoJob)
+			if err = atomicWrite(filepath.Join(directory, "geo-job.json"), raw, 0600); err != nil {
+				return nil, err
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, err
 	}
 	return u, nil
 }
@@ -235,13 +256,13 @@ func (u *CoreUpdater) Status() map[string]any {
 		record := m.coreRecord()
 		cores[core] = map[string]any{"tag": record.Tag, "source": record.Source, "sha256": record.SHA256, "can_rollback": record.PreviousPath != "", "user_ip_attribution": core != "singbox" || record.Source != "official"}
 	}
-	return map[string]any{"managed": true, "enabled": u.enabled, "automatic": false, "cores": cores, "job": u.job}
+	return map[string]any{"managed": true, "enabled": u.enabled, "automatic": false, "cores": cores, "job": u.job, "geo_job": u.geoJob}
 }
 func (u *CoreUpdater) SetEnabled(enabled bool) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if u.job.State == "running" {
-		return errors.New("wait for the current core operation")
+	if u.job.State == "running" || u.geoJob.State == "running" {
+		return errors.New("wait for the current core or geo operation")
 	}
 	raw, _ := json.Marshal(map[string]bool{"enabled": enabled})
 	if err := atomicWrite(filepath.Join(u.Directory, "policy.json"), raw, 0600); err != nil {
@@ -266,8 +287,8 @@ func (u *CoreUpdater) Start(core, tag string, rollback, requireIPs bool) error {
 	if coreRepository(core) == "" || m == nil {
 		return errors.New("core unavailable")
 	}
-	if u.job.State == "running" {
-		return errors.New("another core operation is running")
+	if u.job.State == "running" || u.geoJob.State == "running" {
+		return errors.New("another core or geo operation is running")
 	}
 	if !rollback && !u.enabled {
 		return errors.New("official core downloads are disabled")
