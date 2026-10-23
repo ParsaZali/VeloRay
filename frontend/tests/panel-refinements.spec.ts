@@ -1754,7 +1754,7 @@ test("OIDC login keeps the local second factor and password fallback", async ({
     .click();
   await expect(page.locator("#main-content")).toBeVisible();
   expect(attempts).toEqual([{ totp_code: "111111" }, { totp_code: "222222" }]);
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/dashboard$/);
   completed = false;
   await page.goto("/?oidc=totp");
   await page
@@ -2369,7 +2369,7 @@ test("administrator edits LDAP binding while preserving local role and SSO field
     .getByTitle("Edit", { exact: true })
     .click();
   const dialog = page.getByRole("dialog", {
-    name: "Administrator",
+    name: "Account",
     exact: true,
   });
   const dn = dialog.getByRole("textbox", {
