@@ -1,4 +1,5 @@
 import { CoreManager } from "@/components/core-manager";
+import { GeoManager } from "@/components/geo-manager";
 import { Textarea } from "@/components/ui/controls";
 import { Select } from "@/components/ui/controls";
 import { t } from "@/lib/i18n";
@@ -30,6 +31,7 @@ export function XrayPage() {
   const [patch, setPatch] = useState("{}");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [managerRevision, setManagerRevision] = useState(0);
   const refreshSequence = useRef(0);
 
   async function loadNodes() {
@@ -290,7 +292,22 @@ export function XrayPage() {
           );
         })}
       </div>
-      {nodeId && <CoreManager key={nodeId} nodeId={nodeId} />}
+      {nodeId && (
+        <>
+          <CoreManager
+            key={nodeId}
+            nodeId={nodeId}
+            externalRevision={managerRevision}
+            onChange={() => setManagerRevision((value) => value + 1)}
+          />
+          <GeoManager
+            key={nodeId + "-geo"}
+            nodeId={nodeId}
+            externalRevision={managerRevision}
+            onChange={() => setManagerRevision((value) => value + 1)}
+          />
+        </>
+      )}
       {msg && (
         <div
           role="status"

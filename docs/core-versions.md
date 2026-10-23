@@ -24,6 +24,8 @@ VeloRay's bundled sing-box build includes an additional per-user IP telemetry fi
 
 Only binaries are replaced. Geo assets, TLS keys, routing policy, users and configurations are preserved. The bundled cores remain the CI-tested reference versions; arbitrary upstream releases still need operator verification with the actual client applications and network.
 
+GeoIP and Geosite have separate [verified update and rollback controls](geo-updates.md). Core and geo operations cannot run together. Both use the same opt-in official-download policy; neither enables automatic updates.
+
 ## API
 
 All following routes are superuser/administrator-scope only:

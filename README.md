@@ -112,6 +112,7 @@ Screenshots use demonstration accounts, not production credentials.
 | **Availability** | Single-use verified node enrollment, certificate pinning, automatic background-worker election for active/standby panels, bounded customer freeze and service impact review |
 | **Subscriptions** | A simple default page, custom HTML files, configurable URL paths, a separate HTTPS port, QR codes and app-specific exports |
 | **Core versions** | Opt-in manual downloads from official GitHub releases, verified SHA-256, version selection, configuration checks and previous-version rollback |
+| **GeoIP / Geosite** | Official v2fly releases, SHA-256 verification, full Xray validation, atomic updates and previous-asset rollback |
 | **Traffic** | Durable counters, actual upload/download history, quota multipliers, charts, usage CSV and outbound accounting |
 | **Network** | Guided inbounds/outbounds, routing rules, chaining, Xray fallbacks/balancing and sing-box selectors/URL-test groups |
 | **Connection tests** | Generated client credentials, delivery-host selection and node-side protocol/HTTPS probes |
@@ -168,6 +169,7 @@ Downloads are manual; enabling them does not schedule automatic core changes. Pa
 - [Sales, payments and wallets](docs/commerce.md)
 - [Telegram sales and Mini App](docs/telegram-sales.md)
 - [Passkey authentication and recovery](docs/passkeys.md)
+- [GeoIP / Geosite updates and rollback](docs/geo-updates.md)
 - [Customer freeze and service impact review](docs/customer-freeze-and-impact.md)
 - [Single-use node enrollment](docs/node-enrollment.md)
 - [Active/standby panel deployment](docs/panel-availability.md)

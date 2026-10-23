@@ -28,10 +28,19 @@ type State = {
   reason?: string;
   cores?: Partial<Record<Core, CoreState>>;
   job?: { core: Core; tag: string; state: string; error?: string };
+  geo_job?: { state: string };
 };
 const repositories = { xray: "XTLS/Xray-core", singbox: "SagerNet/sing-box" };
 
-export function CoreManager({ nodeId }: { nodeId: string }) {
+export function CoreManager({
+  nodeId,
+  externalRevision = 0,
+  onChange,
+}: {
+  nodeId: string;
+  externalRevision?: number;
+  onChange?: () => void;
+}) {
   useLocale();
   const session = useSession();
   const [state, setState] = useState<State | null>(null);
@@ -42,7 +51,8 @@ export function CoreManager({ nodeId }: { nodeId: string }) {
   const [revision, refresh] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const running = state?.job?.state === "running";
+  const running =
+    state?.job?.state === "running" || state?.geo_job?.state === "running";
   const allowed = !!session?.is_superuser;
   useEffect(() => {
     if (!nodeId || !allowed) return;
@@ -55,7 +65,7 @@ export function CoreManager({ nodeId }: { nodeId: string }) {
         });
         if (controller.signal.aborted) return;
         setState(next);
-        if (next.job?.state === "running")
+        if (next.job?.state === "running" || next.geo_job?.state === "running")
           timer = setTimeout(() => void load(), 2000);
       } catch (e) {
         if (!controller.signal.aborted)
@@ -71,7 +81,7 @@ export function CoreManager({ nodeId }: { nodeId: string }) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [nodeId, allowed, revision]);
+  }, [nodeId, allowed, revision, externalRevision]);
   const controller = useRef(new AbortController());
   useEffect(() => {
     controller.current = new AbortController();
@@ -111,7 +121,10 @@ export function CoreManager({ nodeId }: { nodeId: string }) {
         body: JSON.stringify({ enabled }),
         signal: controller.current.signal,
       });
-      if (!controller.current.signal.aborted) setState(next);
+      if (!controller.current.signal.aborted) {
+        setState(next);
+        onChange?.();
+      }
     } catch (e) {
       if (!controller.current.signal.aborted)
         setError(e instanceof Error ? e.message : String(e));
@@ -140,6 +153,7 @@ export function CoreManager({ nodeId }: { nodeId: string }) {
       if (!controller.current.signal.aborted) {
         setState(next);
         refresh((value) => value + 1);
+        onChange?.();
       }
     } catch (e) {
       if (!controller.current.signal.aborted)
