@@ -19,7 +19,7 @@ var editable = map[string]string{
 	"clients":       "renewal_period renewal_every renewal_timezone hwid_limit device_limit start_after_first_use duration_days owner_id inbound name credential protocol_settings subscription_token enabled expires_at traffic_limit_bytes renewal_interval_days next_renewal_at traffic_multiplier note",
 	"outbounds":     "name node core tag protocol config enabled",
 	"routing_rules": "name node core priority config enabled",
-	"users":         "ldap_dn oidc_issuer oidc_subject username email is_active is_staff is_superuser password role permissions allowed_inbounds own_clients_only max_clients traffic_budget_bytes",
+	"users":         "ldap_dn oidc_issuer oidc_subject username email is_active is_staff is_superuser password role permissions allowed_inbounds own_clients_only max_clients traffic_budget_bytes can_delegate max_subresellers",
 	"api_keys":      "name scope enabled expires_at user",
 }
 
@@ -114,6 +114,9 @@ func (s *Server) view(ctx context.Context, q Query, kind string, d Data) (Data, 
 	return out, nil
 }
 func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Actor) (any, int, error) {
+	if path == "resellers" || strings.HasPrefix(path, "resellers/") {
+		return s.resellersAPI(w, r, path, a)
+	}
 	if path == "cluster" {
 		return s.clusterAPI(r, a)
 	}
@@ -443,6 +446,13 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 			if kind == "users" {
 				if id == num(a.User, "id") {
 					return nil, fail(400, "You cannot delete your own account")
+				}
+				var children bool
+				if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM vr_users WHERE COALESCE((data->>'parent_id')::bigint,0)=$1)`, id).Scan(&children); e != nil {
+					return nil, e
+				}
+				if children {
+					return nil, fail(409, "this account has subresellers; deactivate it to preserve its hierarchy")
 				}
 				if e := ensureAdmin(ctx, tx, id, nil); e != nil {
 					return nil, e

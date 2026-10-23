@@ -77,6 +77,9 @@ func (s *Server) requestPayment(ctx context.Context, id string) (any, int, error
 	if err != nil || !expiry.After(time.Now()) {
 		return nil, 0, fail(409, "checkout expired; create a new order")
 	}
+	if e = s.recheckOrderCapacity(ctx, tx, o); e != nil {
+		return nil, 0, e
+	}
 	snap := obj(o, "snapshot")
 	if authority := str(o, "_authority"); authority != "" {
 		return Data{"url": gatewayBase(flag(snap, "_sandbox")) + "/pg/StartPay/" + authority, "sandbox": flag(snap, "_sandbox")}, 200, nil

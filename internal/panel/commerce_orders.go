@@ -27,6 +27,11 @@ func (s *Server) shopAPI(w http.ResponseWriter, r *http.Request, path string) (a
 		if !flag(d, "enabled") {
 			return nil, 0, fail(404, "store not found")
 		}
+		publicBrand := Data{}
+		for _, key := range strings.Fields("enabled name support_url logo_url description") {
+			publicBrand[key] = d[key]
+		}
+		d = publicBrand
 		if _, e = seller(ctx, s.Store.Pool, id); e != nil {
 			return nil, 0, e
 		}
@@ -244,6 +249,13 @@ func (s *Server) createOrder(ctx context.Context, input Data, payer int64, publi
 			return nil, fail(400, "traffic top-up requires a finite traffic grant")
 		}
 	}
+	u, e := seller(ctx, tx, owner)
+	if e != nil {
+		return nil, e
+	}
+	if e = s.validateOrderCapacity(ctx, tx, u, snapshot, str(input, "kind"), num(Data{"id": customer}, "id")); e != nil {
+		return nil, e
+	}
 	id, token := randomToken(24), randomToken(32)
 	raw, _ := json.Marshal(snapshot)
 	var payerValue any
@@ -292,6 +304,9 @@ func (s *Server) walletPurchase(w http.ResponseWriter, r *http.Request, a Actor)
 			}
 			return nil, fail(409, "order is not pending")
 		}
+		if e = s.recheckOrderCapacity(ctx, tx, d); e != nil {
+			return nil, e
+		}
 		_, e = walletEntry(ctx, tx, num(a.User, "id"), str(d, "currency"), -num(d, "amount"), "order:"+id, "Order "+id, num(a.User, "id"))
 		if e != nil {
 			return nil, e
@@ -300,6 +315,11 @@ func (s *Server) walletPurchase(w http.ResponseWriter, r *http.Request, a Actor)
 		return nil, e
 	})
 	if e != nil {
+		// A failed wallet debit must not leave a fresh inventory hold behind.
+		// The condition also protects a payment whose commit acknowledgement was lost.
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_, _ = s.Store.Pool.Exec(cleanup, `UPDATE vr_orders SET state='cancelled' WHERE id=$1 AND state='pending' AND gateway='' AND authority IS NULL`, id)
 		return nil, 0, e
 	}
 	_ = s.fulfillOrder(ctx, id)
@@ -332,6 +352,7 @@ func (s *Server) walletTopup(w http.ResponseWriter, r *http.Request, a Actor) (a
 // A paid order and its customer mutation commit together, after agents validate
 // and apply their journaled configuration. Failed deployment leaves it paid.
 func (s *Server) fulfillOrder(ctx context.Context, id string) error {
+	ctx = context.WithValue(ctx, fulfillingOrderKey{}, id)
 	o, e := getOrder(ctx, s.Store.Pool, id, false)
 	if e != nil {
 		return e

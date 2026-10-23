@@ -76,7 +76,15 @@ func TestIntegrationFreezePreservesTokenAndResumesWithOfflineAgent(t *testing.T)
 	if _, _, e = managementRequest(t, s, ctx, a, "POST", "customers/bulk", Data{"ids": []any{id}, "action": "enable"}); e == nil {
 		t.Fatal("bulk enable bypassed freeze")
 	}
+	if _, _, e = managementRequest(t, s, ctx, a, "PATCH", fmt.Sprintf("customers/%d", id), Data{"traffic_limit_bytes": 2000}); e != nil {
+		t.Fatal("quota edit on a frozen account failed", e)
+	}
 	members, _ := customerMembers(ctx, s.Store.Pool, id)
+	for _, c := range members {
+		if str(c, "next_renewal_at") != "" {
+			t.Fatal("frozen quota edit restarted renewal clock", c)
+		}
+	}
 	if _, _, e = managementRequest(t, s, ctx, a, "PATCH", fmt.Sprintf("clients/%d", num(members[0], "id")), Data{"expires_at": stamp(time.Now().Add(99 * 24 * time.Hour))}); e == nil {
 		t.Fatal("client edit bypassed saved duration")
 	}

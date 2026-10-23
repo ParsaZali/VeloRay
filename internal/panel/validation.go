@@ -312,7 +312,7 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 		return errors.New("inbound does not exist")
 	}
 	p := str(i, "protocol")
-	if num(d, "device_limit") > 0 && !oneOf(p, "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell", "shadowtls", "mtproto") {
+	if num(d, "device_limit") > 0 && !supportsClientDevices(p) {
 		return errors.New("device limits require a supported metered protocol")
 	}
 	if !supportsClients(p) {
@@ -441,6 +441,10 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 		if err := validateAWGClient(d); err != nil {
 			return err
 		}
+	}
+	if frozen(d) {
+		d["next_renewal_at"] = nil
+		return nil
 	}
 	if e := scheduleRenewal(d, time.Now().UTC()); e != nil {
 		return e

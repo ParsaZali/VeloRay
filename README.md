@@ -104,7 +104,8 @@ Screenshots use demonstration accounts, not production credentials.
 | Area | What you can manage |
 |---|---|
 | **Users & customers** | Shared accounts across nodes, quotas, expiry, first-use activation, scheduled renewal, IP/HWID limits, bulk actions and token rotation |
-| **Sales & billing** | React storefront, verified Zarinpal checkout, wallet purchase/renew/top-up, immutable ledger, credit limits, settlement records and currency-separated reports |
+| **Sales & billing** | React storefront, verified Zarinpal checkout, reserved inventory, wallet purchase/renew/top-up, immutable ledger, reseller hierarchy, credit transfers and currency-separated profit reports |
+| **Seller branding** | Individual store/subscription name, logo, support link and DNS/HTTPS-verified subscription domains |
 | **Multi-node** | Local and remote agents, scoped deployments, listener inspection, configuration validation, journals and compensated rollback |
 | **Availability** | Single-use verified node enrollment, certificate pinning, automatic background-worker election for active/standby panels, bounded customer freeze and service impact review |
 | **Subscriptions** | A simple default page, custom HTML files, configurable URL paths, a separate HTTPS port, QR codes and app-specific exports |

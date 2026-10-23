@@ -3,6 +3,8 @@ import { Select, Input } from "@/components/ui/controls";
 import { t } from "@/lib/i18n";
 import { useLocale, tx } from "@/lib/i18n";
 const permissionOptions = [
+  ["resellers.read", "View subresellers"],
+  ["resellers.write", "Manage subresellers"],
   ["commerce.read", "View sales and wallet"],
   ["commerce.write", "Manage offers and wallet purchases"],
   ["dashboard.read", "View dashboard"],
@@ -51,6 +53,8 @@ type Editor = {
   permissions: string[];
   allowed_inbounds: number[];
   own_clients_only: boolean;
+  can_delegate: boolean;
+  max_subresellers: string;
   max_clients: string;
   budget: string;
 };
@@ -74,6 +78,8 @@ const blank = (): Editor => ({
   permissions: [],
   allowed_inbounds: [],
   own_clients_only: true,
+  can_delegate: false,
+  max_subresellers: "0",
   max_clients: "0",
   budget: "0",
 });
@@ -138,6 +144,8 @@ export function AdminPage() {
       allowed_inbounds: u.allowed_inbounds || [],
       own_clients_only: !!u.own_clients_only,
       max_clients: String(u.max_clients || 0),
+      can_delegate: !!u.can_delegate,
+      max_subresellers: String(u.max_subresellers || 0),
       budget: String((u.traffic_budget_bytes || 0) / 1024 ** 3),
     });
   }
@@ -157,6 +165,8 @@ export function AdminPage() {
         allowed_inbounds: editor.allowed_inbounds,
         own_clients_only: editor.role === "reseller" || editor.own_clients_only,
         max_clients: Number(editor.max_clients),
+        can_delegate: editor.can_delegate,
+        max_subresellers: Number(editor.max_subresellers),
         traffic_budget_bytes: Math.round(Number(editor.budget) * 1024 ** 3),
       };
       body.ldap_dn = editor.ldap_dn;
@@ -717,6 +727,32 @@ export function AdminPage() {
                       value={editor.budget}
                       onChange={(e) =>
                         setEditor({ ...editor, budget: e.target.value })
+                      }
+                    />
+                  </Field>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={editor.can_delegate}
+                      onChange={(e) =>
+                        setEditor({ ...editor, can_delegate: e.target.checked })
+                      }
+                    />
+                    {t("Allow subresellers", "اجازهٔ ساخت ریسلر زیرمجموعه")}
+                  </label>
+                  <Field
+                    label={t("Direct subreseller limit", "سقف ریسلر مستقیم")}
+                  >
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={editor.max_subresellers}
+                      onChange={(e) =>
+                        setEditor({
+                          ...editor,
+                          max_subresellers: e.target.value,
+                        })
                       }
                     />
                   </Field>

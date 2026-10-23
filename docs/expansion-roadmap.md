@@ -6,8 +6,8 @@ This tracker distinguishes working features from planned integrations. Existing 
 |---|---|---|
 | 1 | Storefront, verified payments, purchase/renew/traffic top-up | Available: storefront, verified Zarinpal, wallet purchase, renewal and traffic grants; merchant configuration required |
 | 2 | Reseller wallets, credit, immutable ledger and settlement | Available: scoped wallets/credit, immutable ledger, manual settlements and seller-specific offers |
-| 3 | Subreseller hierarchy and inherited limits | Planned; depends on ledger and ownership rules |
-| 4 | Per-reseller storefront/subscription branding and domains | Partial: individual storefront branding; subscription branding and verified domains remain |
+| 3 | Subreseller hierarchy and inherited limits | Available: bounded nested delegation, inherited inbounds, reserved capacity, descendant commerce access and atomic parent-to-child wallet transfers |
+| 4 | Per-reseller storefront/subscription branding and domains | Available: individual store and subscription branding; domain activation requires DNS ownership, valid HTTPS and matching instance proof; configure proxy and certificates first |
 | 5 | Telegram customer sales bot and Mini App | Planned; uses the same checkout and fulfillment |
 | 6 | Expanded migration with mapping and preview | Planned; extend existing import preview |
 | 7 | Encrypted S3/SFTP backups, retention and restore verification | Planned |

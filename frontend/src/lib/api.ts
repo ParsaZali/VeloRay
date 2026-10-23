@@ -315,6 +315,9 @@ export type AppSettings = {
   telegram_alert_cooldown_minutes: number;
 };
 export type AdminUser = {
+  parent_id?: number;
+  can_delegate?: boolean;
+  max_subresellers?: number;
   ldap_dn?: string;
   oidc_issuer?: string;
   oidc_subject?: string;

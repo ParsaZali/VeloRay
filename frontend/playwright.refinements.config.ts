@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "tests",
-  testMatch: "panel-refinements.spec.ts",
+  testMatch: ["panel-refinements.spec.ts", "commerce-workflow.spec.ts"],
   workers: 1,
   retries: 0,
   use: {

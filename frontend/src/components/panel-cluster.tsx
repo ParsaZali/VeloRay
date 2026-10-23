@@ -19,6 +19,13 @@ export function PanelCluster() {
     setBusy(true);
     try {
       const d = await api<{ instances: Instance[] }>("/cluster", { signal });
+      if (!Array.isArray(d.instances))
+        throw new Error(
+          t(
+            "Panel instance status is unavailable",
+            "وضعیت نمونه‌های پنل در دسترس نیست",
+          ),
+        );
       if (!signal?.aborted) {
         setInstances(d.instances);
         setError("");

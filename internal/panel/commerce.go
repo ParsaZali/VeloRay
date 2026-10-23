@@ -28,7 +28,7 @@ func money(d Data, key string, minimum int64) (int64, error) {
 }
 func validCurrency(s string) bool { return oneOf(s, "IRR", "IRT", "USD", "EUR") }
 func commerceAdmin(a Actor) bool  { return flag(a.User, "is_superuser") && a.Scope == "admin" }
-func commerceOwner(r *http.Request, a Actor) (int64, error) {
+func (s *Server) commerceOwner(r *http.Request, a Actor) (int64, error) {
 	id := num(a.User, "id")
 	if raw := r.URL.Query().Get("owner"); raw != "" {
 		selected, err := strconv.ParseInt(raw, 10, 64)
@@ -36,14 +36,20 @@ func commerceOwner(r *http.Request, a Actor) (int64, error) {
 			return 0, fail(400, "invalid seller")
 		}
 		if selected != id && !commerceAdmin(a) {
-			return 0, fail(403, "seller access denied")
+			yes, e := descendant(r.Context(), s.Store.Pool, id, selected)
+			if e != nil {
+				return 0, e
+			}
+			if !yes {
+				return 0, fail(403, "seller access denied")
+			}
 		}
 		id = selected
 	}
 	return id, nil
 }
 func storeDefaults() Data {
-	return Data{"enabled": false, "name": "VeloRay", "support_url": "", "logo_url": "", "description": ""}
+	return Data{"enabled": false, "name": "VeloRay", "support_url": "", "logo_url": "", "description": "", "subscription_branding": false, "subscription_origin": "", "subscription_verified": false}
 }
 func getStore(ctx context.Context, q Query, owner int64) (Data, error) {
 	d := storeDefaults()
@@ -62,6 +68,9 @@ func seller(ctx context.Context, q Query, id int64) (Data, error) {
 	u, err := get(ctx, q, "users", id)
 	if err != nil || !flag(u, "is_active") || !flag(u, "is_staff") || !permitted(u, "clients.write") {
 		return nil, fail(409, "seller is unavailable")
+	}
+	if e := resellerAncestorsActive(ctx, q, u); e != nil {
+		return nil, e
 	}
 	return u, nil
 }
@@ -135,6 +144,9 @@ func (s *Server) validateOffer(ctx context.Context, q Query, d Data) error {
 	if !visibleService(Actor{User: u}, service) {
 		return fail(403, "service is not assigned to this seller")
 	}
+	if num(u, "traffic_budget_bytes") > 0 && num(d, "traffic_bytes") == 0 {
+		return fail(400, "limited sellers require finite offer traffic grants")
+	}
 	ids, e := idArray(service, "inbound_ids", 200)
 	if e != nil {
 		return e
@@ -149,6 +161,9 @@ func (s *Server) validateOffer(ctx context.Context, q Query, d Data) error {
 		}
 		if !supportsClients(str(v, "protocol")) {
 			return fail(400, "service contains an inbound without managed users")
+		}
+		if e = offeredPolicy(str(v, "protocol"), obj(service, "defaults"), num(d, "traffic_bytes")); e != nil {
+			return fail(400, e.Error())
 		}
 	}
 	return nil
@@ -244,7 +259,7 @@ func orderView(d Data) Data {
 	return out
 }
 func (s *Server) commerceAPI(w http.ResponseWriter, r *http.Request, path string, a Actor) (any, int, error) {
-	owner, e := commerceOwner(r, a)
+	owner, e := s.commerceOwner(r, a)
 	if e != nil {
 		return nil, 0, e
 	}
@@ -253,6 +268,9 @@ func (s *Server) commerceAPI(w http.ResponseWriter, r *http.Request, path string
 	if part == "settings" {
 		return s.commerceSettings(w, r, a)
 	}
+	if part == "store/verify-domain" {
+		return s.verifyStoreDomain(w, r, a, owner)
+	}
 	if part == "store" {
 		if r.Method == "GET" {
 			d, e := getStore(ctx, s.Store.Pool, owner)
@@ -260,7 +278,7 @@ func (s *Server) commerceAPI(w http.ResponseWriter, r *http.Request, path string
 				d["url"] = strings.TrimRight(s.Config.PublicURL, "/") + "/shop?store=" + fmt.Sprint(owner)
 				d["owner_id"] = owner
 			}
-			return d, 200, e
+			return storeBrandView(d), 200, e
 		}
 		if r.Method != "PATCH" {
 			return nil, 0, fail(405, "method not allowed")
@@ -272,7 +290,7 @@ func (s *Server) commerceAPI(w http.ResponseWriter, r *http.Request, path string
 		if e != nil {
 			return nil, 0, e
 		}
-		if e = allowed(input, "enabled name support_url logo_url description"); e != nil {
+		if e = allowed(input, "enabled name support_url logo_url description subscription_branding subscription_origin"); e != nil {
 			return nil, 0, fail(400, e.Error())
 		}
 		if e = typed(input, storeDefaults()); e != nil {
@@ -283,7 +301,21 @@ func (s *Server) commerceAPI(w http.ResponseWriter, r *http.Request, path string
 			if e != nil {
 				return nil, e
 			}
+			oldOrigin := str(d, "subscription_origin")
 			d = merge(d, input)
+			origin, e := normalizeStoreOrigin(str(d, "subscription_origin"))
+			if e != nil {
+				return nil, e
+			}
+			d["subscription_origin"] = origin
+			if oldOrigin != origin {
+				d["subscription_verified"] = false
+				d["domain_verified_at"] = nil
+				d["_domain_proof"] = randomToken(24)
+				if _, e = tx.Exec(ctx, `DELETE FROM vr_store_domains WHERE owner_id=$1`, owner); e != nil {
+					return nil, e
+				}
+			}
 			if e = require(d, "name", 96); e != nil {
 				return nil, fail(400, e.Error())
 			}
@@ -295,7 +327,7 @@ func (s *Server) commerceAPI(w http.ResponseWriter, r *http.Request, path string
 			}
 			raw, _ := json.Marshal(d)
 			_, e = tx.Exec(ctx, `INSERT INTO vr_stores(owner_id,data) VALUES($1,$2) ON CONFLICT(owner_id) DO UPDATE SET data=excluded.data`, owner, string(raw))
-			return d, e
+			return storeBrandView(d), e
 		})
 		return out, 200, e
 	}

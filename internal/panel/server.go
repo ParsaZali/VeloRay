@@ -37,6 +37,7 @@ type Server struct {
 	WebhookHTTP  *http.Client
 	ExternalHTTP *http.Client
 	PaymentHTTP  *http.Client
+	LookupTXT    func(context.Context, string) ([]string, error)
 	Logger       *slog.Logger
 }
 type apiError struct {
@@ -159,6 +160,9 @@ func (s *Server) Handler() http.Handler {
 			d["status"] = "ok"
 			d["database"] = "ok"
 			d["version"] = Version
+			if nonce := r.URL.Query().Get("domain_probe"); len(nonce) >= 32 && subscriptionTokenPattern.MatchString(nonce) {
+				d["domain_instance"] = domainInstanceProof(s.Config.SecretKey, nonce)
+			}
 			writeJSON(w, 200, d)
 			return
 		}

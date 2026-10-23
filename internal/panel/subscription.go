@@ -117,6 +117,11 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := rows[0]
+	cfg, e = s.brandedSubscriptionSettings(ctx, s.Store.Pool, cfg, num(c, "owner_id"))
+	if e != nil {
+		s.respond(w, r, nil, 0, e)
+		return
+	}
 	if assetPath == "" && r.Method == "GET" && !oneOf(r.URL.Query().Get("format"), "stats", "info", "qr") {
 		history := &subscriptionHistoryWriter{ResponseWriter: w}
 		w = history
@@ -473,6 +478,7 @@ func (s *Server) portal(w http.ResponseWriter, r *http.Request, c, i, n, cfg Dat
 	_, clashErr := clashConfig(c, i, n)
 	d := map[string]any{"Locale": str(cfg, "default_locale"), "Direction": "ltr", "Compact": str(cfg, "subscription_template") == "compact", "Site": str(cfg, "site_name"), "Name": str(c, "name"), "Protocol": strings.ToUpper(str(i, "protocol")), "Host": str(n, "public_host"), "Active": "Active", "UsageLabel": "Traffic used", "ExpiryLabel": "Expires", "Used": fmtBytes(used), "Quota": quota, "Expiry": expiry, "Limited": limit > 0, "Percent": min(100, percent(used, limit)), "URL": url, "URLLabel": "Subscription URL", "CopyLabel": "Copy link", "CopyDoneLabel": "Link copied", "CopyFailedLabel": "Select and copy the link", "Connect": "Connection", "QRLabel": "Subscription QR code", "URILabel": "Connection URI", "AppsLabel": "Compatible apps", "SupportLabel": "Contact support", "ShowQR": flag(cfg, "subscription_show_qr"), "ShowApps": flag(cfg, "subscription_show_apps"), "ShowURI": flag(cfg, "subscription_show_connection_uri"), "Link": link, "Profile": profile, "Clash": clashErr == nil, "Support": str(cfg, "support_url"), "Footer": str(cfg, "subscription_footer"), "Announcement": str(cfg, "announcement"), "AnnouncementURL": str(cfg, "announcement_url"), "ProxyLabel": "Proxy account"}
 	_, singErr := singClientOutbound(c, i, n)
+	d["Logo"] = str(cfg, "subscription_logo_url")
 	_, xrayErr := xrayClientConfig(c, i, n)
 	d["SingBox"], d["Xray"] = singErr == nil, xrayErr == nil
 	if formats := obj(cfg, "_feed_formats"); len(formats) > 0 {
@@ -557,8 +563,8 @@ func (s *Server) portal(w http.ResponseWriter, r *http.Request, c, i, n, cfg Dat
 			return
 		}
 	}
-	if str(cfg, "subscription_template") == "custom" {
-		portalScriptPolicy(w, rendered.String())
+	if str(cfg, "subscription_template") == "custom" || str(cfg, "subscription_logo_url") != "" {
+		portalScriptPolicy(w, rendered.String(), str(cfg, "subscription_logo_url"))
 	}
 	if r.Method != "HEAD" {
 		_, _ = w.Write(rendered.Bytes())

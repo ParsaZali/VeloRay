@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useState,
@@ -38,8 +40,21 @@ import { Input, Select, Textarea } from "@/components/ui/controls";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog } from "@/components/common/dialog";
 import { CommerceBreakdown } from "@/components/commerce-breakdown";
+import { StoreDomain } from "@/components/store-domain";
 
-type Tab = "overview" | "offers" | "orders" | "wallet" | "store" | "gateway";
+const ResellerTeam = lazy(() =>
+  import("@/components/reseller-team").then((module) => ({
+    default: module.ResellerTeam,
+  })),
+);
+type Tab =
+  | "overview"
+  | "offers"
+  | "orders"
+  | "wallet"
+  | "store"
+  | "gateway"
+  | "team";
 const emptyStore: StoreBrand = {
   enabled: false,
   name: "VeloRay",
@@ -96,7 +111,7 @@ export function CommerceWorkspace() {
     admin = !!user?.is_superuser;
   const [tab, setTab] = useState<Tab>("overview"),
     [owner, setOwner] = useState(user?.id || 0),
-    [users, setUsers] = useState<AdminUser[]>([]);
+    [users, setUsers] = useState<Pick<AdminUser, "id" | "username">[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]),
     [orders, setOrders] = useState<Order[]>([]),
     [wallets, setWallets] = useState<Wallet[]>([]),
@@ -183,6 +198,16 @@ export function CommerceWorkspace() {
         });
       void api<Gateway>("/commerce/settings", { signal: c.signal })
         .then(setGateway)
+        .catch((e) => {
+          if (!c.signal.aborted) setError(commerceError(e));
+        });
+    } else if (can(user, "resellers.read")) {
+      void api<Pick<AdminUser, "id" | "username">[]>("/resellers", {
+        signal: c.signal,
+      })
+        .then((rows) =>
+          setUsers([{ id: user!.id, username: user!.username }, ...rows]),
+        )
         .catch((e) => {
           if (!c.signal.aborted) setError(commerceError(e));
         });
@@ -308,6 +333,9 @@ export function CommerceWorkspace() {
     ["orders", t("Orders", "سفارش‌ها")],
     ["wallet", t("Wallet & ledger", "کیف پول و تراکنش‌ها")],
     ["store", t("Storefront", "فروشگاه")],
+    ...(can(user, "resellers.read")
+      ? ([["team", t("Team", "زیرمجموعه‌ها")]] as [Tab, string][])
+      : []),
     ...(admin
       ? [["gateway", t("Payment gateway", "درگاه پرداخت")] as [Tab, string]]
       : []),
@@ -329,7 +357,7 @@ export function CommerceWorkspace() {
           </h2>
         </div>
         <div className="flex gap-2 items-center">
-          {admin && (
+          {(admin || can(user, "resellers.read")) && (
             <Field label={t("Seller", "فروشنده")}>
               <Select
                 value={owner}
@@ -392,6 +420,21 @@ export function CommerceWorkspace() {
         </p>
       ) : (
         <>
+          {tab === "team" && (
+            <Suspense fallback={<p role="status">{t("Loading…")}</p>}>
+              <ResellerTeam
+                owner={owner}
+                onNavigate={(id, name) => {
+                  setUsers((rows) =>
+                    rows.some((r) => r.id === id)
+                      ? rows
+                      : [...rows, { id, username: name }],
+                  );
+                  setOwner(id);
+                }}
+              />
+            </Suspense>
+          )}
           {tab === "overview" && (
             <>
               <div className="flex flex-wrap justify-end gap-2">
@@ -793,6 +836,8 @@ export function CommerceWorkspace() {
                           description: brand.description,
                           logo_url: brand.logo_url,
                           support_url: brand.support_url,
+                          subscription_branding: !!brand.subscription_branding,
+                          subscription_origin: brand.subscription_origin || "",
                         }),
                       }),
                     );
@@ -858,6 +903,18 @@ export function CommerceWorkspace() {
                       />
                     </Field>
                   )}
+                  <StoreDomain
+                    key={owner}
+                    owner={owner}
+                    brand={brand}
+                    editable={editable}
+                    onChange={(patch) =>
+                      setBrand((current) => ({ ...current, ...patch }))
+                    }
+                    onVerified={(result) =>
+                      setBrand((current) => ({ ...current, ...result }))
+                    }
+                  />
                   {editable && (
                     <Button disabled={busy} type="submit">
                       {t("Save")}

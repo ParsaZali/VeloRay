@@ -71,6 +71,9 @@ func (s *Server) authenticate(r *http.Request) (Actor, error) {
 	if !flag(a.User, "is_active") || !flag(a.User, "is_staff") {
 		return a, fail(403, "staff access required")
 	}
+	if e := resellerAncestorsActive(ctx, s.Store.Pool, a.User); e != nil {
+		return Actor{}, e
+	}
 	return a, nil
 }
 func (s *Server) authorize(ctx context.Context, a Actor, method, path string) error {
@@ -219,6 +222,9 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) (any, int, error)
 	}
 	if e != nil || !validPassword || !flag(user, "is_active") || !flag(user, "is_staff") {
 		return nil, 0, fail(401, "Username or password is incorrect")
+	}
+	if e = resellerAncestorsActive(r.Context(), tx, user); e != nil {
+		return nil, 0, e
 	}
 	if flag(user, "_totp_enabled") {
 		if str(input, "totp_code") == "" {

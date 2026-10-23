@@ -38,6 +38,10 @@ export type Order = {
   test_mode?: boolean;
 };
 export type StoreBrand = {
+  subscription_branding?: boolean;
+  subscription_origin?: string;
+  subscription_verified?: boolean;
+  domain_record?: { name: string; value: string; verified: boolean };
   enabled: boolean;
   name: string;
   description: string;
