@@ -1,6 +1,6 @@
 # Customer freeze and change review
 
-The **Customers** page can freeze an active customer with a finite expiry for 1–30 days, within a 30-day annual allowance. The panel first disables the customer's deployed connections and then stores their remaining time. It preserves credentials, usage and the canonical subscription token. Generic enable/expiry/renewal edits cannot bypass this saved state.
+The unified **Clients** page can freeze an active shared subscription with a finite expiry for 1–30 days, within a 30-day annual allowance. The panel first disables the customer's deployed connections and then stores their remaining time. It preserves credentials, usage and the canonical subscription token. Generic enable/expiry/renewal edits cannot bypass this saved state.
 
 Resume manually or let the worker resume automatically. If the panel was offline beyond the freeze deadline, the expiry is calculated from that original deadline, so an outage does not extend the freeze indefinitely. Resuming persists the deadline and queues node deployment even when the node is temporarily unreachable. The quota-renewal clock shifts by the actual bounded pause. Expired or exhausted accounts remain subject to their normal policy.
 

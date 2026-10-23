@@ -1,4 +1,5 @@
-import { SessionContext, can } from "@/lib/session";
+import { SessionContext, isReseller } from "@/lib/session";
+import { canVisit } from "@/lib/navigation";
 import { useLocale, t } from "@/lib/i18n";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Shell } from "@/components/layout/shell";
@@ -21,11 +22,6 @@ const OperationsPage = lazy(() =>
 const SubscriptionPoliciesPage = lazy(() =>
   import("@/pages/subscription-policies").then((module) => ({
     default: module.SubscriptionPoliciesPage,
-  })),
-);
-const CustomersPage = lazy(() =>
-  import("@/pages/customers").then((module) => ({
-    default: module.CustomersPage,
   })),
 );
 const ServicesPage = lazy(() =>
@@ -88,7 +84,6 @@ const AdminPage = lazy(() =>
 const meta: Record<RouteKey, [string, string]> = {
   operations: ["Operations", ""],
   "subscription-policies": ["Subscription policies", ""],
-  customers: ["Customers", ""],
   services: ["Services and plans", ""],
   profiles: ["Config profiles", ""],
   dashboard: ["Dashboard", "Traffic and server status"],
@@ -110,7 +105,7 @@ const routes: Record<string, RouteKey> = {
   "/dashboard": "dashboard",
   "/clients": "clients",
   "/subscription-policies": "subscription-policies",
-  "/customers": "customers",
+  "/customers": "clients",
   "/services": "services",
   "/profiles": "profiles",
   "/imports": "imports",
@@ -133,7 +128,6 @@ const paths: Record<RouteKey, string> = {
   dashboard: "/dashboard",
   clients: "/clients",
   "subscription-policies": "/subscription-policies",
-  customers: "/customers",
   services: "/services",
   profiles: "/profiles",
   imports: "/imports",
@@ -173,6 +167,13 @@ function PanelApp() {
   const [user, setUser] = useState<Session | null | undefined>(undefined);
   const initial = routes[window.location.pathname] || "dashboard";
   const [route, setRouteState] = useState<RouteKey>(initial);
+  const effectiveRoute: RouteKey = user?.two_factor_setup_required
+    ? "security"
+    : user && !canVisit(user, route)
+      ? canVisit(user, "dashboard")
+        ? "dashboard"
+        : "security"
+      : route;
   useEffect(() => {
     let active = true;
     const refresh = () =>
@@ -204,60 +205,34 @@ function PanelApp() {
       .catch(() => {});
   }, [user]);
   useEffect(() => {
-    if (user?.two_factor_setup_required) {
-      setRouteState("security");
-      if (window.location.pathname !== "/security")
-        history.replaceState({}, "", "/security");
-    }
-  }, [user?.two_factor_setup_required]);
-  useEffect(() => {
     const f = () =>
       setRouteState(routes[window.location.pathname] || "dashboard");
     window.addEventListener("popstate", f);
     return () => window.removeEventListener("popstate", f);
   }, []);
   useEffect(() => {
-    if (!user || user.two_factor_setup_required) return;
-    if (
-      (route === "operations" ||
-        route === "accounts" ||
-        route === "imports" ||
-        route === "profiles" ||
-        route === "subscription-policies") &&
-      !user.is_superuser
-    ) {
-      setRouteState("dashboard");
-      history.replaceState({}, "", "/dashboard");
-    } else if (
-      ["/admin", "/audit", "/subscriptions", "/traffic"].includes(
-        window.location.pathname,
-      )
-    )
-      history.replaceState({}, "", paths[route]);
-  }, [user, route]);
+    if (!user) return;
+    if (route !== effectiveRoute) setRouteState(effectiveRoute);
+    if (window.location.pathname !== paths[effectiveRoute])
+      history.replaceState({}, "", paths[effectiveRoute]);
+  }, [user, route, effectiveRoute]);
   const setRoute = (r: RouteKey) => {
+    if (
+      !user ||
+      !canVisit(user, r) ||
+      (user.two_factor_setup_required && r !== "security")
+    )
+      return;
     setRouteState(r);
     const p = paths[r];
     if (window.location.pathname !== p) history.pushState({}, "", p);
   };
   const page = useMemo(() => {
-    const access: Partial<Record<RouteKey, string>> = {
-      dashboard: "dashboard.read",
-      clients: "clients.read",
-      customers: "clients.read",
-      services: "clients.read",
-      inbounds: "inbounds.read",
-      outbounds: "outbounds.read",
-      routing: "routing_rules.read",
-      nodes: "nodes.read",
-      xray: "xray.read",
-      api: "api.read",
-    };
-    if (user && access[route] && !can(user, access[route]!))
+    if (user && !canVisit(user, effectiveRoute))
       return (
         <div role="status">{t("Access is not assigned to this account.")}</div>
       );
-    switch (route) {
+    switch (effectiveRoute) {
       case "operations":
         return user?.is_superuser ? <OperationsPage /> : <SettingsPage />;
       case "subscription-policies":
@@ -266,8 +241,6 @@ function PanelApp() {
         ) : (
           <SettingsPage />
         );
-      case "customers":
-        return <CustomersPage />;
       case "services":
         return <ServicesPage />;
       case "profiles":
@@ -297,7 +270,7 @@ function PanelApp() {
       default:
         return <SettingsPage />;
     }
-  }, [route, user?.is_superuser]);
+  }, [effectiveRoute, user]);
   if (user === undefined)
     return (
       <div className="grid min-h-screen place-items-center bg-[var(--bg)]">
@@ -309,13 +282,18 @@ function PanelApp() {
     );
   if (!user)
     return <LoginPage onSuccess={() => currentSession().then(setUser)} />;
-  const [title, subtitle] = meta[route];
+  const [title] = meta[effectiveRoute];
   return (
     <SessionContext.Provider value={user}>
       <Shell
-        route={route}
+        key={`${user.id}:${user.role}:${user.own_clients_only}:${user.permissions?.join("|")}`}
+        route={effectiveRoute}
         setRoute={setRoute}
-        title={t(title)}
+        title={
+          effectiveRoute === "services" && isReseller(user)
+            ? t("Sales & wallet", "فروش و کیف پول")
+            : t(title)
+        }
         subtitle=""
         user={user}
         onLogout={async () => {

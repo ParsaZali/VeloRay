@@ -103,7 +103,7 @@ Screenshots use demonstration accounts, not production credentials.
 
 | Area | What you can manage |
 |---|---|
-| **Users & customers** | Shared accounts across nodes, quotas, expiry, first-use activation, scheduled renewal, IP/HWID limits, bulk actions and token rotation |
+| **Users & subscriptions** | Shared accounts across nodes, quotas, expiry, first-use activation, scheduled renewal, IP/HWID limits, bulk actions and token rotation |
 | **Sales & billing** | React storefront, verified Zarinpal checkout, reserved inventory, wallet purchase/renew/top-up, immutable ledger, reseller hierarchy, credit transfers and currency-separated profit reports |
 | **Seller branding** | Individual store/subscription name, logo, support link and DNS/HTTPS-verified subscription domains |
 | **Telegram sales** | Customer bot and Mini App, verified Stars payments, private order history and automatic delivery with the same fulfillment workflow |
@@ -116,7 +116,7 @@ Screenshots use demonstration accounts, not production credentials.
 | **Traffic** | Durable counters, actual upload/download history, quota multipliers, charts, usage CSV and outbound accounting |
 | **Network** | Guided inbounds/outbounds, routing rules, chaining, Xray fallbacks/balancing and sing-box selectors/URL-test groups |
 | **Connection tests** | Generated client credentials, delivery-host selection and node-side protocol/HTTPS probes |
-| **Accounts & access** | Superuser, reseller, viewer and custom roles, inbound assignment, scoped API keys and account budgets |
+| **Accounts & access** | Focused reseller workspace, own-user isolation, administrator infrastructure controls, assigned connection choices, scoped API keys and account budgets |
 | **Authentication** | Local passwords and 2FA, recovery codes, optional OIDC, GitHub OAuth, Telegram OIDC and LDAPS |
 | **Operations** | Health monitors, deployment diagnostics, hosting budgets, monthly traffic cycles, Prometheus and audit history |
 | **Automation** | Telegram controls, signed webhooks, Discord/SMTP notifications, event preferences and scheduled backups |
@@ -177,7 +177,8 @@ Downloads are manual; enabling them does not schedule automatic core changes. Pa
 
 | Guide | Contents |
 |---|---|
-| [Customers and plans](docs/customer-management.md) | Shared accounts, policies, renewals and reseller budgets |
+| [Reseller workspace](docs/reseller-workspace.md) | Navigation, API boundaries, capacity and unified users |
+| [Users and plans](docs/customer-management.md) | Shared accounts, policies, renewals and reseller budgets |
 | [Subscriptions](docs/subscription-customization.md) | Templates, delivery hosts, device admission and feeds |
 | [Independent subscriptions](docs/independent-subscriptions.md) | HTTPS ports and listener rollover |
 | [MTProto & AmneziaWG](docs/mtproto-and-amneziawg.md) | Native setup, exports, accounting and limitations |

@@ -1,10 +1,20 @@
 # Shared customer accounts and network profiles
 
-VeloRay 1.0 exposes **Customers**, **Services and plans**, and **Config profiles**
-in the existing light/dark panel. The original Clients page remains the connection
-view. Panel administrator accounts are still under Accounts.
+**Clients** is the single user-management screen. Standalone users and shared
+subscriptions appear together, with one row per subscription. The former
+**Customers** screen is removed; `/customers` redirects to `/clients`.
+Shared subscriptions retain their existing data, quotas, credentials and URLs.
+**Services and plans** and **Config profiles** remain administrator tools.
+Panel operator accounts are managed under **Accounts**.
 
-## Customers and services
+## Users and services
+
+Shared accounts retain the `/api/customers` API for compatibility with storefront
+orders and integrations. The Clients editor creates a shared account when multiple
+connections or a service group are selected. Existing shared accounts can be
+edited, frozen/resumed, have their subscription links replaced or be deleted from
+the same Clients screen. A normal edit preserves the selected plan without
+reapplying changed plan defaults.
 
 `GET/POST /api/customers` and `GET/PATCH/DELETE /api/customers/{id}` use
 `clients.read/write/delete`. Resellers see only their own accounts. A customer
@@ -34,8 +44,10 @@ Selecting `plan_id` applies its defaults only on explicit customer creation/edit
 changing a plan never silently resets existing quotas. Explicit policy values in
 the request take precedence over defaults. Deleting a referenced service, shared
 connection, or inbound is refused until its memberships have been removed. Use the
-Customers editor to change a shared account's membership. Bulk Client actions act
-once per account and deploy every member node; delete shared accounts in Customers.
+Clients editor to change a shared account's membership. Bulk Client actions act
+once per account and deploy every member node. Bulk deletion from the unified UI
+explicitly submits `whole_accounts: true`; legacy requests omit it and still
+cannot accidentally delete a shared account through one connection ID.
 
 All membership and policy changes retain reseller account-count and total quota
 budgets. An unavailable node or invalid configuration rolls the database mutation

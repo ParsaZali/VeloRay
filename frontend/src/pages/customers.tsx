@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { api, type InboundItem } from "@/lib/api";
-import { can, useSession } from "@/lib/session";
+import { api, type ClientInboundOption } from "@/lib/api";
+import { can, isReseller, useSession } from "@/lib/session";
 import { t, useLocale } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
@@ -58,13 +58,16 @@ const policy: Policy = {
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const flip = (ids: number[], id: number) =>
   ids.includes(id) ? ids.filter((i) => i !== id) : [...ids, id];
-export function CustomersPage() {
-  return <Workspace kind="customers" />;
-}
 export function ServicesPage() {
   const session = useSession();
   useLocale();
   const [section, setSection] = useState("services");
+  if (isReseller(session))
+    return (
+      <Suspense fallback={<p role="status">{t("Loading…")}</p>}>
+        <CommerceWorkspace />
+      </Suspense>
+    );
   return (
     <div className="space-y-5">
       {can(session, "commerce.read") && (
@@ -107,7 +110,7 @@ function Workspace({ kind }: { kind: "customers" | "services" }) {
       : can(session, "clients.write");
   const [rows, setRows] = useState<Item[]>([]),
     [plans, setPlans] = useState<Item[]>([]),
-    [inbounds, setInbounds] = useState<InboundItem[]>([]),
+    [inbounds, setInbounds] = useState<ClientInboundOption[]>([]),
     [editor, setEditor] = useState<Item | null>(null),
     [deleting, setDeleting] = useState<Item | null>(null),
     [rotating, setRotating] = useState<Item | null>(null),
@@ -132,7 +135,7 @@ function Workspace({ kind }: { kind: "customers" | "services" }) {
       const [a, b, c] = await Promise.all([
         api<Item[]>(`/${kind}`, { signal }),
         services ? Promise.resolve([]) : api<Item[]>("/services", { signal }),
-        api<InboundItem[]>("/inbounds", { signal }),
+        api<ClientInboundOption[]>("/clients/inbound-options", { signal }),
       ]);
       if (!signal?.aborted) {
         setRows(a);

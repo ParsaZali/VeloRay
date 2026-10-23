@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ArrowDownRight, Copy, Plus, Users, Wallet } from "lucide-react";
-import { api, type InboundItem } from "@/lib/api";
+import { api, type ClientInboundOption } from "@/lib/api";
 import { can, useSession } from "@/lib/session";
 import { amountLabel } from "@/lib/commerce";
 import { t, useLocale } from "@/lib/i18n";
@@ -63,7 +63,7 @@ export function ResellerTeam({
   const session = useSession();
   const [rows, setRows] = useState<Reseller[]>([]),
     [policy, setPolicy] = useState<Reseller | null>(null),
-    [inbounds, setInbounds] = useState<InboundItem[]>([]),
+    [inbounds, setInbounds] = useState<ClientInboundOption[]>([]),
     [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -85,7 +85,7 @@ export function ResellerTeam({
         const [children, p, assigned] = await Promise.all([
           api<Reseller[]>(`/resellers?owner=${owner}`, { signal }),
           api<Reseller>(`/resellers/policy?owner=${owner}`, { signal }),
-          api<InboundItem[]>("/inbounds", { signal }),
+          api<ClientInboundOption[]>("/clients/inbound-options", { signal }),
         ]);
         if (!signal?.aborted) {
           setRows(children);

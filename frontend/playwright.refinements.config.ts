@@ -6,6 +6,7 @@ export default defineConfig({
     "commerce-workflow.spec.ts",
     "passkeys-workflow.spec.ts",
     "geo-updates-workflow.spec.ts",
+    "reseller-workspace.spec.ts",
   ],
   workers: 1,
   retries: 0,
