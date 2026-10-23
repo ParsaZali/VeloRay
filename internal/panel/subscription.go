@@ -40,7 +40,7 @@ func clashConfig(c, i, n Data) (Data, error) {
 	case "shadowsocks":
 		v["type"] = "ss"
 		v["cipher"] = fallback(str(obj(i, "protocol_settings"), "method"), "aes-256-gcm")
-		v["password"] = str(c, "credential")
+		v["password"] = ssClientPassword(c, i)
 	case "shadowtls":
 		v["type"], v["cipher"], v["udp"] = "ss", shadowTLSMethod, false
 		v["password"] = str(obj(i, "protocol_settings"), "psk") + ":" + str(c, "credential")

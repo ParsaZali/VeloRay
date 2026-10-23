@@ -318,7 +318,7 @@ func (s *Server) runJob(ctx context.Context, id int64) error {
 	}
 	return e
 }
-func (s *Server) Worker(ctx context.Context) {
+func (s *Server) workerLoops(ctx context.Context) {
 	var monitors sync.WaitGroup
 	for worker := 0; worker < 4; worker++ {
 		monitors.Add(1)
@@ -341,7 +341,9 @@ func (s *Server) Worker(ctx context.Context) {
 	defer monitors.Wait()
 
 	// Network-dependent housekeeping cannot delay live client telemetry.
+	monitors.Add(1)
 	go func() {
+		defer monitors.Done()
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -350,6 +352,9 @@ func (s *Server) Worker(ctx context.Context) {
 			}
 			if e := s.rollNodeBilling(ctx); e != nil && ctx.Err() == nil {
 				s.Logger.Warn("billing period update failed", "error", e)
+			}
+			if e := s.fulfillPaidOrders(ctx); e != nil && ctx.Err() == nil {
+				s.Logger.Warn("paid order fulfillment pending", "error", "check commerce orders")
 			}
 			if e := s.scanLifecycleAlerts(ctx); e != nil && ctx.Err() == nil {
 				s.Logger.Warn("lifecycle alert scan failed", "error", e)
@@ -367,6 +372,9 @@ func (s *Server) Worker(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
+		if e := s.resumeFrozenCustomers(ctx); e != nil && ctx.Err() == nil {
+			s.Logger.Warn("subscription resume pending", "error", e)
+		}
 		if e := s.reconcileNodes(ctx); e != nil && ctx.Err() == nil {
 			s.Logger.Warn("reconciliation failed", "error", e)
 		}

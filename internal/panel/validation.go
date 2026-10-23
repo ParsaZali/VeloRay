@@ -125,6 +125,9 @@ func validateNode(c Config, d Data) error {
 	if str(d, "_agent_token") == "" {
 		return errors.New("agent_token is required")
 	}
+	if pin := str(d, "agent_cert_sha256"); pin != "" && !certificateFingerprint.MatchString(pin) {
+		return errors.New("certificate fingerprint must contain 64 lowercase hex characters")
+	}
 	if flag(d, "is_local") && !loop {
 		return errors.New("local node must use a loopback agent")
 	}
@@ -253,8 +256,22 @@ func validateInbound(ctx context.Context, q Query, c Config, d Data) error {
 	if oneOf(p, "wireguard", "amneziawg") && (!validKey(str(ps, "secret_key")) || !validKey(str(ps, "public_key"))) {
 		return errors.New("WireGuard requires a server keypair")
 	}
-	if p == "shadowsocks" && !oneOf(fallback(str(ps, "method"), "aes-256-gcm"), "aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305") {
+	if p == "shadowsocks" && !oneOf(fallback(str(ps, "method"), "aes-256-gcm"), "aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305", "2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm") {
 		return errors.New("unsupported Shadowsocks method")
+	}
+	if e := validateShadowsocks2022(d); e != nil {
+		return e
+	}
+	if shadowsocks2022(d) && num(d, "id") > 0 {
+		clients, e := list(ctx, q, "clients", "WHERE inbound_id=$1", num(d, "id"))
+		if e != nil {
+			return e
+		}
+		for _, c := range clients {
+			if !validSSKey(str(c, "credential"), ssKeyBytes(d)) {
+				return errors.New("existing user keys are incompatible with this cipher; rotate them or create a new inbound")
+			}
+		}
 	}
 	if p == "tunnel" && !flag(ps, "follow_redirect") && (num(ps, "rewrite_port") < 1 || num(ps, "rewrite_port") > 65535) {
 		return errors.New("tunnel requires a target port or follow_redirect")
@@ -267,6 +284,9 @@ func validateInbound(ctx context.Context, q Query, c Config, d Data) error {
 	return nil
 }
 func validateClient(ctx context.Context, q Query, d Data) error {
+	if frozen(d) && flag(d, "enabled") {
+		return errors.New("resume the frozen subscription before enabling it")
+	}
 	if n := num(d, "hwid_limit"); n < -1 || n > 1000 {
 		return errors.New("HWID limit must be -1–1000")
 	}
@@ -321,6 +341,8 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 	if credential == "" {
 		if oneOf(p, "vless", "vmess", "tuic") {
 			d["credential"] = uuid()
+		} else if shadowsocks2022(i) {
+			d["credential"] = ssKey(ssKeyBytes(i))
 		} else if p == "shadowtls" {
 			d["credential"] = shadowTLSKey()
 		} else {
@@ -374,10 +396,23 @@ func validateClient(ctx context.Context, q Query, d Data) error {
 		d["protocol_settings"] = ps
 	}
 	if p == "shadowsocks" {
-		var n int
-		_ = q.QueryRow(ctx, `SELECT count(*) FROM vr_clients WHERE inbound_id=$1 AND id<>$2`, num(d, "inbound"), num(d, "id")).Scan(&n)
-		if n > 0 {
-			return errors.New("Shadowsocks supports one client per inbound")
+		if shadowsocks2022(i) {
+			if !validSSKey(str(d, "credential"), ssKeyBytes(i)) {
+				return fmt.Errorf("Shadowsocks 2022 user key must be base64-encoded %d bytes", ssKeyBytes(i))
+			}
+			var duplicate bool
+			if e := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM vr_clients WHERE inbound_id=$1 AND data->>'credential'=$2 AND id<>$3)`, num(d, "inbound"), str(d, "credential"), num(d, "id")).Scan(&duplicate); e != nil {
+				return e
+			}
+			if duplicate {
+				return errors.New("Shadowsocks 2022 user keys must be unique within an inbound")
+			}
+		} else {
+			var n int
+			_ = q.QueryRow(ctx, `SELECT count(*) FROM vr_clients WHERE inbound_id=$1 AND id<>$2`, num(d, "inbound"), num(d, "id")).Scan(&n)
+			if n > 0 {
+				return errors.New("Shadowsocks supports one client per inbound")
+			}
 		}
 	}
 	if oneOf(p, "wireguard", "amneziawg") {

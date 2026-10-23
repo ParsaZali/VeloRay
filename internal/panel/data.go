@@ -121,7 +121,7 @@ func deepMerge(a, b Data) Data {
 func defaults(kind string) Data {
 	switch kind {
 	case "nodes":
-		return Data{"profile_id": 0, "name": "", "public_host": "", "agent_url": "", "enabled": true, "verify_tls": true, "is_local": false, "status": "unknown", "xray_version": "", "last_seen_at": nil, "config_patch": Data{}, "deploy_state": "pending", "last_deploy_error": ""}
+		return Data{"profile_id": 0, "name": "", "public_host": "", "agent_url": "", "agent_cert_sha256": "", "enabled": true, "verify_tls": true, "is_local": false, "status": "unknown", "xray_version": "", "last_seen_at": nil, "config_patch": Data{}, "deploy_state": "pending", "last_deploy_error": ""}
 	case "inbounds":
 		return Data{"name": "", "node": 0, "listen": "0.0.0.0", "port": 0, "core": "xray", "protocol": "vless", "transport": "raw", "security": "none", "flow": "", "path": "/", "host_header": "", "service_name": "", "tls_server_name": "", "tls_cert_file": "", "tls_key_file": "", "reality_dest": "", "reality_server_name": "", "reality_private_key": "", "reality_public_key": "", "reality_short_id": "", "protocol_settings": Data{}, "stream_settings": Data{}, "enabled": true}
 	case "clients":

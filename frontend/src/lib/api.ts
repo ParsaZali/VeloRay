@@ -148,6 +148,7 @@ export async function logout() {
 }
 
 export type NodeItem = {
+  agent_cert_sha256?: string;
   id: number;
   name: string;
   public_host: string;

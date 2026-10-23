@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/common/dialog";
 import { PageHeader } from "@/components/common/page-header";
+import { PanelCluster } from "@/components/panel-cluster";
 type Result = {
   ok: boolean;
   latency_ms: number;
@@ -561,24 +562,27 @@ export function OperationsPage() {
         </form>
       )}
       {tab === "diagnostics" && (
-        <section className="rounded-md border border-[var(--border)] p-4">
-          <h2 className="text-[14px] font-medium">
-            {t("Deployment diagnostics")}
-          </h2>
-          <p className="my-3 text-[11px] text-[var(--muted)]">
-            {t(
-              "Shows runtime status and recent operation IDs, states and hashes. Credentials and full configurations are excluded.",
+        <div className="space-y-4">
+          <PanelCluster />
+          <section className="rounded-md border border-[var(--border)] p-4">
+            <h2 className="text-[14px] font-medium">
+              {t("Deployment diagnostics")}
+            </h2>
+            <p className="my-3 text-[11px] text-[var(--muted)]">
+              {t(
+                "Shows runtime status and recent operation IDs, states and hashes. Credentials and full configurations are excluded.",
+              )}
+            </p>
+            {diagnostics && (
+              <pre
+                dir="ltr"
+                className="max-h-[65vh] overflow-auto whitespace-pre-wrap break-all text-[11px]"
+              >
+                {JSON.stringify(diagnostics, null, 2)}
+              </pre>
             )}
-          </p>
-          {diagnostics && (
-            <pre
-              dir="ltr"
-              className="max-h-[65vh] overflow-auto whitespace-pre-wrap break-all text-[11px]"
-            >
-              {JSON.stringify(diagnostics, null, 2)}
-            </pre>
-          )}
-        </section>
+          </section>
+        </div>
       )}
       {loading && tab !== "monitors" && <p role="status">{t("Loading…")}</p>}
       {editor && (

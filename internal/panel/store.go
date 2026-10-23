@@ -53,12 +53,21 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(842100,0)"); err != nil {
 		return err
 	}
-	raw, err := migrations.ReadFile("migrations/001_initial.sql")
+	entries, err := migrations.ReadDir("migrations")
 	if err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, string(raw)); err != nil {
-		return err
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		raw, err := migrations.ReadFile("migrations/" + entry.Name())
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, string(raw)); err != nil {
+			return err
+		}
 	}
 	settings, _ := json.Marshal(defaultSettings())
 	if _, err = tx.Exec(ctx, "INSERT INTO vr_settings(id,data) VALUES(1,$1) ON CONFLICT DO NOTHING", string(settings)); err != nil {

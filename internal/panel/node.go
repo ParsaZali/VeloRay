@@ -3,8 +3,10 @@ package panel
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -74,6 +76,23 @@ func (s *Server) nodeCall(ctx context.Context, node Data, path string, payload a
 	if client == nil {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
 		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: !flag(node, "verify_tls")}
+		if pin := str(node, "agent_cert_sha256"); pin != "" {
+			if !certificateFingerprint.MatchString(pin) {
+				return nil, errors.New("invalid agent certificate fingerprint")
+			}
+			transport.TLSClientConfig.InsecureSkipVerify = true // The exact leaf certificate is verified below.
+			transport.TLSClientConfig.VerifyConnection = func(state tls.ConnectionState) error {
+				if len(state.PeerCertificates) == 0 {
+					return errors.New("agent certificate missing")
+				}
+				leaf := state.PeerCertificates[0]
+				sum := sha256.Sum256(leaf.Raw)
+				if hex.EncodeToString(sum[:]) != pin || time.Now().Before(leaf.NotBefore) || time.Now().After(leaf.NotAfter) {
+					return errors.New("agent certificate does not match its enrollment")
+				}
+				return nil
+			}
+		}
 		if ca := os.Getenv("VELORAY_AGENT_CA_FILE"); ca != "" {
 			raw, e := os.ReadFile(ca)
 			if e != nil {
@@ -173,7 +192,7 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 		}
 		for _, c := range cs {
 			clients[num(c, "id")] = c
-			if str(i, "protocol") == "shadowsocks" {
+			if str(i, "protocol") == "shadowsocks" && !shadowsocks2022(i) {
 				ss[num(i, "id")] = c
 			}
 		}
@@ -236,7 +255,7 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 				cid, _ := strconv.ParseInt(p[1], 10, 64)
 				client = clients[cid]
 			}
-			if client != nil && str(bound[num(client, "inbound")], "protocol") == "shadowsocks" {
+			if client != nil && str(bound[num(client, "inbound")], "protocol") == "shadowsocks" && !shadowsocks2022(bound[num(client, "inbound")]) {
 				client = nil
 			}
 		} else if parts[0] == "inbound" && strings.HasPrefix(parts[1], "in-") {

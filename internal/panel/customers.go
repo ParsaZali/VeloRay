@@ -110,6 +110,7 @@ func clientNodes(ctx context.Context, q Query, c Data) ([]int64, error) {
 }
 func (s *Server) customerView(ctx context.Context, q Query, d Data) (Data, error) {
 	out := public(d)
+	addFreezeView(out, d)
 	members, e := customerMembers(ctx, q, num(d, "id"))
 	if e != nil {
 		return nil, e
@@ -251,6 +252,13 @@ func (s *Server) customersAPI(w http.ResponseWriter, r *http.Request, path strin
 	ctx := r.Context()
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	id := int64(0)
+	if len(parts) == 3 && oneOf(parts[2], "freeze", "resume") {
+		id, e := strconv.ParseInt(parts[1], 10, 64)
+		if e != nil || id < 1 {
+			return nil, 0, fail(404, "customer not found")
+		}
+		return s.customerFreezeAPI(w, r, id, parts[2], a)
+	}
 	if len(parts) == 2 && parts[1] == "bulk" {
 		return s.bulkCustomers(w, r, a)
 	}
@@ -376,6 +384,9 @@ func (s *Server) customersAPI(w http.ResponseWriter, r *http.Request, path strin
 			return nil, remove(ctx, tx, "customers", id)
 		}
 		prior := clone(d)
+		if e := validateFrozenEdit(prior, input); e != nil {
+			return nil, e
+		}
 		d = merge(d, input)
 		if !flag(a.User, "is_superuser") && input["owner_id"] != nil && num(input, "owner_id") != num(prior, "owner_id") {
 			return nil, fail(403, "only administrators can assign customer owners")
@@ -465,6 +476,13 @@ func visibleService(a Actor, d Data) bool {
 func (s *Server) servicesAPI(w http.ResponseWriter, r *http.Request, path string, a Actor) (any, int, error) {
 	ctx := r.Context()
 	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) == 3 && parts[2] == "impact" {
+		id, e := strconv.ParseInt(parts[1], 10, 64)
+		if e != nil || id < 1 {
+			return nil, 0, fail(404, "service not found")
+		}
+		return s.serviceImpactAPI(w, r, id, a)
+	}
 	id := int64(0)
 	if len(parts) > 2 {
 		return nil, 0, fail(404, "endpoint not found")
@@ -509,10 +527,10 @@ func (s *Server) servicesAPI(w http.ResponseWriter, r *http.Request, path string
 		if e != nil {
 			return nil, 0, e
 		}
-		if e = allowed(input, "name note inbound_ids defaults"); e != nil {
+		if e = allowed(input, "name note inbound_ids defaults expected_revision"); e != nil {
 			return nil, 0, fail(400, e.Error())
 		}
-		if e = typed(input, Data{"name": "", "note": "", "inbound_ids": []any{}, "defaults": Data{}}); e != nil {
+		if e = typed(input, Data{"name": "", "note": "", "inbound_ids": []any{}, "defaults": Data{}, "expected_revision": ""}); e != nil {
 			return nil, 0, fail(400, e.Error())
 		}
 	}
@@ -556,6 +574,16 @@ func (s *Server) servicesAPI(w http.ResponseWriter, r *http.Request, path string
 				return nil, e
 			}
 		}
+		if expected := str(input, "expected_revision"); expected != "" {
+			revision, e := serviceRevision(ctx, tx, d)
+			if e != nil {
+				return nil, e
+			}
+			if revision != expected {
+				return nil, fail(409, "service membership changed; refresh the impact preview")
+			}
+		}
+		delete(input, "expected_revision")
 		users, e := list(ctx, tx, "customers", "WHERE data->'service_ids' @> $1::jsonb", fmt.Sprintf("[%d]", id))
 		if e != nil {
 			return nil, e

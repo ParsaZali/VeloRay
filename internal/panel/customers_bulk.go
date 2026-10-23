@@ -122,6 +122,9 @@ func (s *Server) bulkCustomers(w http.ResponseWriter, r *http.Request, a Actor) 
 			}
 			prior := clone(d)
 			if action == "patch" {
+				if e = validateFrozenEdit(prior, patch); e != nil {
+					return nil, e
+				}
 				d = merge(d, patch)
 				reanchorRenewal(d, prior, patch)
 				// Access edits do not implicitly reapply defaults from an old plan.

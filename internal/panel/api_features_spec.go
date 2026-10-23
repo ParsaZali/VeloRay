@@ -44,6 +44,7 @@ func featureAPISpec(paths Data) Data {
 	paths["/api/clients/{id}/connection-test"] = Data{"parameters": param, "post": Data{"summary": "Test an owned, active client from its node through the actual inbound; clients.write required. Test traffic is billable and can activate first use.", "requestBody": body(object(Data{"inbound": Data{"type": "integer", "minimum": 1}, "host_index": Data{"type": "integer", "minimum": 0, "maximum": 200, "default": 0}, "url": Data{"type": "string", "description": "Public HTTPS target; default gstatic generate_204. MTProto instead checks Telegram resPQ without login."}})), "responses": ok("ok, latency_ms, status_code, network_tested, vantage=node, traffic_counts and optional safe error. No credentials/configuration in response. Native/Chromium client availability depends on installed engine.")}}
 
 	operationsAPISpec(paths, schemas)
+	expansionAPISpec(paths, schemas)
 	networkPolicyAPISpec(paths, schemas)
 	subscriptionTemplateAPISpec(paths, schemas)
 	return schemas

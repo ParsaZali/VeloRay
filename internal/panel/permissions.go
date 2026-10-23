@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var permissionCatalog = []string{"dashboard.read", "clients.read", "clients.write", "clients.delete", "inbounds.read", "inbounds.write", "nodes.read", "nodes.write", "traffic.read", "xray.read", "xray.write", "settings.read", "settings.write", "api.read", "outbounds.read", "outbounds.write", "routing_rules.read", "routing_rules.write"}
+var permissionCatalog = []string{"commerce.read", "commerce.write", "dashboard.read", "clients.read", "clients.write", "clients.delete", "inbounds.read", "inbounds.write", "nodes.read", "nodes.write", "traffic.read", "xray.read", "xray.write", "settings.read", "settings.write", "api.read", "outbounds.read", "outbounds.write", "routing_rules.read", "routing_rules.write"}
 
 func accountRole(u Data) string {
 	if flag(u, "is_superuser") {
@@ -24,7 +24,7 @@ func permissions(u Data) []string {
 	}
 	switch str(u, "role") {
 	case "reseller":
-		return []string{"dashboard.read", "clients.read", "clients.write", "clients.delete", "inbounds.read", "traffic.read", "settings.read", "api.read", "outbounds.read", "routing_rules.read"}
+		return []string{"commerce.read", "commerce.write", "dashboard.read", "clients.read", "clients.write", "clients.delete", "inbounds.read", "traffic.read", "settings.read", "api.read", "outbounds.read", "routing_rules.read"}
 	case "viewer":
 		return []string{"dashboard.read", "clients.read", "inbounds.read", "nodes.read", "traffic.read", "xray.read", "settings.read", "api.read", "outbounds.read", "routing_rules.read"}
 	case "custom":
@@ -218,6 +218,24 @@ func (s *Server) roleAuthorize(a Actor, method, path string) error {
 	} // Only safe defaults are exposed to restricted accounts.
 	resource := strings.Split(path, "/")[0]
 	switch resource {
+	case "cluster":
+		if !commerceAdmin(a) {
+			return fail(403, "administrator access required")
+		}
+		return nil
+	case "node-enrollment":
+		if !commerceAdmin(a) {
+			return fail(403, "administrator access required")
+		}
+		return nil
+	case "commerce":
+		if method == http.MethodGet && permitted(a.User, "commerce.read") {
+			return nil
+		}
+		if method != http.MethodGet && permitted(a.User, "commerce.write") {
+			return nil
+		}
+		return fail(403, "commerce access is not assigned to this account")
 	case "customers":
 		resource = "clients"
 	case "services":

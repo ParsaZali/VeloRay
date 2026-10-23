@@ -3,6 +3,8 @@ import { Select, Input } from "@/components/ui/controls";
 import { t } from "@/lib/i18n";
 import { useLocale, tx } from "@/lib/i18n";
 const permissionOptions = [
+  ["commerce.read", "View sales and wallet"],
+  ["commerce.write", "Manage offers and wallet purchases"],
   ["dashboard.read", "View dashboard"],
   ["clients.read", "View clients"],
   ["clients.write", "Create and edit clients"],

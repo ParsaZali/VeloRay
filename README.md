@@ -104,7 +104,9 @@ Screenshots use demonstration accounts, not production credentials.
 | Area | What you can manage |
 |---|---|
 | **Users & customers** | Shared accounts across nodes, quotas, expiry, first-use activation, scheduled renewal, IP/HWID limits, bulk actions and token rotation |
+| **Sales & billing** | React storefront, verified Zarinpal checkout, wallet purchase/renew/top-up, immutable ledger, credit limits, settlement records and currency-separated reports |
 | **Multi-node** | Local and remote agents, scoped deployments, listener inspection, configuration validation, journals and compensated rollback |
+| **Availability** | Single-use verified node enrollment, certificate pinning, automatic background-worker election for active/standby panels, bounded customer freeze and service impact review |
 | **Subscriptions** | A simple default page, custom HTML files, configurable URL paths, a separate HTTPS port, QR codes and app-specific exports |
 | **Core versions** | Opt-in manual downloads from official GitHub releases, verified SHA-256, version selection, configuration checks and previous-version rollback |
 | **Traffic** | Durable counters, actual upload/download history, quota multipliers, charts, usage CSV and outbound accounting |
@@ -123,6 +125,8 @@ Screenshots use demonstration accounts, not production credentials.
 | **Xray** | VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, HTTP, SOCKS, tunnel and TUN |
 | **sing-box** | VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC v5, Snell v6, Naive TLS, ShadowTLS v3, HTTP and SOCKS |
 | **VeloRay Native** | MTProto/FakeTLS and AmneziaWG with per-user traffic, credentials, expiry and revocation |
+
+Shadowsocks 2022 AES multiuser is available on both Xray and sing-box, with separate user keys/counters and compatible app exports. See the [protocol guide](docs/shadowsocks-2022.md).
 
 Transports include **TCP/raw, WebSocket, gRPC, XHTTP, HTTPUpgrade, mKCP and QUIC** where supported by the selected engine. TLS and REALITY are available for compatible combinations. The editor validates supported combinations instead of advertising unavailable ones.
 
@@ -157,6 +161,12 @@ Downloads are manual; enabling them does not schedule automatic core changes. Pa
 [Container & cloud deployment →](docs/container-deployment.md) · [Platform/database scope →](docs/platform-and-database-assessment.md)
 
 ## Documentation
+
+- [Sales, payments and wallets](docs/commerce.md)
+- [Customer freeze and service impact review](docs/customer-freeze-and-impact.md)
+- [Single-use node enrollment](docs/node-enrollment.md)
+- [Active/standby panel deployment](docs/panel-availability.md)
+- [Expansion tracker and remaining integrations](docs/expansion-roadmap.md)
 
 | Guide | Contents |
 |---|---|

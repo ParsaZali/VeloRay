@@ -250,13 +250,19 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data, fieldKey ...str
 			continue
 		}
 		if p == "shadowsocks" {
-			meteredInbounds = append(meteredInbounds, v["tag"])
+			if !shadowsocks2022(i) {
+				meteredInbounds = append(meteredInbounds, v["tag"])
+			}
 			if len(accounts) == 0 {
 				continue
 			}
 			u := accounts[0].(Data)
 			v["method"] = fallback(str(obj(i, "protocol_settings"), "method"), "aes-256-gcm")
 			v["password"] = str(u, "password")
+			if shadowsocks2022(i) {
+				v["password"] = str(obj(i, "protocol_settings"), "password")
+				v["users"] = accounts
+			}
 		} else {
 			v["users"] = accounts
 		}
@@ -348,6 +354,7 @@ func singClientOutbound(c, i, n Data) (Data, error) {
 	}
 	if p == "shadowsocks" {
 		v["method"] = fallback(str(obj(i, "protocol_settings"), "method"), "aes-256-gcm")
+		v["password"] = ssClientPassword(c, i)
 	}
 	if str(i, "security") != "none" {
 		tls := Data{"enabled": true, "server_name": fallback(str(i, "tls_server_name"), str(n, "public_host"))}
