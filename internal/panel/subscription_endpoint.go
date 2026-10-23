@@ -17,6 +17,9 @@ import (
 
 // A requested port never changes customer links until the listener is applied.
 func subscriptionOrigin(c Config, cfg Data) string {
+	if origin := str(cfg, "_store_origin"); origin != "" {
+		return origin
+	}
 	u, err := url.Parse(c.PublicURL)
 	port := num(obj(cfg, "_subscription_endpoint"), "applied_port")
 	if err != nil || u.Host == "" || port < 1 || port > 65535 {
@@ -27,6 +30,14 @@ func subscriptionOrigin(c Config, cfg Data) string {
 }
 func (s *Server) subscriptionURL(ctx context.Context, q Query, token string) (string, error) {
 	cfg, err := settings(ctx, q)
+	if err != nil {
+		return "", err
+	}
+	owner, err := subscriptionTokenOwner(ctx, q, token)
+	if err != nil {
+		return "", err
+	}
+	cfg, err = s.brandedSubscriptionSettings(ctx, q, cfg, owner)
 	if err != nil {
 		return "", err
 	}

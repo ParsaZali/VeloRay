@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { fa } from "./fa";
+import { expansionFA } from "./expansion-fa";
 export type Locale = "en" | "fa";
 let activeLocale: Locale =
   localStorage.getItem("veloray-locale") === "fa" ||
@@ -15,7 +16,7 @@ let activeLocale: Locale =
     : "en";
 export function t(source: string, persian?: string): string {
   if (activeLocale === "en") return source;
-  return persian ?? fa[source] ?? source;
+  return persian ?? expansionFA[source] ?? fa[source] ?? source;
 }
 export const localeName = () => (activeLocale === "fa" ? "fa-IR" : "en-US");
 const LocaleContext = createContext({

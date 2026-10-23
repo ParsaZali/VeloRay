@@ -29,7 +29,7 @@ func xrayClientConfig(c, i, n Data) (Data, error) {
 		server["password"] = str(c, "credential")
 		settings["servers"] = []any{server}
 	case "shadowsocks":
-		server["password"] = str(c, "credential")
+		server["password"] = ssClientPassword(c, i)
 		server["method"] = fallback(str(obj(i, "protocol_settings"), "method"), "aes-256-gcm")
 		settings["servers"] = []any{server}
 	}

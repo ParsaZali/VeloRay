@@ -17,6 +17,53 @@ const node = {
   status: "ok",
   config_patch: {},
 };
+test("sales workspace publishes an explicit-currency offer and preserves the sidebar", async ({page}) => {
+  const offer = {id:1,owner_id:1,name:"Monthly",description:"",enabled:true,service_id:7,amount:10000,currency:"IRT",duration_days:30,traffic_bytes:107374182400,cost_amount:2000};
+  await panel(page,"/services",{
+    services:{json:[{id:7,name:"Primary",note:"",inbound_ids:[],defaults:{}}]},
+    "admin/users":{json:[{id:1,username:"admin"}]},
+    "commerce/settings":{json:{payments_enabled:false,merchant_configured:false,sandbox:false}},
+    "commerce/offers":{json:[offer]},"commerce/orders":{json:[]},"commerce/wallets":{json:[{currency:"IRT",balance:70000,credit_limit:0}]},"commerce/ledger":{json:[]},
+    "commerce/store":{json:{enabled:true,name:"My store",description:"",support_url:"",logo_url:"",url:"http://127.0.0.1:8861/shop?store=1"}},
+    "commerce/reports":{json:{summary:[{currency:"IRT",revenue:10000,orders:1,unit_cost:2000,operating_cost:1000,profit:7000}],by_offer:[],by_node:[]}},
+  });
+  await page.getByRole("button",{name:"Sales & billing",exact:true}).click();
+  await expect(page.getByText("7,000 toman",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"Offers",exact:true}).click();
+  await page.getByRole("button",{name:"Edit",exact:true}).click();
+  const dialog=page.getByRole("dialog");await dialog.getByLabel("Price",{exact:true}).fill("15000");
+  let posted:any;
+  await page.route("**/api/commerce/offers/1?owner=1",async route=>{posted=route.request().postDataJSON();await route.fulfill({json:{...offer,...posted}});});
+  await dialog.getByRole("button",{name:"Save",exact:true}).click();
+  await expect(dialog).not.toBeVisible();
+  expect(posted.amount).toBe(15000);expect(posted.currency).toBe("IRT");expect(posted).not.toHaveProperty("id");expect(posted).not.toHaveProperty("owner_id");
+  await page.getByRole("button",{name:"Wallet & ledger",exact:true}).click();
+  await expect(page.getByText("70,000 toman",{exact:true}).first()).toBeVisible();
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:"test-results/commerce-wallet-mobile.png",fullPage:true});
+});
+test("public storefront supports Persian, light theme and private order delivery",async({page})=>{
+  const errors:string[]=[];page.on("pageerror",e=>errors.push(e.message));
+  await page.addInitScript(()=>{localStorage.setItem("veloray-locale","en");localStorage.setItem("veloray-theme","dark");sessionStorage.setItem("veloray-order:order_abcdefghijklmnopqrstuvwx","private-order-token-1234567890123456789");});
+  await page.route("**/api/**",async route=>{
+    const path=new URL(route.request().url()).pathname;
+    if(path==="/api/shop/catalog")return route.fulfill({json:{enabled:true,name:"Green Connect",description:"Simple subscriptions",logo_url:"",support_url:"https://support.example",payments_enabled:true,offers:[{id:1,name:"Monthly",amount:10000,currency:"IRT",duration_days:30,traffic_bytes:107374182400}]}});
+    if(path.includes("/api/shop/orders/")){expect(route.request().headers().authorization).toContain("private-order-token");return route.fulfill({json:{id:"order_abcdefghijklmnopqrstuvwx",amount:10000,currency:"IRT",state:"fulfilled",snapshot:{name:"Monthly"},subscription_url:"https://sub.example:100/sub/private-customer-token"}});}
+    return route.fulfill({status:404,json:{detail:"unexpected route"}});
+  });
+  await page.goto("/shop?store=1");
+  await expect(page.getByRole("heading",{name:"Choose your subscription"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Continue to payment"})).toBeEnabled();
+  await page.getByRole("button",{name:"Change theme"}).click();await expect(page.locator("html")).toHaveClass(/light/);
+  await page.getByRole("button",{name:"Change language"}).click();await expect(page.locator("html")).toHaveAttribute("dir","rtl");
+  await expect(page.getByRole("heading",{name:"اشتراک خود را انتخاب کنید"})).toBeVisible();
+  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:"test-results/storefront-persian-mobile.png",fullPage:true});
+  await page.goto("/shop?store=1&order=order_abcdefghijklmnopqrstuvwx");
+  await expect(page.locator('input[value="https://sub.example:100/sub/private-customer-token"]')).toBeVisible();
+  expect(errors).toEqual([]);
+});
 async function panel(
   page: Page,
   path: string,

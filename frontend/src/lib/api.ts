@@ -148,6 +148,7 @@ export async function logout() {
 }
 
 export type NodeItem = {
+  agent_cert_sha256?: string;
   id: number;
   name: string;
   public_host: string;
@@ -293,6 +294,7 @@ export type AppSettings = {
   subscription_theme: "system" | "light" | "dark";
   maintenance_mode: boolean;
   require_2fa_for_admins: boolean;
+  passkeys_enabled: boolean;
   api_keys_enabled: boolean;
   api_key_default_days: number;
   audit_retention_days: number;
@@ -314,6 +316,9 @@ export type AppSettings = {
   telegram_alert_cooldown_minutes: number;
 };
 export type AdminUser = {
+  parent_id?: number;
+  can_delegate?: boolean;
+  max_subresellers?: number;
   ldap_dn?: string;
   oidc_issuer?: string;
   oidc_subject?: string;

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var permissionCatalog = []string{"dashboard.read", "clients.read", "clients.write", "clients.delete", "inbounds.read", "inbounds.write", "nodes.read", "nodes.write", "traffic.read", "xray.read", "xray.write", "settings.read", "settings.write", "api.read", "outbounds.read", "outbounds.write", "routing_rules.read", "routing_rules.write"}
+var permissionCatalog = []string{"resellers.read", "resellers.write", "commerce.read", "commerce.write", "dashboard.read", "clients.read", "clients.write", "clients.delete", "inbounds.read", "inbounds.write", "nodes.read", "nodes.write", "traffic.read", "xray.read", "xray.write", "settings.read", "settings.write", "api.read", "outbounds.read", "outbounds.write", "routing_rules.read", "routing_rules.write"}
 
 func accountRole(u Data) string {
 	if flag(u, "is_superuser") {
@@ -24,7 +24,11 @@ func permissions(u Data) []string {
 	}
 	switch str(u, "role") {
 	case "reseller":
-		return []string{"dashboard.read", "clients.read", "clients.write", "clients.delete", "inbounds.read", "traffic.read", "settings.read", "api.read", "outbounds.read", "routing_rules.read"}
+		out := []string{"resellers.read", "commerce.read", "commerce.write", "dashboard.read", "clients.read", "clients.write", "clients.delete", "inbounds.read", "traffic.read", "settings.read", "api.read", "outbounds.read", "routing_rules.read"}
+		if flag(u, "can_delegate") && num(u, "max_subresellers") > 0 {
+			out = append(out, "resellers.write")
+		}
+		return out
 	case "viewer":
 		return []string{"dashboard.read", "clients.read", "inbounds.read", "nodes.read", "traffic.read", "xray.read", "settings.read", "api.read", "outbounds.read", "routing_rules.read"}
 	case "custom":
@@ -140,12 +144,20 @@ func validateAccount(ctx context.Context, q Query, d, old Data, input Data) erro
 	if num(d, "max_clients") < 0 || num(d, "traffic_budget_bytes") < 0 {
 		return fail(400, "account limits cannot be negative")
 	}
-	for _, key := range []string{"role", "permissions", "own_clients_only", "allowed_inbounds", "is_active", "is_staff", "is_superuser"} {
+	if e := validateHierarchyAccount(ctx, q, d, old); e != nil {
+		return e
+	}
+	for _, key := range []string{"can_delegate", "max_subresellers", "role", "permissions", "own_clients_only", "allowed_inbounds", "is_active", "is_staff", "is_superuser"} {
 		before, _ := json.Marshal(old[key])
 		after, _ := json.Marshal(d[key])
 		if string(before) != string(after) {
 			d["_auth_version"] = num(d, "_auth_version") + 1
 			break
+		}
+	}
+	if num(old, "id") > 0 && num(d, "_auth_version") != num(old, "_auth_version") {
+		if _, e := q.Exec(ctx, `WITH RECURSIVE children(id,depth) AS (SELECT id,1 FROM vr_users WHERE COALESCE((data->>'parent_id')::bigint,0)=$1 UNION ALL SELECT u.id,c.depth+1 FROM vr_users u JOIN children c ON COALESCE((u.data->>'parent_id')::bigint,0)=c.id WHERE c.depth<8) UPDATE vr_users SET data=jsonb_set(data,'{_auth_version}',to_jsonb(COALESCE((data->>'_auth_version')::bigint,1)+1)) WHERE id IN(SELECT id FROM children)`, num(old, "id")); e != nil {
+			return e
 		}
 	}
 	return nil
@@ -172,6 +184,10 @@ func validateClientOwner(ctx context.Context, q Query, a Actor, c Data, isNew bo
 	}
 	if num(owner, "max_clients") == 0 && num(owner, "traffic_budget_bytes") == 0 {
 		return nil
+	}
+	reservedClients, reservedTraffic, e := capacityReservations(ctx, q, ownerID, 0)
+	if e != nil {
+		return e
 	}
 	rows, e := list(ctx, q, "clients", "WHERE "+ownerExpression+"=$1", ownerID)
 	if e != nil {
@@ -201,10 +217,10 @@ func validateClientOwner(ctx context.Context, q Query, a Actor, c Data, isNew bo
 			allocated += quota
 		}
 	}
-	if max := num(owner, "max_clients"); max > 0 && count+1 > max {
+	if max := num(owner, "max_clients"); max > 0 && (reservedClients > max || count+1 > max-reservedClients) {
 		return fail(400, "account client limit reached")
 	}
-	if budget := num(owner, "traffic_budget_bytes"); budget > 0 && (num(c, "traffic_limit_bytes") <= 0 || num(c, "traffic_limit_bytes") > budget-allocated) {
+	if budget := num(owner, "traffic_budget_bytes"); budget > 0 && (num(c, "traffic_limit_bytes") <= 0 || reservedTraffic < 0 || reservedTraffic > budget || allocated > budget-reservedTraffic || num(c, "traffic_limit_bytes") > budget-reservedTraffic-allocated) {
 		return fail(400, "account traffic budget exceeded")
 	}
 	return nil
@@ -218,6 +234,24 @@ func (s *Server) roleAuthorize(a Actor, method, path string) error {
 	} // Only safe defaults are exposed to restricted accounts.
 	resource := strings.Split(path, "/")[0]
 	switch resource {
+	case "cluster":
+		if !commerceAdmin(a) {
+			return fail(403, "administrator access required")
+		}
+		return nil
+	case "node-enrollment":
+		if !commerceAdmin(a) {
+			return fail(403, "administrator access required")
+		}
+		return nil
+	case "commerce":
+		if method == http.MethodGet && permitted(a.User, "commerce.read") {
+			return nil
+		}
+		if method != http.MethodGet && permitted(a.User, "commerce.write") {
+			return nil
+		}
+		return fail(403, "commerce access is not assigned to this account")
 	case "customers":
 		resource = "clients"
 	case "services":

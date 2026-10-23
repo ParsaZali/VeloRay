@@ -318,8 +318,12 @@ func (s *Server) runJob(ctx context.Context, id int64) error {
 	}
 	return e
 }
-func (s *Server) Worker(ctx context.Context) {
+func (s *Server) workerLoops(ctx context.Context) {
 	var monitors sync.WaitGroup
+	for _, poll := range []bool{true, false} {
+		monitors.Add(1)
+		go func(poll bool) { defer monitors.Done(); s.telegramWorker(ctx, poll) }(poll)
+	}
 	for worker := 0; worker < 4; worker++ {
 		monitors.Add(1)
 		go func() {
@@ -341,7 +345,9 @@ func (s *Server) Worker(ctx context.Context) {
 	defer monitors.Wait()
 
 	// Network-dependent housekeeping cannot delay live client telemetry.
+	monitors.Add(1)
 	go func() {
+		defer monitors.Done()
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -350,6 +356,9 @@ func (s *Server) Worker(ctx context.Context) {
 			}
 			if e := s.rollNodeBilling(ctx); e != nil && ctx.Err() == nil {
 				s.Logger.Warn("billing period update failed", "error", e)
+			}
+			if e := s.fulfillPaidOrders(ctx); e != nil && ctx.Err() == nil {
+				s.Logger.Warn("paid order fulfillment pending", "error", "check commerce orders")
 			}
 			if e := s.scanLifecycleAlerts(ctx); e != nil && ctx.Err() == nil {
 				s.Logger.Warn("lifecycle alert scan failed", "error", e)
@@ -367,6 +376,9 @@ func (s *Server) Worker(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
+		if e := s.resumeFrozenCustomers(ctx); e != nil && ctx.Err() == nil {
+			s.Logger.Warn("subscription resume pending", "error", e)
+		}
 		if e := s.reconcileNodes(ctx); e != nil && ctx.Err() == nil {
 			s.Logger.Warn("reconciliation failed", "error", e)
 		}
@@ -405,6 +417,9 @@ func (s *Server) reconcileNodes(ctx context.Context) error {
 	return nil
 }
 func (s *Server) maintain(ctx context.Context) error {
+	if _, err := s.Store.Pool.Exec(ctx, `DELETE FROM vr_passkey_challenges WHERE expires_at<now()`); err != nil {
+		return err
+	}
 	cfg, e := settings(ctx, s.Store.Pool)
 	if e != nil {
 		return e
@@ -441,11 +456,9 @@ func (s *Server) maintain(ctx context.Context) error {
 	if _, e = s.Store.Pool.Exec(ctx, "DELETE FROM vr_oidc_challenges WHERE expires_at<now()"); e != nil {
 		return e
 	}
-	if flag(cfg, "telegram_enabled") {
-		if e = s.telegram(ctx, cfg); e != nil {
-			s.Logger.Warn("Telegram unavailable", "error", fmt.Sprintf("%T", e))
-			_, _ = s.Store.Pool.Exec(ctx, `UPDATE vr_settings SET data=jsonb_set(data,'{_telegram_error}','"Telegram polling failed; test the token and check for an existing webhook"') WHERE id=1`)
-		}
+	_, e = s.Store.Pool.Exec(ctx, `DELETE FROM vr_telegram_inbox WHERE processed_at<now()-interval '7 days'`)
+	if e != nil {
+		return e
 	}
 	return nil
 }

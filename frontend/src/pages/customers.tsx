@@ -6,6 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Dialog } from "@/components/common/dialog";
 import { PageHeader } from "@/components/common/page-header";
+import { CustomerFreeze } from "@/components/customer-freeze";
+import { ImpactSummary, type ChangeImpact } from "@/components/change-impact";
+import { lazy, Suspense } from "react";
+const CommerceWorkspace = lazy(() =>
+  import("./commerce").then((module) => ({
+    default: module.CommerceWorkspace,
+  })),
+);
 
 type Policy = {
   renewal_period: string;
@@ -20,6 +28,8 @@ type Policy = {
   renewal_interval_days: number;
 };
 type Item = Partial<Policy> & {
+  frozen?: boolean;
+  freeze_until?: string;
   id?: number;
   name: string;
   note: string;
@@ -52,7 +62,41 @@ export function CustomersPage() {
   return <Workspace kind="customers" />;
 }
 export function ServicesPage() {
-  return <Workspace kind="services" />;
+  const session = useSession();
+  useLocale();
+  const [section, setSection] = useState("services");
+  return (
+    <div className="space-y-5">
+      {can(session, "commerce.read") && (
+        <div
+          className="inline-flex gap-1 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1"
+          aria-label={t("Service workspace", "فضای سرویس‌ها")}
+        >
+          {[
+            ["services", t("Services and plans")],
+            ["sales", t("Sales & billing", "فروش و حسابداری")],
+          ].map(([value, label]) => (
+            <button
+              type="button"
+              aria-pressed={section === value}
+              key={value}
+              onClick={() => setSection(value)}
+              className={`rounded-md px-4 py-2 text-[12px] transition-colors ${section === value ? "bg-emerald-500/10 text-emerald-500" : "text-[var(--muted)]"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {section === "sales" ? (
+        <Suspense fallback={<p role="status">{t("Loading…")}</p>}>
+          <CommerceWorkspace />
+        </Suspense>
+      ) : (
+        <Workspace kind="services" />
+      )}
+    </div>
+  );
 }
 function Workspace({ kind }: { kind: "customers" | "services" }) {
   useLocale();
@@ -81,6 +125,8 @@ function Workspace({ kind }: { kind: "customers" | "services" }) {
     [expiry, setExpiry] = useState(""),
     [accessPatch, setAccessPatch] = useState(false),
     [bulkServices, setBulkServices] = useState<number[]>([]);
+  const [impact, setImpact] = useState<ChangeImpact | null>(null);
+  useEffect(() => setImpact(null), [editor]);
   async function load(signal?: AbortSignal) {
     try {
       const [a, b, c] = await Promise.all([
@@ -151,6 +197,16 @@ function Workspace({ kind }: { kind: "customers" | "services" }) {
       const body = Object.fromEntries(
         Object.entries(editor).filter(([k]) => keys.includes(k)),
       );
+      if (services && editor.id && !impact) {
+        setImpact(
+          await api(`/services/${editor.id}/impact`, {
+            method: "POST",
+            body: JSON.stringify(body),
+          }),
+        );
+        return;
+      }
+      if (services && impact) body.expected_revision = impact.revision;
       await api(`/${kind}${editor.id ? `/${editor.id}` : ""}`, {
         method: editor.id ? "PATCH" : "POST",
         body: JSON.stringify(body),
@@ -379,6 +435,18 @@ function Workspace({ kind }: { kind: "customers" | "services" }) {
                     {t("Rotate subscription")}
                   </Button>
                 )}
+                {!services &&
+                  editable &&
+                  item.id &&
+                  (item.frozen || (item.enabled && item.expires_at)) && (
+                    <CustomerFreeze
+                      id={item.id}
+                      name={item.name}
+                      frozen={item.frozen}
+                      until={item.freeze_until}
+                      onChanged={load}
+                    />
+                  )}
                 {editable && (
                   <Button
                     size="sm"
@@ -565,6 +633,7 @@ function Workspace({ kind }: { kind: "customers" | "services" }) {
         >
           <form onSubmit={save} className="space-y-4">
             <h3>{t(services ? "Service" : "Customer")}</h3>
+            {services && impact && <ImpactSummary impact={impact} />}
             <label className="label">
               {t("Name")}
               <Input
@@ -821,7 +890,14 @@ function Workspace({ kind }: { kind: "customers" | "services" }) {
                 {t("Cancel")}
               </Button>
               <Button type="submit" disabled={busy}>
-                {t(busy ? "Saving…" : "Save")}
+                {busy
+                  ? t("Saving…")
+                  : services && editor.id
+                    ? t(
+                        impact ? "Save & deploy" : "Review changes",
+                        impact ? "ذخیره و اعمال" : "بررسی تغییرات",
+                      )
+                    : t("Save")}
               </Button>
             </div>
           </form>

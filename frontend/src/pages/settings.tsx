@@ -95,6 +95,7 @@ const defaults: AppSettings = {
   subscription_theme: "system",
   maintenance_mode: false,
   require_2fa_for_admins: false,
+  passkeys_enabled: true,
   api_keys_enabled: true,
   api_key_default_days: 90,
   audit_retention_days: 90,
@@ -791,10 +792,20 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                       <Toggle
                         label={t("Require administrator 2FA")}
                         text={t(
-                          "Staff must enroll TOTP before protected API use.",
+                          "Staff must use TOTP or a verified passkey before protected API use.",
+                          "کارکنان باید از TOTP یا کلید ورود تأییدشده استفاده کنند.",
                         )}
                         checked={cfg.require_2fa_for_admins}
                         onChange={(v) => set("require_2fa_for_admins", v)}
+                      />
+                      <Toggle
+                        label={t("Enable passkeys", "فعال‌سازی کلید ورود")}
+                        text={t(
+                          "Allow device PIN, biometrics and security keys on your trusted HTTPS domain.",
+                          "ورود با پین دستگاه، تشخیص بیومتریک و کلید امنیتی روی دامنهٔ HTTPS معتبر.",
+                        )}
+                        checked={cfg.passkeys_enabled}
+                        onChange={(v) => set("passkeys_enabled", v)}
                       />
                       <Toggle
                         label={t("Enable API keys")}

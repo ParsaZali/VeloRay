@@ -273,7 +273,13 @@ export function ClientsPage() {
     );
   }
   function openBatch() {
-    const first = inbounds.find((i) => i.protocol !== "shadowsocks");
+    const first = inbounds.find(
+      (i) =>
+        i.protocol !== "shadowsocks" ||
+        ["2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm"].includes(
+          String(i.protocol_settings.method),
+        ),
+    );
     setEditor({
       ...blank(
         String(first?.id || ""),
@@ -493,7 +499,14 @@ export function ClientsPage() {
               onClick={openBatch}
               disabled={
                 !can(session, "clients.write") ||
-                !inbounds.some((i) => i.protocol !== "shadowsocks")
+                !inbounds.some(
+                  (i) =>
+                    i.protocol !== "shadowsocks" ||
+                    [
+                      "2022-blake3-aes-128-gcm",
+                      "2022-blake3-aes-256-gcm",
+                    ].includes(String(i.protocol_settings.method)),
+                )
               }
             >
               <Users className="h-3.5 w-3.5" /> {t("Batch create")}
@@ -1178,7 +1191,12 @@ function ClientModal({
               {inbounds
                 .filter(
                   (i) =>
-                    editor.count === undefined || i.protocol !== "shadowsocks",
+                    editor.count === undefined ||
+                    i.protocol !== "shadowsocks" ||
+                    [
+                      "2022-blake3-aes-128-gcm",
+                      "2022-blake3-aes-256-gcm",
+                    ].includes(String(i.protocol_settings.method)),
                 )
                 .map((i) => (
                   <option key={i.id} value={i.id}>

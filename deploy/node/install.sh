@@ -79,7 +79,12 @@ for attempt in {1..45};do
  sleep 1
 done
 $healthy||{ vr_diagnostics;vr_error "$LINENO" 1; }
+if [[ -n "${VELORAY_ENROLL_URL:-}" ]];then
+ source deploy/node/enroll.sh
+ vr_node_enroll
+fi
 vr_say 'Node installed and verified. Restrict the agent port to the panel server.' 'نود نصب شد و بررسی سلامت موفق بود؛ دسترسی پورت نود را به سرور پنل محدود کنید.'
-printf 'Token: %s\nCertificate SHA-256: ' "$VELORAY_AGENT_TOKEN"
+if [[ -z "${VELORAY_ENROLL_URL:-}" ]];then printf 'Token: %s\n' "$VELORAY_AGENT_TOKEN";fi
+printf 'Certificate SHA-256: '
 openssl x509 -in "${VELORAY_NODE_CERT:-/etc/veloray-node/tls/agent.crt}" -noout -fingerprint -sha256
 printf 'For verified TLS, use a trusted certificate or add this certificate to the panel CA bundle.\n'

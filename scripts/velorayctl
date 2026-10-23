@@ -12,6 +12,7 @@ VeloRay 1.0 · Server management
   veloray logs [web|agent|xray|singbox|subscriptions|install]
   veloray audit [LIMIT]
   veloray reset [USERNAME]
+  veloray passkeys-reset [USERNAME]
   veloray admin-list
   veloray domain HOST | port PORT | ssl EMAIL
   veloray backup [FILE] | restore FILE
@@ -183,6 +184,15 @@ case "$command" in
  systemctl start xray.service sing-box.service "$AGENT" "$WEB"
  if [[ -f /etc/systemd/system/$ENDPOINT_TIMER ]];then systemctl start "$ENDPOINT_TIMER";fi
  "$0" doctor
+ ;;
+ passkeys-reset)
+ [[ $# -le 1 ]]||{ echo 'Usage: veloray passkeys-reset [USERNAME]' >&2;exit 2; }
+ administrator="$(veloray admin-username "$@")"||exit 1
+ vr_warn "Revoke all passkeys and browser sessions for $administrator. Password and TOTP remain." "همهٔ کلیدهای ورود و نشست‌های $administrator لغو می‌شوند؛ رمز و TOTP حفظ می‌شوند."
+ read -rp "$(vr_text 'Type RESET to continue: ' 'برای ادامه RESET بنویسید: ')" confirmation
+ [[ "$confirmation" == RESET ]]||exit 1
+ veloray reset-passkeys "$administrator"
+ vr_say 'Passkeys revoked. Sign in with your password and enroll a new security factor.' 'کلیدهای ورود لغو شدند؛ با رمز وارد شوید و عامل امنیتی جدید بسازید.'
  ;;
  reset|admin-reset)
  [[ $# -le 1 ]]||{ echo 'Usage: veloray reset [USERNAME]' >&2;exit 2; }

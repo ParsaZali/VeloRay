@@ -36,6 +36,8 @@ type Server struct {
 	TelegramHTTP *http.Client
 	WebhookHTTP  *http.Client
 	ExternalHTTP *http.Client
+	PaymentHTTP  *http.Client
+	LookupTXT    func(context.Context, string) ([]string, error)
 	Logger       *slog.Logger
 }
 type apiError struct {
@@ -119,6 +121,10 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+		if r.URL.Path == "/shop" {
+			w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' https://telegram.org; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors https://web.telegram.org https://webk.telegram.org https://webz.telegram.org; form-action 'self'")
+			w.Header().Del("X-Frame-Options")
+		}
 		defer func() {
 			if v := recover(); v != nil {
 				s.Logger.Error("panic recovered", "path", requestLogPath(r), "panic", v)
@@ -155,6 +161,9 @@ func (s *Server) Handler() http.Handler {
 			d["status"] = "ok"
 			d["database"] = "ok"
 			d["version"] = Version
+			if nonce := r.URL.Query().Get("domain_probe"); len(nonce) >= 32 && subscriptionTokenPattern.MatchString(nonce) {
+				d["domain_instance"] = domainInstanceProof(s.Config.SecretKey, nonce)
+			}
 			writeJSON(w, 200, d)
 			return
 		}
@@ -180,8 +189,22 @@ func (s *Server) Handler() http.Handler {
 			s.githubCallback(w, r)
 			return
 		}
+		if strings.HasPrefix(path, "shop/payment/") {
+			s.paymentCallback(w, r, strings.TrimPrefix(path, "shop/payment/"))
+			return
+		}
+		if path == "node-enrollment/complete" {
+			out, status, e := s.completeEnrollment(w, r)
+			s.respond(w, r, out, status, e)
+			return
+		}
 		if e := s.checkCSRF(r); e != nil {
 			s.respond(w, r, nil, 0, e)
+			return
+		}
+		if strings.HasPrefix(path, "shop/") {
+			out, status, e := s.shopAPI(w, r, path)
+			s.respond(w, r, out, status, e)
 			return
 		}
 		if path == "auth/oidc/start" && r.Method == "POST" {
@@ -201,6 +224,11 @@ func (s *Server) Handler() http.Handler {
 		}
 		if path == "auth/login" && r.Method == "POST" {
 			out, status, e := s.login(w, r)
+			s.respond(w, r, out, status, e)
+			return
+		}
+		if strings.HasPrefix(path, "auth/passkey/") {
+			out, status, e := s.passkeyPublic(w, r, path)
 			s.respond(w, r, out, status, e)
 			return
 		}

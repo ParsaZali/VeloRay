@@ -82,6 +82,8 @@ func inboundSettings(i, node Data, clients []Data) (Data, error) {
 			}
 		case "trojan":
 			v["password"] = str(c, "credential")
+		case "shadowsocks":
+			v["password"] = str(c, "credential")
 		case "hysteria":
 			v["auth"] = str(c, "credential")
 		case "http", "socks":
@@ -122,6 +124,9 @@ func inboundSettings(i, node Data, clients []Data) (Data, error) {
 	case "shadowsocks":
 		if len(clients) == 0 {
 			return nil, nil
+		}
+		if shadowsocks2022(i) {
+			return Data{"method": str(ps, "method"), "password": str(ps, "password"), "clients": entries, "network": "tcp,udp"}, nil
 		}
 		if len(clients) > 1 {
 			return nil, fmt.Errorf("Shadowsocks supports one client per inbound")
@@ -327,7 +332,10 @@ func shareLink(c, i, node Data) string {
 		b, _ := json.Marshal(v)
 		return "vmess://" + base64.StdEncoding.EncodeToString(b)
 	case "shadowsocks":
-		return "ss://" + base64.RawURLEncoding.EncodeToString([]byte(fallback(str(obj(i, "protocol_settings"), "method"), "aes-256-gcm")+":"+credential)) + "@" + addr + "#" + fragment
+		if shadowsocks2022(i) {
+			return "ss://" + url.QueryEscape(str(obj(i, "protocol_settings"), "method")) + ":" + url.QueryEscape(ssClientPassword(c, i)) + "@" + addr + "#" + fragment
+		}
+		return "ss://" + base64.RawURLEncoding.EncodeToString([]byte(fallback(str(obj(i, "protocol_settings"), "method"), "aes-256-gcm")+":"+ssClientPassword(c, i))) + "@" + addr + "#" + fragment
 	case "tuic":
 		q := url.Values{"sni": {fallback(str(i, "tls_server_name"), host)}, "congestion_control": {fallback(str(obj(i, "protocol_settings"), "congestion_control"), "bbr")}, "udp_relay_mode": {"native"}}
 		return "tuic://" + url.UserPassword(credential, str(obj(c, "protocol_settings"), "password")).String() + "@" + addr + "?" + q.Encode() + "#" + fragment

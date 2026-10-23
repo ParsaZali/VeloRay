@@ -61,6 +61,7 @@ type FormState = {
   wg_dns: string;
   socks_udp: boolean;
   ss_method: string;
+  ss_password: string;
   awg: Record<string, string>;
   mtproto_host: string;
   st_handshake: string;
@@ -108,6 +109,7 @@ const fresh = (node = ""): FormState => ({
   wg_dns: "1.1.1.1",
   socks_udp: true,
   ss_method: "aes-256-gcm",
+  ss_password: "",
   awg: {
     jc: "4",
     jmin: "40",
@@ -483,7 +485,12 @@ export function InboundsPage() {
           nodes.find((n) => String(n.id) === form.node)?.public_host || "",
       };
     if (form.protocol === "shadowsocks")
-      p.protocol_settings = { method: form.ss_method };
+      p.protocol_settings = {
+        method: form.ss_method,
+        ...(form.ss_method.startsWith("2022-")
+          ? { password: form.ss_password.trim() }
+          : {}),
+      };
     if (form.protocol === "shadowtls")
       p.protocol_settings = {
         handshake_server: form.st_handshake.trim(),
@@ -589,6 +596,7 @@ export function InboundsPage() {
       wg_dns: String(ps.dns || "1.1.1.1"),
       socks_udp: ps.udp !== false,
       ss_method: String(ps.method || "aes-256-gcm"),
+      ss_password: String(ps.password || ""),
       awg: Object.fromEntries(
         Object.entries(fresh().awg).map(([key, value]) => [
           key,
@@ -1367,14 +1375,43 @@ export function InboundsPage() {
                           value={form.ss_method}
                           onChange={(e) => set("ss_method", e.target.value)}
                         >
+                          <option value="2022-blake3-aes-128-gcm">
+                            2022 · AES-128-GCM
+                          </option>
+                          <option value="2022-blake3-aes-256-gcm">
+                            2022 · AES-256-GCM
+                          </option>
+                          <option value="aes-128-gcm">AES-128-GCM</option>
                           <option value="aes-256-gcm">
                             {t("AES-256-GCM")}
                           </option>
-                          <option value="chacha20-poly1305">
+                          <option value="chacha20-ietf-poly1305">
                             {t("ChaCha20-Poly1305")}
                           </option>
                         </Select>
                       </Field>
+                      {form.ss_method.startsWith("2022-") && (
+                        <Field
+                          label={t("Server key (base64)", "کلید سرور (base64)")}
+                        >
+                          <Input
+                            type="password"
+                            autoComplete="off"
+                            value={form.ss_password}
+                            placeholder={t(
+                              "Empty = generate securely",
+                              "خالی = تولید خودکار",
+                            )}
+                            onChange={(e) => set("ss_password", e.target.value)}
+                          />
+                          <p className="mt-2 text-[11px] text-[var(--muted)]">
+                            {t(
+                              "Multiuser with a separate key and traffic counter for each customer.",
+                              "چندکاربره با کلید و شمارندهٔ ترافیک جدا برای هر مشتری.",
+                            )}
+                          </p>
+                        </Field>
+                      )}
                     </section>
                   )}
                   {form.protocol === "shadowtls" && (

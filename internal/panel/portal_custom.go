@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -138,7 +139,7 @@ func (s *Server) validatePortalAPI(w http.ResponseWriter, r *http.Request, a Act
 }
 func portalSampleData() map[string]any {
 	d := map[string]any{}
-	for _, key := range strings.Fields("Locale Direction Site Name Protocol Host Active UsageLabel ExpiryLabel Used Quota Expiry URL URLLabel CopyLabel CopyDoneLabel CopyFailedLabel Connect QRLabel URILabel AppsLabel SupportLabel Link Profile Support Footer Announcement AnnouncementURL ProxyLabel ActualLabel Actual FactorLabel Factor ChartURL LastUsedISO SubscriptionTheme Accent Remaining ExpiryISO AssetsURL ThemeLabel DarkLabel LightLabel SystemLabel DetailsLabel RemainingLabel Proxy ClientLabel AutoLabel SetupLabel SetupHelp DownloadsLabel SearchLabel CloseLabel") {
+	for _, key := range strings.Fields("Logo Locale Direction Site Name Protocol Host Active UsageLabel ExpiryLabel Used Quota Expiry URL URLLabel CopyLabel CopyDoneLabel CopyFailedLabel Connect QRLabel URILabel AppsLabel SupportLabel Link Profile Support Footer Announcement AnnouncementURL ProxyLabel ActualLabel Actual FactorLabel Factor ChartURL LastUsedISO SubscriptionTheme Accent Remaining ExpiryISO AssetsURL ThemeLabel DarkLabel LightLabel SystemLabel DetailsLabel RemainingLabel Proxy ClientLabel AutoLabel SetupLabel SetupHelp DownloadsLabel SearchLabel CloseLabel") {
 		d[key] = ""
 	}
 	d["Locale"], d["Direction"], d["URL"], d["AssetsURL"] = "en", "ltr", "https://example.test/sub/example", "https://example.test/sub/example/assets/"
@@ -193,7 +194,7 @@ func (s *Server) portalAsset(w http.ResponseWriter, r *http.Request, cfg Data, p
 
 // Permit only the inline script bodies in this exact server-rendered document.
 // Inline event handlers and third-party origins remain blocked.
-func portalScriptPolicy(w http.ResponseWriter, document string) {
+func portalScriptPolicy(w http.ResponseWriter, document string, logos ...string) {
 	tokenizer := html.NewTokenizer(strings.NewReader(document))
 	sources := []string{"'self'"}
 	script := false
@@ -222,6 +223,12 @@ func portalScriptPolicy(w http.ResponseWriter, document string) {
 			script = false
 		}
 	}
-	policy := "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src " + strings.Join(sources, " ") + "; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+	images := "'self' data:"
+	for _, logo := range logos {
+		if u, e := url.Parse(logo); e == nil && u.Scheme == "https" && validHost(u.Hostname()) && u.User == nil {
+			images += " https://" + u.Host
+		}
+	}
+	policy := "default-src 'self'; img-src " + images + "; style-src 'self' 'unsafe-inline'; script-src " + strings.Join(sources, " ") + "; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 	w.Header().Set("Content-Security-Policy", policy)
 }

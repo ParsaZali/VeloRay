@@ -148,7 +148,27 @@ const paths: Record<RouteKey, string> = {
   accounts: "/accounts",
 };
 
+const StorefrontPage = lazy(() =>
+  import("@/pages/storefront").then((module) => ({
+    default: module.StorefrontPage,
+  })),
+);
 export default function App() {
+  if (window.location.pathname === "/shop")
+    return (
+      <Suspense
+        fallback={
+          <div role="status" className="p-8">
+            {t("Loading…")}
+          </div>
+        }
+      >
+        <StorefrontPage />
+      </Suspense>
+    );
+  return <PanelApp />;
+}
+function PanelApp() {
   const { setLocale } = useLocale();
   const [user, setUser] = useState<Session | null | undefined>(undefined);
   const initial = routes[window.location.pathname] || "dashboard";

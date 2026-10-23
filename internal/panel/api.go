@@ -14,12 +14,12 @@ import (
 )
 
 var editable = map[string]string{
-	"nodes":         "profile_id name public_host agent_url agent_token enabled verify_tls config_patch",
+	"nodes":         "profile_id name public_host agent_url agent_token agent_cert_sha256 enabled verify_tls config_patch",
 	"inbounds":      "name node core listen port protocol transport security flow path host_header service_name tls_server_name tls_cert_file tls_key_file reality_dest reality_server_name reality_private_key reality_public_key reality_short_id protocol_settings stream_settings enabled",
 	"clients":       "renewal_period renewal_every renewal_timezone hwid_limit device_limit start_after_first_use duration_days owner_id inbound name credential protocol_settings subscription_token enabled expires_at traffic_limit_bytes renewal_interval_days next_renewal_at traffic_multiplier note",
 	"outbounds":     "name node core tag protocol config enabled",
 	"routing_rules": "name node core priority config enabled",
-	"users":         "ldap_dn oidc_issuer oidc_subject username email is_active is_staff is_superuser password role permissions allowed_inbounds own_clients_only max_clients traffic_budget_bytes",
+	"users":         "ldap_dn oidc_issuer oidc_subject username email is_active is_staff is_superuser password role permissions allowed_inbounds own_clients_only max_clients traffic_budget_bytes can_delegate max_subresellers",
 	"api_keys":      "name scope enabled expires_at user",
 }
 
@@ -114,6 +114,18 @@ func (s *Server) view(ctx context.Context, q Query, kind string, d Data) (Data, 
 	return out, nil
 }
 func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Actor) (any, int, error) {
+	if path == "resellers" || strings.HasPrefix(path, "resellers/") {
+		return s.resellersAPI(w, r, path, a)
+	}
+	if path == "cluster" {
+		return s.clusterAPI(r, a)
+	}
+	if path == "node-enrollment" || strings.HasPrefix(path, "node-enrollment/") {
+		return s.enrollmentAPI(w, r, path, a)
+	}
+	if strings.HasPrefix(path, "commerce/") {
+		return s.commerceAPI(w, r, path, a)
+	}
 	ctx := r.Context()
 	if path == "monitors" || strings.HasPrefix(path, "monitors/") {
 		return s.monitorsAPI(w, r, path, a)
@@ -435,13 +447,32 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 				if id == num(a.User, "id") {
 					return nil, fail(400, "You cannot delete your own account")
 				}
+				var children bool
+				if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM vr_users WHERE COALESCE((data->>'parent_id')::bigint,0)=$1)`, id).Scan(&children); e != nil {
+					return nil, e
+				}
+				if children {
+					return nil, fail(409, "this account has subresellers; deactivate it to preserve its hierarchy")
+				}
 				if e := ensureAdmin(ctx, tx, id, nil); e != nil {
 					return nil, e
+				}
+				var history bool
+				if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM vr_orders WHERE owner_id=$1 OR payer_id=$1 UNION ALL SELECT 1 FROM vr_wallets WHERE user_id=$1 UNION ALL SELECT 1 FROM vr_offers WHERE owner_id=$1 UNION ALL SELECT 1 FROM vr_stores WHERE owner_id=$1 UNION ALL SELECT 1 FROM vr_cost_entries WHERE owner_id=$1)`, id).Scan(&history); e != nil {
+					return nil, e
+				}
+				if history {
+					return nil, fail(409, "this account has commerce records; deactivate it to preserve financial history")
 				}
 			}
 			return nil, remove(ctx, tx, kind, id)
 		}
 		prior := clone(d)
+		if kind == "clients" {
+			if e := validateFrozenEdit(prior, input); e != nil {
+				return nil, e
+			}
+		}
 		d = merge(d, input)
 		if kind == "users" {
 			if str(d, "ldap_dn") != str(prior, "ldap_dn") || str(d, "oidc_issuer") != str(prior, "oidc_issuer") || str(d, "oidc_subject") != str(prior, "oidc_subject") {
@@ -753,6 +784,15 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request, a Actor) (a
 		return nil, 0, e
 	}
 	d = merge(d, in)
+	if flag(d, "require_2fa_for_admins") && !flag(d, "passkeys_enabled") {
+		var dependent bool
+		if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM vr_users WHERE COALESCE((data->>'is_active')::boolean,false) AND COALESCE((data->>'is_staff')::boolean,false) AND COALESCE((data->>'_passkey_count')::bigint,0)>0 AND NOT COALESCE((data->>'_totp_enabled')::boolean,false))`).Scan(&dependent); e != nil {
+			return nil, 0, e
+		}
+		if dependent {
+			return nil, 0, fail(400, "enroll TOTP for passkey-only accounts before disabling passkey sign-in under required MFA")
+		}
+	}
 	if in["subscription_hosts"] != nil {
 		for _, value := range array(d, "subscription_hosts") {
 			if _, err := get(ctx, tx, "inbounds", num(asData(value), "inbound")); err != nil {
@@ -764,13 +804,19 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request, a Actor) (a
 		if len(token) > 256 || strings.ContainsAny(token, "\r\n /?") {
 			return nil, 0, fail(400, "invalid bot token")
 		}
+		previous, _ := unseal(s.Config.FieldKey, str(d, "_telegram_token"))
+		if telegramBotID(previous) != telegramBotID(token) {
+			d["_telegram_last_update_id"] = 0
+		}
 		d["_telegram_token"], e = seal(s.Config.FieldKey, token)
 		if e != nil {
 			return nil, 0, e
 		}
+		d["_telegram_username"] = ""
 	}
 	if flag(in, "telegram_clear_bot_token") {
 		d["_telegram_token"] = ""
+		d["_telegram_username"] = ""
 	}
 	delete(d, "telegram_bot_token")
 	delete(d, "telegram_clear_bot_token")
@@ -1195,7 +1241,7 @@ func (s *Server) batchClients(w http.ResponseWriter, r *http.Request, a Actor) (
 	if err != nil {
 		return nil, 0, err
 	}
-	if !supportsClients(str(in, "protocol")) || str(in, "protocol") == "shadowsocks" {
+	if !supportsClients(str(in, "protocol")) || str(in, "protocol") == "shadowsocks" && !shadowsocks2022(in) {
 		return nil, 0, fail(400, "this protocol does not support batch client creation")
 	}
 	out, err := s.change(ctx, []int64{num(in, "node")}, a, "clients.batch-create", str(input, "name"), func(tx pgx.Tx) (any, error) {
@@ -1232,6 +1278,9 @@ func (s *Server) batchClients(w http.ResponseWriter, r *http.Request, a Actor) (
 }
 
 func applyClientAction(c Data, action string) error {
+	if frozen(c) && oneOf(action, "enable", "disable") {
+		return fail(409, "resume the frozen subscription before changing its active status")
+	}
 	switch action {
 	case "enable":
 		c["enabled"] = true

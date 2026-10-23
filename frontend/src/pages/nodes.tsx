@@ -19,12 +19,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
+import { NodeEnrollment } from "@/components/node-enrollment";
 
 const initial = {
   name: "",
   public_host: "",
   agent_url: "https://",
   agent_token: "",
+  agent_cert_sha256: "",
   verify_tls: true,
   enabled: true,
 };
@@ -107,6 +109,7 @@ export function NodesPage() {
       public_host: n.public_host,
       agent_url: n.agent_url,
       agent_token: "",
+      agent_cert_sha256: n.agent_cert_sha256 || "",
       verify_tls: n.verify_tls,
       enabled: n.enabled,
     });
@@ -122,6 +125,7 @@ export function NodesPage() {
         public_host: form.public_host,
         agent_url: form.agent_url,
         verify_tls: form.verify_tls,
+        agent_cert_sha256: form.agent_cert_sha256,
         enabled: form.enabled,
       };
       if (form.agent_token) payload.agent_token = form.agent_token;
@@ -171,6 +175,23 @@ export function NodesPage() {
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
+            />
+          </label>
+          <label className="label">
+            {t(
+              "Certificate SHA-256 (optional)",
+              "اثر انگشت SHA-256 گواهی (اختیاری)",
+            )}
+            <Input
+              dir="ltr"
+              maxLength={64}
+              value={form.agent_cert_sha256}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  agent_cert_sha256: e.target.value.toLowerCase(),
+                })
+              }
             />
           </label>
           <label className="label">
@@ -250,21 +271,24 @@ export function NodesPage() {
         title={t("Nodes")}
         description={t("Manage the local server and your remote nodes.")}
         actions={
-          <Button
-            variant="outline"
-            onClick={() => {
-              setOpen(!open);
-              setEditing(null);
-              setForm({ ...initial });
-            }}
-          >
-            {open ? (
-              <ChevronUp className="h-3.5 w-3.5" />
-            ) : (
-              <Plus className="h-3.5 w-3.5" />
-            )}
-            {open ? t("Close") : t("Add remote node")}
-          </Button>
+          <>
+            <NodeEnrollment />
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOpen(!open);
+                setEditing(null);
+                setForm({ ...initial });
+              }}
+            >
+              {open ? (
+                <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <Plus className="h-3.5 w-3.5" />
+              )}
+              {open ? t("Close") : t("Add remote node")}
+            </Button>
+          </>
         }
       />
       {msg && (
