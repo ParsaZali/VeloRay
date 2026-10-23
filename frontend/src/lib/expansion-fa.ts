@@ -1,4 +1,21 @@
 export const expansionFA: Record<string, string> = {
+  "reopen the store from its Telegram bot":
+    "فروشگاه را از داخل ربات تلگرام دوباره باز کنید.",
+  "Telegram sales are unavailable": "فروش تلگرام در دسترس نیست.",
+  "Telegram store is unavailable": "فروشگاه تلگرام در دسترس نیست.",
+  "Telegram sales require HTTPS, a support URL and a terms URL":
+    "برای فروش تلگرام، HTTPS و لینک پشتیبانی و شرایط خرید لازم است.",
+  "Telegram store purchases use Stars offers only":
+    "خرید داخل تلگرام با بسته‌های استارز انجام می‌شود.",
+  "accept the store terms before paying":
+    "پیش از پرداخت، شرایط خرید فروشگاه را بپذیرید.",
+  "start this store's Telegram bot before checkout":
+    "پیش از خرید، ربات همین فروشگاه را استارت کنید.",
+  "Stars offers must not exceed 10000 Stars":
+    "قیمت بسته نباید بیشتر از ۱۰٬۰۰۰ استارز باشد.",
+  "the store bot changed; create a new invoice":
+    "ربات فروشگاه تغییر کرده است؛ فاکتور جدید بسازید.",
+  "Telegram invoice could not be created": "ساخت فاکتور تلگرام ناموفق بود.",
   "insufficient wallet credit": "اعتبار کیف پول کافی نیست.",
   "credit limit is below the outstanding debt":
     "سقف اعتبار از بدهی فعلی کمتر است.",

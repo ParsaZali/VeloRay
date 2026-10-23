@@ -320,6 +320,10 @@ func (s *Server) runJob(ctx context.Context, id int64) error {
 }
 func (s *Server) workerLoops(ctx context.Context) {
 	var monitors sync.WaitGroup
+	for _, poll := range []bool{true, false} {
+		monitors.Add(1)
+		go func(poll bool) { defer monitors.Done(); s.telegramWorker(ctx, poll) }(poll)
+	}
 	for worker := 0; worker < 4; worker++ {
 		monitors.Add(1)
 		go func() {
@@ -449,11 +453,9 @@ func (s *Server) maintain(ctx context.Context) error {
 	if _, e = s.Store.Pool.Exec(ctx, "DELETE FROM vr_oidc_challenges WHERE expires_at<now()"); e != nil {
 		return e
 	}
-	if flag(cfg, "telegram_enabled") {
-		if e = s.telegram(ctx, cfg); e != nil {
-			s.Logger.Warn("Telegram unavailable", "error", fmt.Sprintf("%T", e))
-			_, _ = s.Store.Pool.Exec(ctx, `UPDATE vr_settings SET data=jsonb_set(data,'{_telegram_error}','"Telegram polling failed; test the token and check for an existing webhook"') WHERE id=1`)
-		}
+	_, e = s.Store.Pool.Exec(ctx, `DELETE FROM vr_telegram_inbox WHERE processed_at<now()-interval '7 days'`)
+	if e != nil {
+		return e
 	}
 	return nil
 }

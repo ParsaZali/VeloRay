@@ -15,6 +15,11 @@ import (
 )
 
 func (s *Server) telegramRequest(ctx context.Context, token, method string, in any) (Data, error) {
+	if oneOf(method, "getUpdates", "answerPreCheckoutQuery") {
+		limited, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		ctx = limited
+	}
 	b, e := json.Marshal(in)
 	if e != nil {
 		return nil, e
@@ -70,29 +75,34 @@ func botHome(cfg Data) Data {
 }
 
 func (s *Server) telegram(ctx context.Context, cfg Data) error {
+	if e := s.telegramPoll(ctx, cfg); e != nil {
+		return e
+	}
+	return s.telegramReplies(ctx, cfg)
+}
+func (s *Server) telegramReplies(ctx context.Context, cfg Data) error {
 	conn, e := s.Store.Pool.Acquire(ctx)
 	if e != nil {
 		return e
 	}
 	defer conn.Release()
 	var locked bool
-	if e = conn.QueryRow(ctx, `SELECT pg_try_advisory_lock(842100,31)`).Scan(&locked); e != nil {
+	if e = conn.QueryRow(ctx, `SELECT pg_try_advisory_lock(842100,32)`).Scan(&locked); e != nil {
 		return e
 	}
 	if !locked {
 		return nil
 	}
-	defer conn.Exec(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock(842100,31)`)
+	defer conn.Exec(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock(842100,32)`)
 	token, e := unseal(s.Config.FieldKey, str(cfg, "_telegram_token"))
 	if e != nil || token == "" {
 		return errors.New("bot token is missing")
 	}
-	updates, e := s.telegramRequest(ctx, token, "getUpdates", Data{"offset": num(cfg, "_telegram_last_update_id") + 1, "limit": 20, "timeout": 0, "allowed_updates": []any{"message", "callback_query"}})
+	updates, e := s.telegramInbox(ctx, "message", telegramBotID(token))
 	if e != nil {
 		return e
 	}
-	for _, value := range array(updates, "result") {
-		u := asData(value)
+	for _, u := range updates {
 		id := num(u, "update_id")
 		m := obj(u, "message")
 		from := obj(m, "from")
@@ -104,15 +114,16 @@ func (s *Server) telegram(ctx context.Context, cfg Data) error {
 			text = str(callback, "data")
 			if strings.HasPrefix(text, "vr:") {
 				text = strings.TrimPrefix(text, "vr:")
-			} else {
+			} else if !strings.HasPrefix(text, "vs:") {
 				text = ""
 			}
 		}
-		permitted := telegramPermitted(cfg, m, from)
+		sales := s.telegramSalesRoute(ctx, text, m, from)
+		permitted := sales || telegramPermitted(cfg, m, from)
 		owner := strconv.FormatInt(num(from, "id"), 10)
 		var cached []byte
 		var sent *time.Time
-		e = s.Store.Pool.QueryRow(ctx, `SELECT reply,sent_at FROM vr_telegram_updates WHERE id=$1`, id).Scan(&cached, &sent)
+		e = s.Store.Pool.QueryRow(ctx, `SELECT reply,sent_at FROM vr_telegram_updates WHERE id=$1 AND bot_id=$2`, id, telegramBotID(token)).Scan(&cached, &sent)
 		if e != nil && !errors.Is(e, pgx.ErrNoRows) {
 			return e
 		}
@@ -123,11 +134,22 @@ func (s *Server) telegram(ctx context.Context, cfg Data) error {
 			if len(cached) == 0 {
 				reply := Data{"text": botText(cfg, "Too many commands; try again shortly", "تعداد درخواست‌ها زیاد است؛ کمی بعد دوباره تلاش کنید"), "reply_markup": botHome(cfg)}
 				if e = rateLimit(ctx, s.Store.Pool, "telegram:"+owner, 30, time.Minute); e == nil {
-					reply = s.telegramReply(ctx, cfg, text, owner)
+					if sales {
+						reply = s.telegramSalesReply(ctx, cfg, text, num(from, "id"))
+					} else {
+						reply = s.telegramReply(ctx, cfg, text, owner)
+					}
 				}
 				reply["chat_id"], reply["disable_web_page_preview"] = num(obj(m, "chat"), "id"), true
 				cached, _ = json.Marshal(reply)
-				if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO vr_telegram_updates(id,reply) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET reply=excluded.reply`, id, string(cached)); e != nil {
+				if sales {
+					sealed, err := seal(s.Config.FieldKey, string(cached))
+					if err != nil {
+						return err
+					}
+					cached, _ = json.Marshal(Data{"_sealed_sales": sealed})
+				}
+				if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO vr_telegram_updates(id,reply,bot_id) VALUES($1,$2,$3) ON CONFLICT(bot_id,id) DO UPDATE SET reply=excluded.reply`, id, string(cached), telegramBotID(token)); e != nil {
 					return e
 				}
 			}
@@ -135,16 +157,29 @@ func (s *Server) telegram(ctx context.Context, cfg Data) error {
 			if e != nil {
 				return e
 			}
+			if sealed := str(reply, "_sealed_sales"); sealed != "" {
+				plain, err := unseal(s.Config.FieldKey, sealed)
+				if err != nil {
+					return err
+				}
+				reply, e = decode([]byte(plain))
+				if e != nil {
+					return e
+				}
+			}
 			if _, e = s.telegramRequest(ctx, token, "sendMessage", reply); e != nil {
 				return e
 			}
 		}
-		if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO vr_telegram_updates(id,sent_at) VALUES($1,now()) ON CONFLICT(id) DO UPDATE SET sent_at=now()`, id); e != nil {
+		if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO vr_telegram_updates(id,sent_at,bot_id) VALUES($1,now(),$2) ON CONFLICT(bot_id,id) DO UPDATE SET sent_at=now()`, id, telegramBotID(token)); e != nil {
 			return e
 		}
-		if _, e = s.Store.Pool.Exec(ctx, `UPDATE vr_settings SET data=jsonb_set(data,'{_telegram_last_update_id}',to_jsonb(GREATEST(COALESCE((data->>'_telegram_last_update_id')::bigint,0),$1::bigint))) WHERE id=1`, id); e != nil {
+		if _, e = s.Store.Pool.Exec(ctx, `UPDATE vr_telegram_inbox SET processed_at=now() WHERE id=$1 AND bot_id=$2`, id, telegramBotID(token)); e != nil {
 			return e
 		}
+	}
+	if e = s.telegramOrderNotifications(ctx, cfg, token); e != nil {
+		return e
 	}
 	if e = s.telegramAlerts(ctx, cfg, token); e != nil {
 		return e
@@ -391,6 +426,9 @@ func (s *Server) telegramAPI(w http.ResponseWriter, r *http.Request, path string
 	me, e := s.telegramRequest(ctx, token, "getMe", Data{})
 	if e != nil {
 		return nil, 0, fail(502, e.Error())
+	}
+	if _, e = s.Store.Pool.Exec(ctx, `UPDATE vr_settings SET data=jsonb_set(data,'{_telegram_username}',to_jsonb($1::text)) WHERE id=1`, str(obj(me, "result"), "username")); e != nil {
+		return nil, 0, e
 	}
 	hook, e := s.telegramRequest(ctx, token, "getWebhookInfo", Data{})
 	if e != nil {

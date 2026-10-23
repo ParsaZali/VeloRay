@@ -3,7 +3,7 @@ package panel
 func expansionAPISpec(paths, schemas Data) {
 	text := Data{"type": "string"}
 	integer := Data{"type": "integer"}
-	currency := Data{"type": "string", "enum": []any{"IRR", "IRT", "USD", "EUR"}, "description": "Whole rials/tomans; USD/EUR amounts are cents. No currency conversion between wallets."}
+	currency := Data{"type": "string", "enum": []any{"IRR", "IRT", "USD", "EUR", "XTR"}, "description": "Whole rials/tomans/Telegram Stars; USD/EUR amounts are cents. No currency conversion between wallets."}
 	object := func(fields Data) Data {
 		return Data{"type": "object", "additionalProperties": false, "properties": fields}
 	}
@@ -34,7 +34,11 @@ func expansionAPISpec(paths, schemas Data) {
 	paths["/api/commerce/settings"] = Data{"get": Data{"summary": "Superuser gateway availability, without merchant secret", "responses": response}, "patch": Data{"summary": "Configure verified Zarinpal gateway", "requestBody": body("PaymentGatewayInput"), "responses": response}}
 	paths["/api/commerce/orders/{id}/fulfill"] = Data{"parameters": []any{Data{"name": "id", "in": "path", "required": true, "schema": text}}, "post": Data{"summary": "Idempotent retry of an owned paid order; never marks an unpaid order as paid", "responses": response}}
 	paths["/api/shop/catalog"] = Data{"get": Data{"summary": "Public published offers for the store query parameter; no unit costs or inbound IDs", "security": []any{}, "parameters": []any{Data{"name": "store", "in": "query", "required": true, "schema": integer}}, "responses": response}}
-	paths["/api/shop/orders"] = Data{"post": Data{"summary": "Create public invoice; origin/CSRF protected and rate limited. Returns order token once.", "security": []any{}, "requestBody": body("WalletPurchaseInput"), "responses": Data{"201": Data{"description": "Order ID, amount, currency and private bearer token"}}}}
+	schemas["StorefrontInput"].(Data)["properties"].(Data)["telegram_sales"] = Data{"type": "boolean"}
+	schemas["StorefrontInput"].(Data)["properties"].(Data)["terms_url"] = Data{"type": "string", "description": "HTTPS terms URL; required with support URL for Telegram sales"}
+	schemas["PublicCheckoutInput"] = object(Data{"offer_id": integer, "kind": Data{"enum": []any{"purchase", "renewal", "traffic"}}, "name": text, "customer_token": Data{"type": "string", "writeOnly": true}, "telegram_init_data": Data{"type": "string", "writeOnly": true, "description": "Raw signed Telegram Mini App initData; only XTR offers are accepted through Telegram"}, "accept_terms": Data{"type": "boolean"}})
+	paths["/api/shop/orders"] = Data{"post": Data{"summary": "Create public invoice; signed Telegram identity, currency and terms enforced for Stars. Returns order token once.", "security": []any{}, "requestBody": body("PublicCheckoutInput"), "responses": Data{"201": Data{"description": "Order ID, amount, currency and private bearer token"}}}}
+	paths["/api/shop/catalog"].(Data)["get"].(Data)["parameters"] = []any{Data{"name": "store", "in": "query", "required": true, "schema": integer}, Data{"name": "X-Telegram-Init-Data", "in": "header", "schema": text, "description": "Optional Telegram-signed initData; selects Stars-only catalog"}}
 	orderParams := []any{Data{"name": "id", "in": "path", "required": true, "schema": text}, Data{"name": "Authorization", "in": "header", "required": true, "schema": text, "description": "Bearer ORDER_TOKEN, not a panel API key"}}
 	paths["/api/shop/orders/{id}"] = Data{"parameters": orderParams, "get": Data{"summary": "Private order status and delivered subscription after fulfillment", "security": []any{}, "responses": response}}
 	for _, action := range []string{"pay", "verify"} {

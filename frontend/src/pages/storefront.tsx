@@ -8,6 +8,7 @@ import {
   Package,
   RefreshCw,
   ShieldCheck,
+  Send,
   Sun,
 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -27,6 +28,11 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/controls";
 import { Card, CardContent } from "@/components/ui/card";
 import { orderStatus } from "@/lib/commerce";
+import {
+  loadMiniApp,
+  miniAppData,
+  openStarsInvoice,
+} from "@/lib/telegram-miniapp";
 
 export function StorefrontPage() {
   const { locale, setLocale } = useLocale(),
@@ -34,6 +40,14 @@ export function StorefrontPage() {
   const params = new URLSearchParams(window.location.search),
     store = params.get("store") || "",
     initialOrder = params.get("order") || "";
+  const [telegramData] = useState(miniAppData),
+    [termsAccepted, setTermsAccepted] = useState(false),
+    [privateToken, setPrivateToken] = useState<string | null>(() => {
+      const token = new URLSearchParams(location.hash.slice(1)).get("token");
+      return initialOrder && token && /^[A-Za-z0-9_-]{32,128}$/.test(token)
+        ? token
+        : null;
+    });
   const [catalog, setCatalog] = useState<Catalog | null>(null),
     [selected, setSelected] = useState<Offer | null>(null),
     [kind, setKind] = useState("purchase"),
@@ -46,8 +60,17 @@ export function StorefrontPage() {
     [busy, setBusy] = useState(false),
     [copied, setCopied] = useState(false);
   const orderToken = orderID
-    ? sessionStorage.getItem(`veloray-order:${orderID}`)
+    ? privateToken || sessionStorage.getItem(`veloray-order:${orderID}`)
     : null;
+  useEffect(() => {
+    const fragment = new URLSearchParams(location.hash.slice(1));
+    const token = fragment.get("token");
+    if (initialOrder && token && /^[A-Za-z0-9_-]{32,128}$/.test(token)) {
+      sessionStorage.setItem(`veloray-order:${initialOrder}`, token);
+      history.replaceState({}, "", location.pathname + location.search);
+    }
+    if (telegramData) void loadMiniApp().catch(() => {});
+  }, [initialOrder, telegramData]);
   useEffect(() => {
     if (initialOrder) {
       setLoading(false);
@@ -56,6 +79,9 @@ export function StorefrontPage() {
     const c = new AbortController();
     void api<Catalog>(`/shop/catalog?store=${encodeURIComponent(store)}`, {
       signal: c.signal,
+      ...(telegramData
+        ? { headers: { "X-Telegram-Init-Data": telegramData } }
+        : {}),
     })
       .then((d) => {
         setCatalog(d);
@@ -69,7 +95,7 @@ export function StorefrontPage() {
         if (!c.signal.aborted) setLoading(false);
       });
     return () => c.abort();
-  }, [store, initialOrder]);
+  }, [store, initialOrder, telegramData]);
   useEffect(() => {
     if (!orderID) return;
     if (!orderToken) {
@@ -91,7 +117,11 @@ export function StorefrontPage() {
         });
         if (c.signal.aborted) return;
         setOrder(result);
-        if (result.state === "paid" && !result.test_mode)
+        if (
+          (result.state === "paid" ||
+            (result.state === "pending" && result.currency === "XTR")) &&
+          !result.test_mode
+        )
           timer = setTimeout(() => void refresh(), 5000);
       } catch (e) {
         if (!c.signal.aborted) setError(commerceError(e));
@@ -104,12 +134,23 @@ export function StorefrontPage() {
     };
   }, [orderID, orderToken]);
   async function pay(id: string, token: string) {
-    const response = await api<{ url: string }>(`/shop/orders/${id}/pay`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: "{}",
-    });
-    window.location.assign(response.url);
+    const response = await api<{ url: string; gateway?: string }>(
+      `/shop/orders/${id}/pay`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: "{}",
+      },
+    );
+    if (response.gateway === "telegram-stars" && telegramData) {
+      await openStarsInvoice(response.url, () => {
+        void api<Order>(`/shop/orders/${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+          .then(setOrder)
+          .catch((e) => setError(commerceError(e)));
+      });
+    } else window.location.assign(response.url);
   }
   async function checkout(e: FormEvent) {
     e.preventDefault();
@@ -124,9 +165,13 @@ export function StorefrontPage() {
           name,
           kind,
           customer_token: tokenFromURL(subscription),
+          ...(telegramData
+            ? { telegram_init_data: telegramData, accept_terms: termsAccepted }
+            : {}),
         }),
       });
       rememberOrder(result);
+      setPrivateToken(result.token || null);
       setOrderID(result.id);
       history.replaceState({}, "", `/shop?store=${store}&order=${result.id}`);
       await pay(result.id, result.token!);
@@ -141,11 +186,12 @@ export function StorefrontPage() {
     setBusy(true);
     setError("");
     try {
-      await api(`/shop/orders/${orderID}/verify`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${orderToken}` },
-        body: "{}",
-      });
+      if (order?.currency !== "XTR")
+        await api(`/shop/orders/${orderID}/verify`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${orderToken}` },
+          body: "{}",
+        });
       const result = await api<Order>(`/shop/orders/${orderID}`, {
         headers: { Authorization: `Bearer ${orderToken}` },
       });
@@ -473,11 +519,36 @@ export function StorefrontPage() {
                             : "—"}
                         </strong>
                       </div>
+                      {catalog.telegram_checkout && catalog.terms_url && (
+                        <label className="flex items-start gap-2 text-[12px] leading-6">
+                          <input
+                            className="mt-1"
+                            type="checkbox"
+                            required
+                            checked={termsAccepted}
+                            onChange={(e) => setTermsAccepted(e.target.checked)}
+                          />
+                          <span>
+                            {t("I accept the store's", "می‌پذیرم:")}{" "}
+                            <a
+                              className="text-emerald-500"
+                              href={catalog.terms_url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {t("purchase terms", "شرایط خرید فروشگاه")}
+                            </a>
+                          </span>
+                        </label>
+                      )}
                       <Button
                         className="w-full"
                         type="submit"
                         disabled={
-                          busy || !selected || !catalog.payments_enabled
+                          busy ||
+                          !selected ||
+                          !catalog.payments_enabled ||
+                          (!!catalog.telegram_checkout && !termsAccepted)
                         }
                       >
                         {t(
@@ -492,6 +563,20 @@ export function StorefrontPage() {
                             "پرداخت آنلاین در حال حاضر فعال نیست.",
                           )}
                         </p>
+                      )}
+                      {!catalog.telegram_checkout && catalog.telegram_url && (
+                        <a
+                          className="flex items-center gap-2 text-[12px] text-emerald-500"
+                          href={catalog.telegram_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <Send className="h-4 w-4" />
+                          {t(
+                            "Buy with Telegram Stars",
+                            "خرید با استارز تلگرام",
+                          )}
+                        </a>
                       )}
                       <p className="flex items-center gap-2 text-[11px] text-[var(--muted)]">
                         <ShieldCheck className="h-4 w-4 text-emerald-500" />

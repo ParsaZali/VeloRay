@@ -61,6 +61,13 @@ func (s *Server) gatewayCall(ctx context.Context, sandbox bool, action string, i
 	return out, nil
 }
 func (s *Server) requestPayment(ctx context.Context, id string) (any, int, error) {
+	order, e := getOrder(ctx, s.Store.Pool, id, false)
+	if e != nil {
+		return nil, 0, e
+	}
+	if str(order, "currency") == "XTR" {
+		return s.requestStarsPayment(ctx, id)
+	}
 	tx, e := s.Store.Pool.Begin(ctx)
 	if e != nil {
 		return nil, 0, e

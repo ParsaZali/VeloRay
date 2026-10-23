@@ -106,6 +106,7 @@ Screenshots use demonstration accounts, not production credentials.
 | **Users & customers** | Shared accounts across nodes, quotas, expiry, first-use activation, scheduled renewal, IP/HWID limits, bulk actions and token rotation |
 | **Sales & billing** | React storefront, verified Zarinpal checkout, reserved inventory, wallet purchase/renew/top-up, immutable ledger, reseller hierarchy, credit transfers and currency-separated profit reports |
 | **Seller branding** | Individual store/subscription name, logo, support link and DNS/HTTPS-verified subscription domains |
+| **Telegram sales** | Customer bot and Mini App, verified Stars payments, private order history and automatic delivery with the same fulfillment workflow |
 | **Multi-node** | Local and remote agents, scoped deployments, listener inspection, configuration validation, journals and compensated rollback |
 | **Availability** | Single-use verified node enrollment, certificate pinning, automatic background-worker election for active/standby panels, bounded customer freeze and service impact review |
 | **Subscriptions** | A simple default page, custom HTML files, configurable URL paths, a separate HTTPS port, QR codes and app-specific exports |
@@ -164,6 +165,7 @@ Downloads are manual; enabling them does not schedule automatic core changes. Pa
 ## Documentation
 
 - [Sales, payments and wallets](docs/commerce.md)
+- [Telegram sales and Mini App](docs/telegram-sales.md)
 - [Customer freeze and service impact review](docs/customer-freeze-and-impact.md)
 - [Single-use node enrollment](docs/node-enrollment.md)
 - [Active/standby panel deployment](docs/panel-availability.md)

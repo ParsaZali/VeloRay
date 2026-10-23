@@ -38,6 +38,9 @@ export type Order = {
   test_mode?: boolean;
 };
 export type StoreBrand = {
+  telegram_sales?: boolean;
+  telegram_url?: string;
+  terms_url?: string;
   subscription_branding?: boolean;
   subscription_origin?: string;
   subscription_verified?: boolean;
@@ -51,6 +54,7 @@ export type StoreBrand = {
   owner_id?: number;
 };
 export type Catalog = StoreBrand & {
+  telegram_checkout?: boolean;
   offers: Offer[];
   payments_enabled: boolean;
 };
@@ -141,7 +145,9 @@ export function amountLabel(amount: number | string, currency: string) {
       ? t("toman", "تومان")
       : currency === "IRR"
         ? t("rial", "ریال")
-        : currency;
+        : currency === "XTR"
+          ? t("Stars", "استارز")
+          : currency;
   return `${value} ${unit}`;
 }
 export const tokenFromURL = (raw: string) => {

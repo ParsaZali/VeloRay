@@ -41,6 +41,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog } from "@/components/common/dialog";
 import { CommerceBreakdown } from "@/components/commerce-breakdown";
 import { StoreDomain } from "@/components/store-domain";
+import { StoreTelegram } from "@/components/store-telegram";
 
 const ResellerTeam = lazy(() =>
   import("@/components/reseller-team").then((module) => ({
@@ -92,13 +93,15 @@ function Currency({
 }) {
   return (
     <Select value={value} onChange={(e) => onChange(e.target.value)}>
-      {["IRT", "IRR", "USD", "EUR"].map((v) => (
+      {["IRT", "IRR", "USD", "EUR", "XTR"].map((v) => (
         <option key={v} value={v}>
           {v === "IRT"
             ? t("Toman", "تومان")
             : v === "IRR"
               ? t("Rial", "ریال")
-              : `${v} (${t("cents", "سنت")})`}
+              : v === "XTR"
+                ? t("Telegram Stars", "استارز تلگرام")
+                : `${v} (${t("cents", "سنت")})`}
         </option>
       ))}
     </Select>
@@ -838,6 +841,8 @@ export function CommerceWorkspace() {
                           support_url: brand.support_url,
                           subscription_branding: !!brand.subscription_branding,
                           subscription_origin: brand.subscription_origin || "",
+                          telegram_sales: !!brand.telegram_sales,
+                          terms_url: brand.terms_url || "",
                         }),
                       }),
                     );
@@ -913,6 +918,13 @@ export function CommerceWorkspace() {
                     }
                     onVerified={(result) =>
                       setBrand((current) => ({ ...current, ...result }))
+                    }
+                  />
+                  <StoreTelegram
+                    brand={brand}
+                    editable={editable}
+                    onChange={(patch) =>
+                      setBrand((current) => ({ ...current, ...patch }))
                     }
                   />
                   {editable && (

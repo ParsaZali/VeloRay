@@ -279,3 +279,144 @@ test("cluster status failure does not hide deployment diagnostics", async ({
   ).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("Telegram checkout requires terms and uses a Stars invoice inside the Mini App", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.addInitScript(() => {
+    localStorage.setItem("veloray-locale", "en");
+    (window as any).Telegram = {
+      WebApp: {
+        initData: "signed-Telegram-fixture",
+        ready() {},
+        expand() {},
+        openInvoice(url: string, callback: (status: string) => void) {
+          (window as any).invoiceOpened = url;
+          callback("paid");
+        },
+      },
+    };
+  });
+  let checkout: any,
+    invoice = false;
+  const id = "starsorder_abcdefghijklmnopqrstuvwxyz",
+    token = "bearer_abcdefghijklmnopqrstuvwxyz0123456789";
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/shop/catalog") {
+      expect(route.request().headers()["x-telegram-init-data"]).toBe(
+        "signed-Telegram-fixture",
+      );
+      return route.fulfill({
+        json: {
+          name: "Stars shop",
+          enabled: true,
+          telegram_checkout: true,
+          terms_url: "https://store.example/terms",
+          support_url: "https://store.example/support",
+          payments_enabled: true,
+          offers: [
+            {
+              id: 7,
+              name: "Monthly",
+              amount: 75,
+              currency: "XTR",
+              duration_days: 30,
+              traffic_bytes: 1000,
+            },
+          ],
+        },
+      });
+    }
+    if (path === "/api/shop/orders") {
+      checkout = route.request().postDataJSON();
+      return route.fulfill({
+        json: { id, token, currency: "XTR", amount: 75, state: "pending" },
+      });
+    }
+    if (path.endsWith("/pay")) {
+      invoice = true;
+      return route.fulfill({
+        json: {
+          url: "https://t.me/$invoice-fixture",
+          gateway: "telegram-stars",
+        },
+      });
+    }
+    if (path === `/api/shop/orders/${id}`) {
+      expect(route.request().headers().authorization).toBe(`Bearer ${token}`);
+      return route.fulfill({
+        json: {
+          id,
+          currency: "XTR",
+          amount: 75,
+          state: invoice ? "fulfilled" : "pending",
+          snapshot: { name: "Monthly" },
+          ...(invoice
+            ? {
+                subscription_url:
+                  "https://sub.example:100/sub/fulfilled-customer",
+              }
+            : {}),
+        },
+      });
+    }
+    return route.fulfill({ status: 404, json: { detail: "unexpected route" } });
+  });
+  await page.goto("/shop?store=1#tgWebAppData=signed-Telegram-fixture");
+  await page.getByLabel("Your name", { exact: true }).fill("Buyer");
+  const pay = page.getByRole("button", {
+    name: "Continue to payment",
+    exact: true,
+  });
+  await expect(pay).toBeDisabled();
+  await page.getByRole("checkbox").check();
+  await pay.click();
+  await expect(
+    page.locator(
+      'input[value="https://sub.example:100/sub/fulfilled-customer"]',
+    ),
+  ).toBeVisible();
+  expect(checkout.telegram_init_data).toBe("signed-Telegram-fixture");
+  expect(checkout.accept_terms).toBe(true);
+  expect(checkout).not.toHaveProperty("telegram_user_id");
+  expect(await page.evaluate(() => (window as any).invoiceOpened)).toBe(
+    "https://t.me/$invoice-fixture",
+  );
+  expect(errors).toEqual([]);
+});
+test("private bot order link imports its bearer from the fragment and removes it from the address", async ({
+  page,
+}) => {
+  const id = "privateorder_abcdefghijklmnopqrstuvwxyz",
+    token = "private_abcdefghijklmnopqrstuvwxyz0123456789";
+  await page.addInitScript(() => localStorage.setItem("veloray-locale", "en"));
+  await page.route("**/api/shop/orders/**", async (route) => {
+    expect(route.request().headers().authorization).toBe(`Bearer ${token}`);
+    expect(route.request().url()).not.toContain(token);
+    return route.fulfill({
+      json: {
+        id,
+        currency: "XTR",
+        amount: 75,
+        state: "fulfilled",
+        snapshot: { name: "Monthly" },
+        subscription_url: "https://sub.example:100/sub/delivered",
+      },
+    });
+  });
+  await page.goto(`/shop?store=1&order=${id}#token=${token}`);
+  await expect(
+    page.locator('input[value="https://sub.example:100/sub/delivered"]'),
+  ).toBeVisible();
+  expect(new URL(page.url()).hash).toBe("");
+  expect(
+    await page.evaluate(
+      ({ id }) => sessionStorage.getItem(`veloray-order:${id}`),
+      { id },
+    ),
+  ).toBe(token);
+  await expect(page.getByRole("alert")).not.toBeVisible();
+});

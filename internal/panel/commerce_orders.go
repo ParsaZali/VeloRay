@@ -27,8 +27,16 @@ func (s *Server) shopAPI(w http.ResponseWriter, r *http.Request, path string) (a
 		if !flag(d, "enabled") {
 			return nil, 0, fail(404, "store not found")
 		}
+		telegramSales := flag(d, "telegram_sales")
+		buyer, e := s.miniAppBuyer(ctx, s.Store.Pool, r.Header.Get("X-Telegram-Init-Data"))
+		if e != nil {
+			return nil, 0, e
+		}
+		if buyer > 0 && !telegramSales {
+			return nil, 0, fail(404, "Telegram store is unavailable")
+		}
 		publicBrand := Data{}
-		for _, key := range strings.Fields("enabled name support_url logo_url description") {
+		for _, key := range strings.Fields("enabled name support_url logo_url description terms_url") {
 			publicBrand[key] = d[key]
 		}
 		d = publicBrand
@@ -41,6 +49,9 @@ func (s *Server) shopAPI(w http.ResponseWriter, r *http.Request, path string) (a
 		}
 		out := []Data{}
 		for _, v := range all {
+			if buyer > 0 && str(v, "currency") != "XTR" || buyer == 0 && !oneOf(str(v, "currency"), "IRR", "IRT") {
+				continue
+			}
 			if s.validateOffer(ctx, s.Store.Pool, v) == nil {
 				delete(v, "cost_amount")
 				delete(v, "service_id")
@@ -54,6 +65,13 @@ func (s *Server) shopAPI(w http.ResponseWriter, r *http.Request, path string) (a
 		d["owner_id"] = id
 		d["offers"] = out
 		d["payments_enabled"] = flag(cfg, "commerce_payments_enabled") && str(cfg, "_commerce_merchant") != ""
+		if buyer > 0 {
+			d["payments_enabled"] = true
+			d["telegram_checkout"] = true
+		}
+		if telegramSales {
+			d["telegram_url"] = telegramStoreURL(cfg, id)
+		}
 		return d, 200, nil
 	}
 	if path == "shop/orders" && r.Method == "POST" {
@@ -64,8 +82,16 @@ func (s *Server) shopAPI(w http.ResponseWriter, r *http.Request, path string) (a
 		if e != nil {
 			return nil, 0, e
 		}
-		if e = allowed(d, "offer_id name kind customer_token"); e != nil {
+		if e = allowed(d, "offer_id name kind customer_token telegram_init_data accept_terms"); e != nil {
 			return nil, 0, fail(400, e.Error())
+		}
+		buyer, e := s.miniAppBuyer(ctx, s.Store.Pool, str(d, "telegram_init_data"))
+		if e != nil {
+			return nil, 0, e
+		}
+		delete(d, "telegram_init_data")
+		if buyer > 0 {
+			ctx = context.WithValue(ctx, telegramBuyerKey{}, buyer)
 		}
 		o, e := s.createOrder(ctx, d, 0, true)
 		if e != nil {
@@ -170,6 +196,11 @@ func (s *Server) createOrder(ctx context.Context, input Data, payer int64, publi
 		return nil, e
 	}
 	owner := num(v, "owner_id")
+	termsURL := ""
+	buyer, _ := ctx.Value(telegramBuyerKey{}).(int64)
+	if buyer > 0 && str(v, "currency") != "XTR" || payer == 0 && str(v, "currency") == "XTR" && buyer == 0 {
+		return nil, fail(409, "Telegram store purchases use Stars offers only")
+	}
 	if publicShop {
 		store, e := getStore(ctx, tx, owner)
 		if e != nil {
@@ -177,6 +208,19 @@ func (s *Server) createOrder(ctx context.Context, input Data, payer int64, publi
 		}
 		if !flag(store, "enabled") {
 			return nil, fail(404, "store not found")
+		}
+		if buyer > 0 {
+			if !flag(store, "telegram_sales") || !flag(input, "accept_terms") {
+				return nil, fail(400, "accept the store terms before paying")
+			}
+			termsURL = str(store, "terms_url")
+			var bound bool
+			if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM vr_telegram_customers WHERE user_id=$1 AND owner_id=$2)`, buyer, owner).Scan(&bound); e != nil {
+				return nil, e
+			}
+			if !bound {
+				return nil, fail(403, "start this store's Telegram bot before checkout")
+			}
 		}
 	}
 	service, e := get(ctx, tx, "services", num(v, "service_id"))
@@ -188,6 +232,20 @@ func (s *Server) createOrder(ctx context.Context, input Data, payer int64, publi
 	snapshot["inbound_ids"] = service["inbound_ids"]
 	snapshot["customer_name"] = str(input, "name")
 	snapshot["_request_hash"] = requestHash
+	if buyer > 0 {
+		snapshot["_telegram_user"] = buyer
+		cfg, e := settings(ctx, tx)
+		if e != nil {
+			return nil, e
+		}
+		token, e := unseal(s.Config.FieldKey, str(cfg, "_telegram_token"))
+		if e != nil {
+			return nil, e
+		}
+		snapshot["_telegram_bot_id"] = telegramBotID(token)
+		snapshot["_terms_url"] = termsURL
+		snapshot["_terms_accepted_at"] = stamp()
+	}
 	inboundIDs, e := idArray(snapshot, "inbound_ids", 200)
 	if e != nil {
 		return nil, e
@@ -269,6 +327,15 @@ func (s *Server) createOrder(ctx context.Context, input Data, payer int64, publi
 	_, e = tx.Exec(ctx, `INSERT INTO vr_orders(id,owner_id,payer_id,offer_id,customer_id,kind,amount,currency,token_hash,snapshot,client_reference) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, id, owner, payerValue, num(v, "id"), customer, str(input, "kind"), num(v, "amount"), str(v, "currency"), digest(token), string(raw), reference)
 	if e != nil {
 		return nil, e
+	}
+	if buyer > 0 {
+		sealed, e := seal(s.Config.FieldKey, token)
+		if e != nil {
+			return nil, e
+		}
+		if _, e = tx.Exec(ctx, `INSERT INTO vr_telegram_orders(order_id,user_id,token_ciphertext) VALUES($1,$2,$3)`, id, buyer, sealed); e != nil {
+			return nil, e
+		}
 	}
 	if e = tx.Commit(ctx); e != nil {
 		return nil, e

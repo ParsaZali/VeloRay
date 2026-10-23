@@ -795,13 +795,19 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request, a Actor) (a
 		if len(token) > 256 || strings.ContainsAny(token, "\r\n /?") {
 			return nil, 0, fail(400, "invalid bot token")
 		}
+		previous, _ := unseal(s.Config.FieldKey, str(d, "_telegram_token"))
+		if telegramBotID(previous) != telegramBotID(token) {
+			d["_telegram_last_update_id"] = 0
+		}
 		d["_telegram_token"], e = seal(s.Config.FieldKey, token)
 		if e != nil {
 			return nil, 0, e
 		}
+		d["_telegram_username"] = ""
 	}
 	if flag(in, "telegram_clear_bot_token") {
 		d["_telegram_token"] = ""
+		d["_telegram_username"] = ""
 	}
 	delete(d, "telegram_bot_token")
 	delete(d, "telegram_clear_bot_token")

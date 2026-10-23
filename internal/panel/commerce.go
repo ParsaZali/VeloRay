@@ -26,7 +26,7 @@ func money(d Data, key string, minimum int64) (int64, error) {
 	}
 	return n, nil
 }
-func validCurrency(s string) bool { return oneOf(s, "IRR", "IRT", "USD", "EUR") }
+func validCurrency(s string) bool { return oneOf(s, "IRR", "IRT", "USD", "EUR", "XTR") }
 func commerceAdmin(a Actor) bool  { return flag(a.User, "is_superuser") && a.Scope == "admin" }
 func (s *Server) commerceOwner(r *http.Request, a Actor) (int64, error) {
 	id := num(a.User, "id")
@@ -49,7 +49,7 @@ func (s *Server) commerceOwner(r *http.Request, a Actor) (int64, error) {
 	return id, nil
 }
 func storeDefaults() Data {
-	return Data{"enabled": false, "name": "VeloRay", "support_url": "", "logo_url": "", "description": "", "subscription_branding": false, "subscription_origin": "", "subscription_verified": false}
+	return Data{"enabled": false, "name": "VeloRay", "support_url": "", "logo_url": "", "description": "", "subscription_branding": false, "subscription_origin": "", "subscription_verified": false, "telegram_sales": false, "terms_url": ""}
 }
 func getStore(ctx context.Context, q Query, owner int64) (Data, error) {
 	d := storeDefaults()
@@ -123,6 +123,9 @@ func (s *Server) validateOffer(ctx context.Context, q Query, d Data) error {
 	}
 	if !validCurrency(str(d, "currency")) {
 		return fail(400, "unsupported currency")
+	}
+	if str(d, "currency") == "XTR" && num(d, "amount") > 10000 {
+		return fail(400, "Stars offers must not exceed 10000 Stars")
 	}
 	if num(d, "duration_days") < 1 || num(d, "duration_days") > 3650 {
 		return fail(400, "duration_days must be 1–3650")
@@ -277,6 +280,11 @@ func (s *Server) commerceAPI(w http.ResponseWriter, r *http.Request, path string
 			if d != nil {
 				d["url"] = strings.TrimRight(s.Config.PublicURL, "/") + "/shop?store=" + fmt.Sprint(owner)
 				d["owner_id"] = owner
+				cfg, err := settings(ctx, s.Store.Pool)
+				if err != nil {
+					return nil, 0, err
+				}
+				d["telegram_url"] = telegramStoreURL(cfg, owner)
 			}
 			return storeBrandView(d), 200, e
 		}
@@ -290,7 +298,7 @@ func (s *Server) commerceAPI(w http.ResponseWriter, r *http.Request, path string
 		if e != nil {
 			return nil, 0, e
 		}
-		if e = allowed(input, "enabled name support_url logo_url description subscription_branding subscription_origin"); e != nil {
+		if e = allowed(input, "enabled name support_url logo_url description subscription_branding subscription_origin telegram_sales terms_url"); e != nil {
 			return nil, 0, fail(400, e.Error())
 		}
 		if e = typed(input, storeDefaults()); e != nil {
@@ -319,8 +327,11 @@ func (s *Server) commerceAPI(w http.ResponseWriter, r *http.Request, path string
 			if e = require(d, "name", 96); e != nil {
 				return nil, fail(400, e.Error())
 			}
-			if !commerceURL(str(d, "support_url")) || !commerceURL(str(d, "logo_url")) || len(str(d, "description")) > 1200 {
+			if !commerceURL(str(d, "support_url")) || !commerceURL(str(d, "logo_url")) || !commerceURL(str(d, "terms_url")) || len(str(d, "description")) > 1200 {
 				return nil, fail(400, "invalid branding URL or description")
+			}
+			if flag(d, "telegram_sales") && (str(d, "support_url") == "" || str(d, "terms_url") == "" || !strings.HasPrefix(s.Config.PublicURL, "https://")) {
+				return nil, fail(400, "Telegram sales require HTTPS, a support URL and a terms URL")
 			}
 			if _, e = seller(ctx, tx, owner); e != nil {
 				return nil, e
