@@ -37,7 +37,15 @@ test("PWA activation removes obsolete VeloRay caches and preserves other applica
 
 test("PWA waits for explicit update acceptance before replacing the running app",async({page})=>{
  const host=await server();try{
-  await login(page,host.origin);host.setRevision(2);await page.evaluate(async()=>{await (await navigator.serviceWorker.getRegistration())?.update()});
+  await login(page,host.origin);host.setRevision(2);
+  // register() starts an automatic update check. A manual update() can join
+  // that earlier job, whose response was fetched before setRevision(2).
+  // Observe an actual waiting worker before asserting the consent UI.
+  await expect.poll(()=>page.evaluate(async()=>{
+   const registration=await navigator.serviceWorker.getRegistration();
+   if(!registration?.waiting)await registration?.update();
+   return !!registration?.waiting;
+  })).toBe(true);
   const update=page.getByRole("button",{name:"Update app",exact:true});await expect(update).toBeVisible();expect(await page.evaluate(async()=>!!(await navigator.serviceWorker.getRegistration())?.waiting)).toBe(true);
   await update.click();await expect(update).toHaveCount(0);await expect.poll(()=>page.evaluate(()=>caches.keys())).toContain("veloray-static-v2");expect(await page.evaluate(()=>caches.keys())).not.toContain("veloray-static-v1");
  }finally{await host.close()}
