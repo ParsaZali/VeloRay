@@ -67,7 +67,7 @@ func run() error {
 		return nil
 	}
 	switch command {
-	case "audit", "menu", "status", "doctor", "start", "stop", "restart", "logs", "url", "reset", "admin-reset", "domain", "port", "ssl", "update", "auto-update", "uninstall", "repair", "ports", "inbounds", "inbound-port", "backup-schedule", "language", "node":
+	case "audit", "menu", "status", "doctor", "start", "stop", "restart", "logs", "url", "reset", "admin-reset", "passkeys-reset", "domain", "port", "ssl", "update", "auto-update", "uninstall", "repair", "ports", "inbounds", "inbound-port", "backup-schedule", "language", "node":
 		controller, err := exec.LookPath("velorayctl")
 		if err != nil {
 			return errors.New("management is available after installation; run veloray help for development commands")
@@ -91,6 +91,7 @@ func run() error {
   veloray status | doctor | url    Service health and panel address
   veloray start | stop | restart   Manage panel, agent and both cores
   veloray reset [USERNAME]         Change an administrator password
+  veloray passkeys-reset [USERNAME] Revoke lost administrator passkeys
   veloray admin-list               List existing administrator usernames
   veloray logs [web|agent|xray|singbox|subscriptions] Follow service logs
   veloray audit [LIMIT]            Read server audit events
@@ -305,6 +306,14 @@ Run veloray serve explicitly to start the application in the foreground.`)
 		}
 		fmt.Println(name)
 		return nil
+	case "reset-passkeys":
+		if os.Geteuid() != 0 {
+			return errors.New("administrator passkey recovery requires root")
+		}
+		if len(args) != 2 {
+			return errors.New("usage: veloray reset-passkeys USERNAME")
+		}
+		return store.ResetAdministratorPasskeys(ctx, args[1])
 	case "bootstrap", "bootstrap-if-empty", "reset-password":
 		username := os.Getenv("VELORAY_ADMIN_USERNAME")
 		if username == "" {

@@ -157,6 +157,7 @@ VeloRay با مجوز MIT منتشر می‌شود؛ هسته‌ها و وابس
 
 - [راهنمای فروش، پرداخت و کیف پول](docs/commerce.md)
 - [ربات فروش تلگرام، مینی‌اپ و پرداخت استارز](docs/telegram-sales.md)
+- [ورود با Passkey و بازیابی کلیدهای مدیر](docs/passkeys.md)
 - [فریز اشتراک و پیش‌نمایش اثر تغییر سرویس](docs/customer-freeze-and-impact.md)
 - [اتصال نود با دستور یک‌بارمصرف و تأیید گواهی](docs/node-enrollment.md)
 - [پنل فعال و آماده‌به‌کار](docs/panel-availability.md)

@@ -294,6 +294,7 @@ export type AppSettings = {
   subscription_theme: "system" | "light" | "dark";
   maintenance_mode: boolean;
   require_2fa_for_admins: boolean;
+  passkeys_enabled: boolean;
   api_keys_enabled: boolean;
   api_key_default_days: number;
   audit_retention_days: number;

@@ -33,6 +33,7 @@ export function StoreTelegram({
           <label className="label">
             {t("Terms URL", "لینک شرایط خرید")}
             <Input
+              className="input"
               type="url"
               dir="ltr"
               required

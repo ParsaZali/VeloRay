@@ -24,7 +24,7 @@ This tracker distinguishes working features from planned integrations. Existing 
 | 18 | Bounded subscription freeze preserving duration | Available: 30-day annual allowance, manual/automatic bounded resume, preserved token and usage |
 | 19 | Adaptive subscription order from measured quality | Planned |
 | 20 | Pre-save impact preview | Available for service membership changes, with a stale-preview revision guard |
-| 21 | Passkey authentication | Planned |
+| 21 | Passkey authentication | Available: discoverable WebAuthn with required device verification, account-scoped enrollment/revocation, MFA/session protections and root-only administrator recovery; stable trusted HTTPS panel domain required |
 | 22 | Active/standby panel operation | Available: worker leadership and takeover, cluster diagnostics and deployment guide; external load balancing/shared infrastructure required |
 | 23 | Managed SSH proxy users/keys/expiry/accounting | Planned; requires independent host/runtime verification |
 | 24 | Revenue/cost/profit by seller, offer and node | Available: currency-separated seller/offer reports and explicit equal node revenue allocation, operating costs and profit |

@@ -417,6 +417,9 @@ func (s *Server) reconcileNodes(ctx context.Context) error {
 	return nil
 }
 func (s *Server) maintain(ctx context.Context) error {
+	if _, err := s.Store.Pool.Exec(ctx, `DELETE FROM vr_passkey_challenges WHERE expires_at<now()`); err != nil {
+		return err
+	}
 	cfg, e := settings(ctx, s.Store.Pool)
 	if e != nil {
 		return e

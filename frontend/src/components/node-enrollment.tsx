@@ -91,7 +91,7 @@ export function NodeEnrollment() {
                   rows={5}
                   dir="ltr"
                   value={issued.install_command}
-                  className="font-mono text-[11px]"
+                  className="input font-mono text-[11px]"
                   onFocus={(e) => e.target.select()}
                 />
                 <Button
@@ -126,6 +126,7 @@ export function NodeEnrollment() {
                 <label className="label">
                   {t("Node name")}
                   <Input
+                    className="input"
                     required
                     maxLength={96}
                     value={name}
@@ -135,6 +136,7 @@ export function NodeEnrollment() {
                 <label className="label">
                   {t("Public host")}
                   <Input
+                    className="input"
                     required
                     dir="ltr"
                     placeholder="node.example.com"

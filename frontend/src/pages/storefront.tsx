@@ -307,6 +307,7 @@ export function StorefrontPage() {
                         <label className="label">
                           {t("Subscription link", "لینک اشتراک")}
                           <Input
+                            className="input"
                             readOnly
                             value={order.subscription_url}
                             dir="ltr"
@@ -472,6 +473,7 @@ export function StorefrontPage() {
                       <label className="label">
                         {t("Action", "عملیات")}
                         <Select
+                          className="input"
                           value={kind}
                           onChange={(e) => setKind(e.target.value)}
                         >
@@ -490,6 +492,7 @@ export function StorefrontPage() {
                         <label className="label">
                           {t("Your name", "نام شما")}
                           <Input
+                            className="input"
                             required
                             autoComplete="name"
                             maxLength={80}
@@ -501,6 +504,7 @@ export function StorefrontPage() {
                         <label className="label">
                           {t("Subscription URL or token", "لینک یا شناسهٔ ساب")}
                           <Input
+                            className="input"
                             required
                             type="password"
                             autoComplete="off"

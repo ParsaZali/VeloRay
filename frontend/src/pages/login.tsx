@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Eye,
   EyeOff,
+  Fingerprint,
   KeyRound,
   LoaderCircle,
   LogIn,
@@ -16,6 +17,11 @@ import { Button } from "@/components/ui/button";
 import { VeloRayMark } from "@/components/brand/veloray-mark";
 import { api, login } from "@/lib/api";
 import { useTheme } from "@/components/theme/theme-provider";
+import {
+  passkeyError,
+  signInWithPasskey,
+  supportsPasskeys,
+} from "@/lib/passkeys";
 
 const copy = {
   en: {
@@ -55,6 +61,17 @@ const copy = {
 } as const;
 
 export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
+  const [passkeyEnabled, setPasskeyEnabled] = useState(false);
+  useEffect(() => {
+    if (!supportsPasskeys()) return;
+    const c = new AbortController();
+    void api<{ enabled: boolean }>("/auth/passkey/status", { signal: c.signal })
+      .then((d) => {
+        if (!c.signal.aborted) setPasskeyEnabled(d.enabled === true);
+      })
+      .catch(() => {});
+    return () => c.abort();
+  }, []);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -114,6 +131,20 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
     localStorage.setItem("veloray-login-locale", next);
     setLocale(next);
     setError("");
+  }
+  async function startPasskey() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await signInWithPasskey();
+      history.replaceState({}, "", "/");
+      onSuccess();
+    } catch (e) {
+      setError(passkeyError(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function startSSO(provider: "oidc" | "github") {
@@ -354,6 +385,20 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
                   )}
                 </Button>
 
+                {passkeyEnabled && !need2fa && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={busy}
+                    onClick={() => void startPasskey()}
+                  >
+                    <Fingerprint className="h-4 w-4 text-emerald-500" />
+                    {locale === "fa"
+                      ? "ورود با کلید ورود"
+                      : "Sign in with passkey"}
+                  </Button>
+                )}
                 {oidcEnabled && !need2fa && (
                   <Button
                     variant="outline"

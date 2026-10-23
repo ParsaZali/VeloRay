@@ -227,6 +227,11 @@ func (s *Server) Handler() http.Handler {
 			s.respond(w, r, out, status, e)
 			return
 		}
+		if strings.HasPrefix(path, "auth/passkey/") {
+			out, status, e := s.passkeyPublic(w, r, path)
+			s.respond(w, r, out, status, e)
+			return
+		}
 		a, e := s.authenticate(r)
 		if e != nil {
 			s.respond(w, r, nil, 0, e)

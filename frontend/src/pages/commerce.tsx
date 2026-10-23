@@ -92,7 +92,11 @@ function Currency({
   onChange: (v: string) => void;
 }) {
   return (
-    <Select value={value} onChange={(e) => onChange(e.target.value)}>
+    <Select
+      className="input"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
       {["IRT", "IRR", "USD", "EUR", "XTR"].map((v) => (
         <option key={v} value={v}>
           {v === "IRT"
@@ -363,6 +367,7 @@ export function CommerceWorkspace() {
           {(admin || can(user, "resellers.read")) && (
             <Field label={t("Seller", "فروشنده")}>
               <Select
+                className="input"
                 value={owner}
                 disabled={busy}
                 onChange={(e) => setOwner(Number(e.target.value))}
@@ -614,12 +619,14 @@ export function CommerceWorkspace() {
                 <CardTitle>{t("Orders", "سفارش‌ها")}</CardTitle>
                 <div className="flex flex-wrap gap-2">
                   <Input
+                    className="input"
                     aria-label={t("Search orders", "جستجوی سفارش")}
                     placeholder={t("Search", "جستجو")}
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
                   <Select
+                    className="input"
                     aria-label={t("Order status", "وضعیت سفارش")}
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
@@ -861,6 +868,7 @@ export function CommerceWorkspace() {
                   </label>
                   <Field label={t("Store name", "نام فروشگاه")}>
                     <Input
+                      className="input"
                       required
                       maxLength={96}
                       value={brand.name}
@@ -872,6 +880,7 @@ export function CommerceWorkspace() {
                   </Field>
                   <Field label={t("Description", "توضیحات")}>
                     <Textarea
+                      className="input"
                       maxLength={1200}
                       value={brand.description}
                       disabled={!editable}
@@ -888,6 +897,7 @@ export function CommerceWorkspace() {
                   ).map(([key, label]) => (
                     <Field key={key} label={label}>
                       <Input
+                        className="input"
                         type="url"
                         placeholder="https://"
                         value={brand[key]}
@@ -901,6 +911,7 @@ export function CommerceWorkspace() {
                   {brand.url && (
                     <Field label={t("Store link", "لینک فروشگاه")}>
                       <Input
+                        className="input"
                         readOnly
                         value={brand.url}
                         dir="ltr"
@@ -963,6 +974,7 @@ export function CommerceWorkspace() {
                 >
                   <Field label={t("Merchant ID", "شناسهٔ پذیرنده")}>
                     <Input
+                      className="input"
                       type="password"
                       autoComplete="off"
                       value={merchant}
@@ -1033,6 +1045,7 @@ export function CommerceWorkspace() {
             <h3>{t("Offer", "بستهٔ فروش")}</h3>
             <Field label={t("Name")}>
               <Input
+                className="input"
                 required
                 maxLength={96}
                 value={editor.name}
@@ -1041,6 +1054,7 @@ export function CommerceWorkspace() {
             </Field>
             <Field label={t("Service", "سرویس")}>
               <Select
+                className="input"
                 value={editor.service_id}
                 onChange={(e) =>
                   setEditor({ ...editor, service_id: Number(e.target.value) })
@@ -1057,6 +1071,7 @@ export function CommerceWorkspace() {
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t("Price", "قیمت")}>
                 <Input
+                  className="input"
                   type="number"
                   required
                   min={1}
@@ -1076,6 +1091,7 @@ export function CommerceWorkspace() {
               </Field>
               <Field label={t("Duration (days)", "مدت (روز)")}>
                 <Input
+                  className="input"
                   type="number"
                   required
                   min={1}
@@ -1096,6 +1112,7 @@ export function CommerceWorkspace() {
                 )}
               >
                 <Input
+                  className="input"
                   type="number"
                   required
                   min={0}
@@ -1114,6 +1131,7 @@ export function CommerceWorkspace() {
               </Field>
               <Field label={t("Unit cost", "هزینهٔ تأمین هر بسته")}>
                 <Input
+                  className="input"
                   type="number"
                   min={0}
                   max={1e12}
@@ -1130,6 +1148,7 @@ export function CommerceWorkspace() {
             </div>
             <Field label={t("Description", "توضیحات")}>
               <Textarea
+                className="input"
                 maxLength={1200}
                 value={editor.description}
                 onChange={(e) =>
@@ -1192,6 +1211,7 @@ export function CommerceWorkspace() {
               <>
                 <Field label={t("Offer", "بستهٔ فروش")}>
                   <Select
+                    className="input"
                     value={purchaseOffer}
                     onChange={(e) => setPurchaseOffer(Number(e.target.value))}
                   >
@@ -1206,6 +1226,7 @@ export function CommerceWorkspace() {
                 </Field>
                 <Field label={t("Action", "عملیات")}>
                   <Select
+                    className="input"
                     value={purchaseKind}
                     onChange={(e) => setPurchaseKind(e.target.value)}
                   >
@@ -1223,6 +1244,7 @@ export function CommerceWorkspace() {
                 {purchaseKind === "purchase" ? (
                   <Field label={t("Customer name", "نام مشتری")}>
                     <Input
+                      className="input"
                       required
                       maxLength={80}
                       value={purchaseName}
@@ -1234,6 +1256,7 @@ export function CommerceWorkspace() {
                     label={t("Subscription URL or token", "لینک یا شناسهٔ ساب")}
                   >
                     <Input
+                      className="input"
                       type="password"
                       autoComplete="off"
                       required
@@ -1259,6 +1282,7 @@ export function CommerceWorkspace() {
                   }
                 >
                   <Input
+                    className="input"
                     type="number"
                     required
                     step={1}
@@ -1277,6 +1301,7 @@ export function CommerceWorkspace() {
                   <>
                     <Field label={t("Note", "شرح تراکنش")}>
                       <Input
+                        className="input"
                         required
                         maxLength={500}
                         value={note}
@@ -1285,6 +1310,7 @@ export function CommerceWorkspace() {
                     </Field>
                     <Field label={t("Reference", "شناسهٔ پیگیری")}>
                       <Input
+                        className="input"
                         required
                         minLength={12}
                         maxLength={160}
@@ -1307,6 +1333,7 @@ export function CommerceWorkspace() {
                     label={t("Node ID (optional)", "شناسهٔ نود (اختیاری)")}
                   >
                     <Input
+                      className="input"
                       type="number"
                       min={1}
                       value={node}

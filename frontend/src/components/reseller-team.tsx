@@ -341,6 +341,7 @@ export function ResellerTeam({
               <label className="label">
                 {t("Username")}
                 <Input
+                  className="input"
                   required
                   maxLength={150}
                   value={editor.username}
@@ -352,6 +353,7 @@ export function ResellerTeam({
               <label className="label">
                 {t("Email")}
                 <Input
+                  className="input"
                   type="email"
                   value={editor.email}
                   onChange={(e) =>
@@ -362,6 +364,7 @@ export function ResellerTeam({
               <label className="label">
                 {t("Password")}
                 <Input
+                  className="input"
                   type="password"
                   autoComplete="new-password"
                   minLength={12}
@@ -379,6 +382,7 @@ export function ResellerTeam({
               <label className="label">
                 {t("Client limit", "سقف مشتری")}
                 <Input
+                  className="input"
                   type="number"
                   required
                   min={0}
@@ -394,6 +398,7 @@ export function ResellerTeam({
               <label className="label">
                 {t("Traffic budget (GiB)", "بودجهٔ ترافیک (گیگابایت)")}
                 <Input
+                  className="input"
                   type="number"
                   required
                   min={0}
@@ -412,6 +417,7 @@ export function ResellerTeam({
               <label className="label">
                 {t("Direct subreseller limit", "سقف ریسلر مستقیم")}
                 <Input
+                  className="input"
                   type="number"
                   min={0}
                   max={100}
@@ -512,11 +518,16 @@ export function ResellerTeam({
             <h3>{t("Reseller credentials", "اطلاعات ورود ریسلر")}</h3>
             <label className="label">
               {t("Username")}
-              <Input readOnly value={credential.username} />
+              <Input className="input" readOnly value={credential.username} />
             </label>
             <label className="label">
               {t("Password")}
-              <Input readOnly type="password" value={credential.password} />
+              <Input
+                className="input"
+                readOnly
+                type="password"
+                value={credential.password}
+              />
             </label>
             <p className="text-[11px] text-[var(--muted)]">
               {t(
@@ -551,6 +562,7 @@ export function ResellerTeam({
             <label className="label">
               {t("Amount", "مبلغ")}
               <Input
+                className="input"
                 type="number"
                 required
                 min={1}
@@ -562,6 +574,7 @@ export function ResellerTeam({
             <label className="label">
               {t("Currency", "واحد پول")}
               <Select
+                className="input"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
               >
@@ -575,6 +588,7 @@ export function ResellerTeam({
             <label className="label">
               {t("Note", "شرح تراکنش")}
               <Input
+                className="input"
                 maxLength={400}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}

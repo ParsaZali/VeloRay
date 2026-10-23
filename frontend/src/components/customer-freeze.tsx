@@ -88,6 +88,7 @@ export function CustomerFreeze({
                 <label className="label">
                   {t("Freeze duration (days)", "مدت فریز (روز)")}
                   <Input
+                    className="input"
                     type="number"
                     required
                     min={1}

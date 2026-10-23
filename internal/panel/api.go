@@ -784,6 +784,15 @@ func (s *Server) settingsAPI(w http.ResponseWriter, r *http.Request, a Actor) (a
 		return nil, 0, e
 	}
 	d = merge(d, in)
+	if flag(d, "require_2fa_for_admins") && !flag(d, "passkeys_enabled") {
+		var dependent bool
+		if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM vr_users WHERE COALESCE((data->>'is_active')::boolean,false) AND COALESCE((data->>'is_staff')::boolean,false) AND COALESCE((data->>'_passkey_count')::bigint,0)>0 AND NOT COALESCE((data->>'_totp_enabled')::boolean,false))`).Scan(&dependent); e != nil {
+			return nil, 0, e
+		}
+		if dependent {
+			return nil, 0, fail(400, "enroll TOTP for passkey-only accounts before disabling passkey sign-in under required MFA")
+		}
+	}
 	if in["subscription_hosts"] != nil {
 		for _, value := range array(d, "subscription_hosts") {
 			if _, err := get(ctx, tx, "inbounds", num(asData(value), "inbound")); err != nil {

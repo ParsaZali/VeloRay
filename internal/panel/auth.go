@@ -22,6 +22,10 @@ type Actor struct {
 	SecondFactor bool
 }
 
+func secondFactorConfigured(u Data) bool {
+	return flag(u, "_totp_enabled") || num(u, "_passkey_count") > 0
+}
+
 func (s *Server) authenticate(r *http.Request) (Actor, error) {
 	ctx := r.Context()
 	settings, e := settings(ctx, s.Store.Pool)
@@ -49,7 +53,7 @@ func (s *Server) authenticate(r *http.Request) (Actor, error) {
 			return a, fail(401, "invalid API key owner")
 		}
 		a.Scope = str(k, "scope")
-		a.SecondFactor = flag(a.User, "_totp_enabled")
+		a.SecondFactor = secondFactorConfigured(a.User)
 		_, _ = s.Store.Pool.Exec(ctx, `UPDATE vr_api_keys SET data=jsonb_set(data,'{last_used_at}',to_jsonb($1::text)) WHERE id=$2`, stamp(), num(k, "id"))
 	} else {
 		cookie, e := r.Cookie("veloray_session")
@@ -81,8 +85,8 @@ func (s *Server) authorize(ctx context.Context, a Actor, method, path string) er
 	if e != nil {
 		return e
 	}
-	if flag(cfg, "require_2fa_for_admins") && (!flag(a.User, "_totp_enabled") || !a.SecondFactor) {
-		if a.SessionHash == "" || !(strings.HasPrefix(path, "auth/2fa/") || path == "auth/me" || path == "auth/logout") {
+	if flag(cfg, "require_2fa_for_admins") && (!secondFactorConfigured(a.User) || !a.SecondFactor) {
+		if a.SessionHash == "" || !(strings.HasPrefix(path, "auth/2fa/") || strings.HasPrefix(path, "auth/passkeys") || path == "auth/me" || path == "auth/logout") {
 			return failCode(403, "two_factor_setup_required", "Set up two-factor authentication to continue")
 		}
 	}
@@ -101,7 +105,7 @@ func (s *Server) authorize(ctx context.Context, a Actor, method, path string) er
 }
 func (s *Server) sessionView(ctx context.Context, a Actor) Data {
 	cfg, _ := settings(ctx, s.Store.Pool)
-	return Data{"role": accountRole(a.User), "permissions": permissions(a.User), "own_clients_only": ownClients(a.User), "id": num(a.User, "id"), "username": str(a.User, "username"), "is_staff": flag(a.User, "is_staff"), "is_superuser": flag(a.User, "is_superuser"), "two_factor_setup_required": flag(cfg, "require_2fa_for_admins") && (!flag(a.User, "_totp_enabled") || !a.SecondFactor)}
+	return Data{"role": accountRole(a.User), "permissions": permissions(a.User), "own_clients_only": ownClients(a.User), "id": num(a.User, "id"), "username": str(a.User, "username"), "is_staff": flag(a.User, "is_staff"), "is_superuser": flag(a.User, "is_superuser"), "two_factor_setup_required": flag(cfg, "require_2fa_for_admins") && (!secondFactorConfigured(a.User) || !a.SecondFactor)}
 }
 func (s *Server) cookie(w http.ResponseWriter, name, value string, maxAge int, httpOnly bool) {
 	http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/", Secure: s.Config.SecureCookies, HttpOnly: httpOnly, SameSite: http.SameSiteStrictMode, MaxAge: maxAge})
@@ -110,7 +114,7 @@ func (s *Server) checkCSRF(r *http.Request) error {
 	if r.Method == "GET" || r.Method == "HEAD" || r.Method == "OPTIONS" {
 		return nil
 	}
-	if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") && r.URL.Path != "/api/auth/login" {
+	if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") && !strings.HasPrefix(r.URL.Path, "/api/auth/") {
 		return nil
 	}
 	origin := r.Header.Get("Origin")
@@ -261,6 +265,9 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) (any, int, error)
 }
 func (s *Server) authAPI(w http.ResponseWriter, r *http.Request, path string, a Actor) (any, int, error) {
 	ctx := r.Context()
+	if strings.HasPrefix(path, "auth/passkeys") {
+		return s.passkeysAPI(w, r, path, a)
+	}
 	if path == "auth/me" && r.Method == "GET" {
 		return s.sessionView(ctx, a), 200, nil
 	}
@@ -502,6 +509,40 @@ func (s *Store) AdminReset(ctx context.Context, name, password string) error {
 		return e
 	}
 	if e = audit(ctx, tx, num(u, "id"), "admin.password_reset", name, Data{"source": "CLI"}); e != nil {
+		return e
+	}
+	return tx.Commit(ctx)
+}
+
+func (s *Store) ResetAdministratorPasskeys(ctx context.Context, name string) error {
+	tx, e := s.Pool.Begin(ctx)
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback(ctx)
+	var raw []byte
+	e = tx.QueryRow(ctx, `SELECT data||jsonb_build_object('id',id) FROM vr_users WHERE data->>'username'=$1 AND data->>'is_superuser'='true' FOR UPDATE`, name).Scan(&raw)
+	if errors.Is(e, pgx.ErrNoRows) {
+		return errors.New("administrator not found")
+	}
+	if e != nil {
+		return e
+	}
+	u, e := decode(raw)
+	if e != nil {
+		return e
+	}
+	for _, query := range []string{`DELETE FROM vr_passkeys WHERE user_id=$1`, `DELETE FROM vr_passkey_challenges WHERE user_id=$1`, `DELETE FROM vr_sessions WHERE user_id=$1`} {
+		if _, e = tx.Exec(ctx, query, num(u, "id")); e != nil {
+			return e
+		}
+	}
+	u["_passkey_count"] = 0
+	u["_auth_version"] = num(u, "_auth_version") + 1
+	if e = save(ctx, tx, "users", u); e != nil {
+		return e
+	}
+	if e = audit(ctx, tx, num(u, "id"), "admin.passkeys_reset", name, Data{"source": "CLI"}); e != nil {
 		return e
 	}
 	return tx.Commit(ctx)

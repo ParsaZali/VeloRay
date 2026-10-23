@@ -1,4 +1,23 @@
 export const expansionFA: Record<string, string> = {
+  "passkeys require a trusted HTTPS domain":
+    "کلید ورود به دامنه‌ای با HTTPS معتبر نیاز دارد.",
+  "passkey sign-in is disabled": "ورود با کلید غیرفعال است.",
+  "confirm your local password to manage passkeys":
+    "برای مدیریت کلیدهای ورود، رمز محلی خود را تأیید کنید.",
+  "sign in with an existing passkey before managing passkeys":
+    "برای مدیریت کلیدها، ابتدا با یکی از کلیدهای موجود وارد شوید.",
+  "passkey request expired; try again":
+    "مهلت درخواست کلید ورود تمام شده؛ دوباره تلاش کنید.",
+  "passkey sign-in failed": "ورود با کلید ناموفق بود.",
+  "passkey registration could not be verified":
+    "تأیید کلید ورود جدید ناموفق بود.",
+  "passkey is already registered": "این کلید قبلاً ثبت شده است.",
+  "passkey limit reached": "تعداد کلیدها به سقف مجاز رسیده است.",
+  "passkey not found": "کلید ورود پیدا نشد.",
+  "enroll another passkey or TOTP before removing your last security factor":
+    "پیش از حذف آخرین عامل امنیتی، کلید دیگر یا TOTP را فعال کنید.",
+  "enroll TOTP for passkey-only accounts before disabling passkey sign-in under required MFA":
+    "برای غیرفعال کردن کلید ورود در حالت احراز هویت اجباری، ابتدا TOTP حساب‌های وابسته را فعال کنید.",
   "reopen the store from its Telegram bot":
     "فروشگاه را از داخل ربات تلگرام دوباره باز کنید.",
   "Telegram sales are unavailable": "فروش تلگرام در دسترس نیست.",

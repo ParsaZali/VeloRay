@@ -74,6 +74,7 @@ export function StoreDomain({
               "آدرس اختصاصی ساب (اختیاری)",
             )}
             <Input
+              className="input"
               type="url"
               dir="ltr"
               disabled={!editable}
@@ -95,6 +96,7 @@ export function StoreDomain({
               <label className="label">
                 {t("TXT record name", "نام رکورد TXT")}
                 <Input
+                  className="input"
                   readOnly
                   dir="ltr"
                   value={brand.domain_record.name}
@@ -104,6 +106,7 @@ export function StoreDomain({
               <label className="label">
                 {t("TXT record value", "مقدار رکورد TXT")}
                 <Input
+                  className="input"
                   readOnly
                   dir="ltr"
                   value={brand.domain_record.value}
