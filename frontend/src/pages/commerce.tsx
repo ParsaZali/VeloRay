@@ -300,12 +300,9 @@ export function CommerceWorkspace() {
           body: JSON.stringify({ amount: Number(amount), currency }),
         });
         rememberOrder(order);
-        const pay = await api<{ url: string }>(`/shop/orders/${order.id}/pay`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${order.token}` },
-          body: "{}",
-        });
-        window.location.assign(pay.url);
+        window.location.assign(
+          `/shop?store=${order.owner_id}&order=${order.id}#token=${encodeURIComponent(order.token || "")}`,
+        );
       } else {
         const endpoint =
           dialog === "credit"
@@ -742,7 +739,7 @@ export function CommerceWorkspace() {
                     </Button>
                   </>
                 )}
-                {editable && owner === user?.id && (
+                {editable && !admin && owner === user?.id && (
                   <Button onClick={() => open("topup")}>
                     <Plus className="h-4 w-4" />
                     {t("Top up wallet", "شارژ کیف پول")}
@@ -859,7 +856,7 @@ export function CommerceWorkspace() {
                     <input
                       type="checkbox"
                       checked={brand.enabled}
-                      disabled={!editable}
+                      disabled={!editable || busy}
                       onChange={(e) =>
                         setBrand({ ...brand, enabled: e.target.checked })
                       }
@@ -872,7 +869,7 @@ export function CommerceWorkspace() {
                       required
                       maxLength={96}
                       value={brand.name}
-                      disabled={!editable}
+                      disabled={!editable || busy}
                       onChange={(e) =>
                         setBrand({ ...brand, name: e.target.value })
                       }
@@ -883,7 +880,7 @@ export function CommerceWorkspace() {
                       className="input"
                       maxLength={1200}
                       value={brand.description}
-                      disabled={!editable}
+                      disabled={!editable || busy}
                       onChange={(e) =>
                         setBrand({ ...brand, description: e.target.value })
                       }
@@ -901,7 +898,7 @@ export function CommerceWorkspace() {
                         type="url"
                         placeholder="https://"
                         value={brand[key]}
-                        disabled={!editable}
+                        disabled={!editable || busy}
                         onChange={(e) =>
                           setBrand({ ...brand, [key]: e.target.value })
                         }
@@ -923,7 +920,7 @@ export function CommerceWorkspace() {
                     key={owner}
                     owner={owner}
                     brand={brand}
-                    editable={editable}
+                    editable={editable && !busy}
                     onChange={(patch) =>
                       setBrand((current) => ({ ...current, ...patch }))
                     }
@@ -933,7 +930,7 @@ export function CommerceWorkspace() {
                   />
                   <SalesPayments
                     brand={brand}
-                    editable={editable}
+                    editable={editable && !busy}
                     onChange={(patch) =>
                       setBrand((current) => ({ ...current, ...patch }))
                     }
@@ -941,7 +938,7 @@ export function CommerceWorkspace() {
                   <StoreTelegram
                     services={services}
                     brand={brand}
-                    editable={editable}
+                    editable={editable && !busy}
                     onChange={(patch) =>
                       setBrand((current) => ({ ...current, ...patch }))
                     }
@@ -976,7 +973,7 @@ export function CommerceWorkspace() {
               <SalesReview
                 key={`${owner}:${tab}`}
                 owner={owner}
-                editable={editable}
+                editable={editable && !busy}
                 orders={orders}
                 mode={tab}
                 onReviewed={() => void load()}
@@ -1057,7 +1054,7 @@ export function CommerceWorkspace() {
                   className="input"
                   type="number"
                   required
-                  min={1}
+                  min={editor.currency === "USDT" ? 0.000001 : 1}
                   max={editor.currency === "USDT" ? 1e6 : 1e12}
                   step={editor.currency === "USDT" ? 0.000001 : 1}
                   value={
@@ -1127,13 +1124,20 @@ export function CommerceWorkspace() {
                   className="input"
                   type="number"
                   min={0}
-                  max={1e12}
-                  step={1}
-                  value={editor.cost_amount}
+                  max={editor.currency === "USDT" ? 1e6 : 1e12}
+                  step={editor.currency === "USDT" ? 0.000001 : 1}
+                  value={
+                    editor.currency === "USDT"
+                      ? editor.cost_amount / 1000000
+                      : editor.cost_amount
+                  }
                   onChange={(e) =>
                     setEditor({
                       ...editor,
-                      cost_amount: Number(e.target.value),
+                      cost_amount: Math.round(
+                        Number(e.target.value) *
+                          (editor.currency === "USDT" ? 1000000 : 1),
+                      ),
                     })
                   }
                 />

@@ -62,6 +62,7 @@ export function StoreTelegram({
       <label className="flex items-center gap-3 text-[13px]">
         <input
           type="checkbox"
+          aria-label={t("Enable sales bot", "روشن کردن ربات فروش")}
           checked={!!brand.telegram_sales}
           disabled={!editable}
           onChange={(e) => onChange({ telegram_sales: e.target.checked })}

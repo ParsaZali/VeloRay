@@ -130,7 +130,7 @@ func (s *Server) advancedTelegramReply(ctx context.Context, cfg Data, text, owne
 		reply["text"] = proofBotDescription(proof) + "\n" + botAmount(o) + "\n" + str(proof, "transaction_id") + "\n" + str(obj(proof, "evidence"), "note")
 		reply["protect_content"] = true
 		if image := str(obj(proof, "evidence"), "image"); image != "" {
-			reply["text"] = str(reply, "text") + "\n" + botText(cfg, "View the receipt photo in the panel before approving.", "پیش از تأیید، عکس رسید را در پنل بررسی کنید.")
+			reply["_photo_data"] = image
 		}
 		if str(proof, "method") == "usdt" {
 			reply["reply_markup"] = botKeyboard([]any{botButton(botText(cfg, "Review transfer", "بررسی واریز"), fmt.Sprintf("vr:/receipt %d approve", id))})

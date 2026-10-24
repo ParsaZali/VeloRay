@@ -47,7 +47,8 @@ export function StorefrontPage() {
     { theme, setTheme } = useTheme();
   const params = new URLSearchParams(window.location.search),
     store = params.get("store") || "",
-    initialOrder = params.get("order") || "";
+    initialOrder = params.get("order") || "",
+    requestedService = params.get("service") || "";
   const [telegramData] = useState(miniAppData),
     [termsAccepted, setTermsAccepted] = useState(false),
     [privateToken, setPrivateToken] = useState<string | null>(() => {
@@ -105,6 +106,29 @@ export function StorefrontPage() {
       });
     return () => c.abort();
   }, [store, initialOrder, telegramData]);
+  useEffect(() => {
+    if (!requestedService || !telegramData || !catalog) return;
+    const c = new AbortController();
+    void api<{ services: import("@/lib/sales").BuyerService[] }>(
+      `/shop/me?store=${encodeURIComponent(store)}`,
+      { headers: { "X-Telegram-Init-Data": telegramData }, signal: c.signal },
+    )
+      .then((d) => {
+        const own = d.services.find((s) => String(s.id) === requestedService);
+        if (!own)
+          throw new Error(t("Subscription not found", "اشتراک پیدا نشد"));
+        setKind("renewal");
+        setSubscription(own.subscription_url);
+        const match = catalog.offers.find((o) =>
+          own.service_ids?.includes(o.service_id),
+        );
+        if (match) setSelected(match);
+      })
+      .catch((e) => {
+        if (!c.signal.aborted) setError(commerceError(e));
+      });
+    return () => c.abort();
+  }, [requestedService, telegramData, store, catalog]);
   useEffect(() => {
     if (!orderID) return;
     if (!orderToken) {
@@ -443,6 +467,10 @@ export function StorefrontPage() {
                     onRenew={(service) => {
                       setKind("renewal");
                       setSubscription(service.subscription_url);
+                      const matching = catalog.offers.find((o) =>
+                        service.service_ids?.includes(o.service_id),
+                      );
+                      if (matching) setSelected(matching);
                       document
                         .getElementById("store-checkout")
                         ?.scrollIntoView({
@@ -465,7 +493,11 @@ export function StorefrontPage() {
               )}
               <div className="max-w-2xl">
                 <h1 className="text-2xl font-semibold tracking-tight">
-                  {t("Choose your subscription", "اشتراک خود را انتخاب کنید")}
+                  {catalog.bot?.catalog_text?.replaceAll(
+                    "{store}",
+                    catalog.name,
+                  ) ||
+                    t("Choose your subscription", "اشتراک خود را انتخاب کنید")}
                 </h1>
                 {catalog.bot?.welcome_image && (
                   <img
@@ -473,6 +505,11 @@ export function StorefrontPage() {
                     src={catalog.bot.welcome_image}
                     className="mb-4 max-h-52 rounded-xl object-contain"
                   />
+                )}
+                {catalog.bot?.welcome && (
+                  <p className="mt-3 whitespace-pre-wrap text-[14px] leading-7">
+                    {catalog.bot.welcome.replaceAll("{store}", catalog.name)}
+                  </p>
                 )}
                 {catalog.description && (
                   <p className="mt-3 text-[14px] leading-7 text-[var(--muted)]">

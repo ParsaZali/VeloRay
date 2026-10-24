@@ -61,7 +61,7 @@ func (s *Server) salesCustomerView(ctx context.Context, owner, user, id int64) (
 		return nil, e
 	}
 	out := Data{}
-	for _, k := range strings.Fields("id name enabled expires_at first_used_at used_traffic_bytes raw_used_traffic_bytes raw_upload_traffic_bytes raw_download_traffic_bytes traffic_limit_bytes disabled_reason") {
+	for _, k := range strings.Fields("id name service_ids enabled expires_at first_used_at used_traffic_bytes raw_used_traffic_bytes raw_upload_traffic_bytes raw_download_traffic_bytes traffic_limit_bytes disabled_reason") {
 		out[k] = c[k]
 	}
 	out["remaining_bytes"] = nil

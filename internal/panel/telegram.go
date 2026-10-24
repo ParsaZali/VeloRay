@@ -145,7 +145,7 @@ func (s *Server) telegramReplies(ctx context.Context, cfg Data) error {
 				}
 				reply["chat_id"], reply["disable_web_page_preview"] = num(obj(m, "chat"), "id"), true
 				cached, _ = json.Marshal(reply)
-				if sales {
+				if permitted {
 					sealed, err := seal(s.Config.FieldKey, string(cached))
 					if err != nil {
 						return err
@@ -170,13 +170,7 @@ func (s *Server) telegramReplies(ctx context.Context, cfg Data) error {
 					return e
 				}
 			}
-			method := "sendMessage"
-			if str(reply, "photo") != "" {
-				method = "sendPhoto"
-				reply["caption"] = reply["text"]
-				delete(reply, "text")
-			}
-			if _, e = s.telegramRequest(ctx, token, method, reply); e != nil {
+			if e = s.telegramSendReply(ctx, token, reply); e != nil {
 				return e
 			}
 		}
@@ -188,6 +182,9 @@ func (s *Server) telegramReplies(ctx context.Context, cfg Data) error {
 		}
 	}
 	if e = s.telegramOrderNotifications(ctx, cfg, token); e != nil {
+		return e
+	}
+	if e = s.proofNotifications(ctx, cfg, token); e != nil {
 		return e
 	}
 	if e = s.ticketNotifications(ctx, cfg, token); e != nil {
@@ -400,6 +397,13 @@ func (s *Server) telegramExecute(ctx context.Context, cfg Data, owner, nonce str
 			if err != nil {
 				return nil, err
 			}
+			related, err := clientNodes(ctx, tx, c)
+			if err != nil {
+				return nil, err
+			}
+			if err = ensureCovered(related, nodes); err != nil {
+				return nil, err
+			}
 			if err = applyClientAction(c, action); err != nil {
 				return nil, err
 			}
@@ -461,6 +465,15 @@ func (s *Server) telegramAPI(w http.ResponseWriter, r *http.Request, path string
 	}
 	if path == "telegram/setup" && webhook {
 		return nil, 0, fail(409, "This token has a webhook. Remove it in the existing bot service before using VeloRay polling")
+	}
+	if path == "telegram/setup" {
+		commands := []any{}
+		for _, pair := range [][2]string{{"start", "Open store"}, {"buy", "Buy a subscription"}, {"services", "My subscriptions"}, {"orders", "My orders"}, {"free", "Free trial"}, {"support", "Support"}, {"terms", "Purchase terms"}} {
+			commands = append(commands, Data{"command": pair[0], "description": pair[1]})
+		}
+		if _, e = s.telegramRequest(ctx, token, "setMyCommands", Data{"commands": commands, "scope": Data{"type": "default"}}); e != nil {
+			return nil, 0, fail(502, "Telegram command setup failed")
+		}
 	}
 	for owner := range telegramOwners(cfg) {
 		if path == "telegram/test" {

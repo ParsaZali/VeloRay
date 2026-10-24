@@ -101,6 +101,9 @@ func (s *Server) recordPaymentProof(ctx context.Context, id string, d Data) (Dat
 		return nil, e
 	}
 	expiry, _ := timestamp(o, "expires_at")
+	if str(o, "kind") == "topup" && num(o, "owner_id") == num(o, "payer_id") {
+		return nil, fail(410, "legacy self-funded wallet invoices are unavailable; ask your parent seller for a new funding invoice")
+	}
 	if str(o, "state") != "pending" || !expiry.After(time.Now()) {
 		return nil, fail(409, "order is not awaiting payment or has expired")
 	}
@@ -260,4 +263,30 @@ func (s *Server) receiptsAPI(w http.ResponseWriter, r *http.Request, path string
 }
 func proofBotDescription(p Data) string {
 	return fmt.Sprintf("#%d · %s · %s\n%s", num(p, "id"), str(p, "method"), str(p, "state"), str(p, "order_id"))
+}
+
+func (s *Server) proofNotifications(ctx context.Context, cfg Data, token string) error {
+	rows, e := commerceRows(ctx, s.Store.Pool, `SELECT jsonb_build_object('id',p.id,'order_id',p.order_id,'state',p.state,'method',p.method,'note',p.review_note,'user_id',t.user_id,'amount',o.amount,'currency',o.currency) FROM vr_payment_proofs p JOIN vr_orders o ON o.id=p.order_id LEFT JOIN vr_telegram_orders t ON t.order_id=p.order_id WHERE p.notification_state<>p.state ORDER BY p.id LIMIT 10`)
+	if e != nil {
+		return e
+	}
+	for _, d := range rows {
+		if str(d, "state") == "pending" {
+			for owner := range telegramOwners(cfg) {
+				_, e = s.telegramRequest(ctx, token, "sendMessage", Data{"chat_id": owner, "protect_content": true, "text": fmt.Sprintf("%s #%d\n%s", botText(cfg, "Transfer awaiting review", "واریز در انتظار بررسی"), num(d, "id"), botAmount(d)), "reply_markup": botKeyboard([]any{botButton(botText(cfg, "Review receipt", "بررسی رسید"), fmt.Sprintf("vr:/receipt %d", num(d, "id")))})})
+				if e != nil {
+					return e
+				}
+			}
+		} else if str(d, "state") == "rejected" && num(d, "user_id") > 0 {
+			_, e = s.telegramRequest(ctx, token, "sendMessage", Data{"chat_id": num(d, "user_id"), "protect_content": true, "text": botText(cfg, "Receipt rejected: ", "رسید رد شد: ") + str(d, "note"), "reply_markup": botKeyboard([]any{botButton(botText(cfg, "View order", "مشاهده سفارش"), "vs:order:"+str(d, "order_id"))})})
+			if e != nil {
+				return e
+			}
+		}
+		if _, e = s.Store.Pool.Exec(ctx, `UPDATE vr_payment_proofs SET notification_state=$2 WHERE id=$1 AND state=$2`, num(d, "id"), str(d, "state")); e != nil {
+			return e
+		}
+	}
+	return nil
 }

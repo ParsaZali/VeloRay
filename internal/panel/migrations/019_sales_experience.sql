@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS vr_payment_proofs (
  UNIQUE(network,transaction_id)
 );
 CREATE INDEX IF NOT EXISTS vr_payment_proofs_pending ON vr_payment_proofs(id) WHERE state='pending';
+ALTER TABLE vr_payment_proofs ADD COLUMN IF NOT EXISTS notification_state text NOT NULL DEFAULT '';
 CREATE TABLE IF NOT EXISTS vr_bot_trials (
  owner_id bigint NOT NULL REFERENCES vr_users(id), user_id bigint NOT NULL CHECK(user_id>0),
  customer_id bigint REFERENCES vr_accounts(id) ON DELETE SET NULL,

@@ -319,7 +319,11 @@ func (s *Server) commerceAPI(w http.ResponseWriter, r *http.Request, path string
 				return nil, e
 			}
 			oldOrigin := str(d, "subscription_origin")
+			oldBot := obj(d, "bot")
 			d = merge(d, input)
+			if patch, ok := input["bot"]; ok {
+				d["bot"] = merge(oldBot, asData(patch))
+			}
 			origin, e := normalizeStoreOrigin(str(d, "subscription_origin"))
 			if e != nil {
 				return nil, e

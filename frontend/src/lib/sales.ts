@@ -114,6 +114,7 @@ export type PaymentProof = {
   evidence?: { image?: string; note?: string; destination?: ManualMethod };
 };
 export type BuyerService = {
+  service_ids?: number[];
   id: number;
   name: string;
   enabled: boolean;

@@ -116,7 +116,7 @@ export function BuyerHub({
       setBusy(false);
     }
   }
-  const choices: [View, string, typeof Package][] = [
+  const baseChoices: [View, string, typeof Package][] = [
     ["services", t("My services", "سرویس‌های من"), Package],
     ["orders", t("My orders", "سفارش‌های من"), RefreshCw],
     ...(catalog.bot?.trial_enabled
@@ -131,6 +131,27 @@ export function BuyerHub({
     ["tutorial", t("Tutorials", "آموزش اتصال"), BookOpen],
     ["support", t("Support", "پشتیبانی"), MessageCircle],
   ];
+  const configured = catalog.bot?.buttons;
+  const actionFor = (view: View) => (view === "orders" ? "account" : view);
+  const choices = baseChoices
+    .filter(
+      ([key]) =>
+        !configured ||
+        configured.find((b) => b.action === actionFor(key))?.visible !== false,
+    )
+    .map(
+      ([key, label, Icon]) =>
+        [
+          key,
+          configured?.find((b) => b.action === actionFor(key))?.label || label,
+          Icon,
+        ] as [View, string, typeof Package],
+    )
+    .sort(
+      (a, b) =>
+        (configured?.find((v) => v.action === actionFor(a[0]))?.row || 0) -
+        (configured?.find((v) => v.action === actionFor(b[0]))?.row || 0),
+    );
   const bytes = (n: number) =>
     `${(n / 1073741824).toLocaleString(undefined, { maximumFractionDigits: 3 })} GiB`;
   return (
@@ -150,6 +171,38 @@ export function BuyerHub({
           </Button>
         ))}
       </nav>
+      {catalog.bot?.custom_buttons?.length ? (
+        <div className="flex flex-wrap gap-2">
+          {catalog.bot.custom_buttons.map((b, i) =>
+            b.url ? (
+              <a
+                key={i}
+                className="rounded-lg border border-[var(--border)] px-4 py-2 text-[12px] text-emerald-500"
+                href={b.url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {b.label}
+              </a>
+            ) : (
+              <details
+                key={i}
+                className="min-w-0 rounded-lg border border-[var(--border)] p-3 text-[12px]"
+              >
+                <summary className="cursor-pointer">{b.label}</summary>
+                {b.image && (
+                  <img
+                    alt=""
+                    src={b.image}
+                    className="mt-3 max-h-52 rounded-lg object-contain"
+                  />
+                )}
+                <p className="mt-3 whitespace-pre-wrap leading-7">{b.text}</p>
+              </details>
+            ),
+          )}
+        </div>
+      ) : null}
       {view && (
         <Card>
           <CardContent className="space-y-4">
@@ -347,6 +400,16 @@ export function BuyerHub({
                       "اشتراک آزمایشی دریافت کنید. هر حساب تلگرام یک‌بار می‌تواند تست بگیرد.",
                     )}
                 </p>
+                {catalog.bot?.trial_channel_url && (
+                  <a
+                    className="inline-block text-[12px] text-emerald-500"
+                    href={catalog.bot.trial_channel_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t("Join trial channel", "عضویت در کانال دریافت تست")}
+                  </a>
+                )}
                 <label className="flex gap-2 text-[12px]">
                   <input
                     type="checkbox"

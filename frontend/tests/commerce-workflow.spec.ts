@@ -148,6 +148,7 @@ test("subreseller creation shows a generated password once and transfers real-pa
   page,
 }) => {
   const state = await workspace(page);
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/services");
   await page
     .getByRole("button", { name: "Sales & billing", exact: true })
@@ -195,6 +196,7 @@ test("store branding saves before DNS and HTTPS verification and remains usable 
   page,
 }) => {
   const state = await workspace(page);
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/services");
   await page
     .getByRole("button", { name: "Sales & billing", exact: true })
@@ -243,6 +245,7 @@ test("service review sends a revision only after the impact has been displayed",
   page,
 }) => {
   const state = await workspace(page);
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/services");
   await page.getByRole("button", { name: "Edit Primary", exact: true }).click();
   const dialog = page.getByRole("dialog");
@@ -419,4 +422,356 @@ test("private bot order link imports its bearer from the fragment and removes it
     ),
   ).toBe(token);
   await expect(page.getByRole("alert")).not.toBeVisible();
+});
+
+test("optional sales customization and coming-soon gateway", async ({
+  page,
+}) => {
+  const state = await workspace(page);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/services");
+  await page
+    .getByRole("button", { name: "Sales & billing", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Storefront", exact: true }).click();
+  const sales = page.getByRole("checkbox", {
+    name: "Enable sales bot",
+    exact: true,
+  });
+  await expect(sales).not.toBeChecked();
+  await sales.check();
+  await page
+    .getByLabel("Purchase terms URL")
+    .fill("https://store.example/terms");
+  await page
+    .getByLabel("Support URL", { exact: true })
+    .fill("https://t.me/support");
+  await page.getByText("Messages & images", { exact: true }).click();
+  await page
+    .getByLabel("Welcome message", { exact: true })
+    .fill("Welcome to {store} — {user_id}");
+  await page
+    .getByLabel("Welcome image URL", { exact: true })
+    .fill("https://store.example/welcome.png");
+  await page.getByText("Main menu", { exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "buy label", exact: true })
+    .fill("Get connected");
+  await page.getByText("Free trial", { exact: true }).click();
+  await page.getByRole("checkbox", { name: "Offer a free trial" }).check();
+  await page.getByLabel("Trial service", { exact: true }).click();
+  await page.getByRole("option", { name: "Primary", exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Menu preview", exact: true }).click();
+  await expect(page.getByText("Get connected", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "test-results/sales-bot-mobile.png" });
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect
+    .poll(
+      () => state.writes.filter((w) => w.resource === "commerce/store").length,
+    )
+    .toBe(1);
+  await expect(
+    page.getByRole("status").filter({ hasText: "Saved" }),
+  ).toBeVisible();
+  let write = state.writes
+    .filter((w) => w.resource === "commerce/store")
+    .at(-1);
+  expect(write?.body.telegram_sales).toBe(true);
+  expect(write?.body.bot.welcome).toContain("{user_id}");
+  expect(write?.body.bot.trial_service_id).toBe(7);
+  expect(write?.body.bot.buttons[0].label).toBe("Get connected");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page
+    .getByRole("checkbox", { name: "Enable sales bot", exact: true })
+    .uncheck();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect
+    .poll(
+      () =>
+        state.writes.filter((w) => w.resource === "commerce/store").at(-1)?.body
+          .telegram_sales,
+    )
+    .toBe(false);
+  await page
+    .getByRole("button", { name: "Payment gateway", exact: true })
+    .click();
+  await expect(page.getByText("Soon...", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(
+      "If you would like a payment gateway added, let us know through Telegram.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(page.getByLabel("Merchant ID")).not.toBeVisible();
+});
+test("manual receipt stays in the Mini App without confirming a payment", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("veloray-locale", "en");
+    (window as any).Telegram = {
+      WebApp: { initData: "signed-buyer", ready() {}, expand() {} },
+    };
+  });
+  const id = "manual_order_abcdefghijklmnopqrstuvwxyz",
+    token = "private_token_abcdefghijklmnopqrstuvwxyz0123456789";
+  let submitted: any = null;
+  let verified = false;
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    let json: any = {};
+    if (path === "/api/auth/csrf") json = { csrfToken: "test" };
+    else if (path === "/api/shop/catalog")
+      json = {
+        enabled: true,
+        name: "Green Store",
+        telegram_checkout: true,
+        terms_url: "https://store.example/terms",
+        payments_enabled: true,
+        offers: [
+          {
+            id: 1,
+            name: "Monthly",
+            amount: 10000,
+            currency: "IRT",
+            duration_days: 30,
+            traffic_bytes: 1073741824,
+          },
+        ],
+      };
+    else if (path === "/api/shop/orders" && route.request().method() === "POST")
+      json = { id, token, currency: "IRT", amount: 10000, state: "pending" };
+    else if (path.endsWith("/pay")) json = { gateway: "manual", methods: [] };
+    else if (path.endsWith("/receipt")) {
+      submitted = route.request().postDataJSON();
+      expect(route.request().headers().authorization).toBe(`Bearer ${token}`);
+      json = { id: 9, order_id: id, method: "card", state: "pending" };
+    } else if (path === `/api/shop/orders/${id}`)
+      json = {
+        id,
+        currency: "IRT",
+        amount: 10000,
+        state: "pending",
+        snapshot: { name: "Monthly" },
+        manual_payments: [
+          {
+            method: "card",
+            card_number: "6037991234567890",
+            card_holder: "Demo Seller",
+            instructions: "Exact invoice amount",
+          },
+        ],
+        receipt: submitted ? { id: 9, state: "pending", method: "card" } : null,
+      };
+    else if (path.endsWith("/verify")) {
+      verified = true;
+    } else
+      return route.fulfill({
+        status: 404,
+        json: { detail: "Unexpected route" },
+      });
+    return route.fulfill({ json });
+  });
+  await page.goto("/shop?store=1");
+  await page.getByLabel("Your name", { exact: true }).fill("Buyer");
+  await page.getByRole("checkbox").check();
+  await page
+    .getByRole("button", { name: "Continue to payment", exact: true })
+    .click();
+  await expect(page.getByText("Demo Seller", { exact: true })).toBeVisible();
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "receipt.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
+  await page
+    .getByRole("button", { name: "Submit receipt", exact: true })
+    .click();
+  await expect(
+    page.getByText(
+      "Your receipt is awaiting review. We will deliver your subscription after approval.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  expect(submitted.method).toBe("card");
+  expect(submitted.image).toContain("data:image/png;base64,");
+  expect(verified).toBe(false);
+  expect(new URL(page.url()).pathname).toBe("/shop");
+});
+test("buyer confirms link rotation and failed trial stays visible", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("veloray-locale", "en");
+    (window as any).Telegram = {
+      WebApp: { initData: "signed-customer", ready() {}, expand() {} },
+    };
+  });
+  let rotated: any = null;
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    let json: any = {};
+    if (path === "/api/auth/csrf") json = { csrfToken: "test" };
+    else if (path === "/api/shop/catalog")
+      json = {
+        enabled: true,
+        name: "Shop",
+        payments_enabled: true,
+        terms_url: "https://shop.example/terms",
+        bot: {
+          trial_enabled: true,
+          allow_rotate: true,
+          buttons: [
+            {
+              action: "services",
+              label: "My connections",
+              visible: true,
+              row: 0,
+            },
+            { action: "trial", label: "Try it", visible: true, row: 1 },
+          ],
+        },
+        offers: [],
+      };
+    else if (path === "/api/shop/me")
+      json = {
+        user_id: 777,
+        services: [
+          {
+            id: 4,
+            name: "My subscription",
+            enabled: true,
+            used_traffic_bytes: 1073741824,
+            remaining_bytes: 2147483648,
+            traffic_limit_bytes: 3221225472,
+            subscription_url: "https://sub.example/sub/private",
+          },
+        ],
+      };
+    else if (path === "/api/shop/me/services/4/rotate") {
+      rotated = route.request().postDataJSON();
+      json = {};
+    } else if (path === "/api/shop/me/trial")
+      return route.fulfill({
+        status: 409,
+        json: { detail: "Your trial has already been claimed" },
+      });
+    else
+      return route.fulfill({
+        status: 404,
+        json: { detail: "Unexpected route" },
+      });
+    return route.fulfill({ json });
+  });
+  await page.goto("/shop?store=1");
+  await page
+    .getByRole("button", { name: "My connections", exact: true })
+    .click();
+  await expect(
+    page.getByText("My subscription", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Change link", exact: true }).click();
+  expect(rotated).toBeNull();
+  await page.getByRole("button", { name: "Confirm", exact: true }).click();
+  await expect.poll(() => rotated).toEqual({ confirm: true });
+  await page.getByRole("button", { name: "Try it", exact: true }).click();
+  await page.getByRole("checkbox").check();
+  await page
+    .getByRole("button", { name: "Get free trial", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Your trial has already been claimed",
+  );
+  await expect(
+    page.getByRole("button", { name: "Get free trial", exact: true }),
+  ).toBeVisible();
+});
+
+test("receipt approval requires bank reference and a second explicit confirmation", async ({
+  page,
+}) => {
+  await workspace(page);
+  const id = "proof_order_abcdefghijklmnopqrstuvwxyz";
+  let approved: any = null;
+  await page.route("**/api/commerce/orders?*", (route) =>
+    route.fulfill({
+      json: [
+        {
+          id,
+          amount: 10000,
+          currency: "IRT",
+          state: "pending",
+          kind: "purchase",
+          snapshot: { name: "Monthly" },
+          created_at: new Date().toISOString(),
+        },
+      ],
+    }),
+  );
+  await page.route("**/api/commerce/receipts?*", (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 7,
+          order_id: id,
+          method: "card",
+          state: "pending",
+          created_at: new Date().toISOString(),
+        },
+      ],
+    }),
+  );
+  await page.route("**/api/commerce/receipts/7?*", (route) =>
+    route.fulfill({
+      json: {
+        id: 7,
+        order_id: id,
+        method: "card",
+        state: "pending",
+        evidence: {
+          note: "Demo receipt",
+          destination: { method: "card", card_number: "6037991234567890" },
+        },
+      },
+    }),
+  );
+  await page.route("**/api/commerce/receipts/7/approve?*", (route) => {
+    approved = route.request().postDataJSON();
+    return route.fulfill({ json: { id: 7, state: "approved" } });
+  });
+  await page.goto("/services");
+  await page
+    .getByRole("button", { name: "Sales & billing", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Receipts", exact: true }).click();
+  await page.getByRole("button", { name: /#7/ }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Demo receipt", { exact: true })).toBeVisible();
+  const approve = dialog.getByRole("button", {
+    name: "Approve transfer",
+    exact: true,
+  });
+  await expect(approve).toBeDisabled();
+  await dialog
+    .getByLabel("Verified bank reference", { exact: true })
+    .fill("bank-confirmed-123");
+  await approve.click();
+  expect(approved).toBeNull();
+  await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
+  await expect
+    .poll(() => approved)
+    .toMatchObject({
+      expected_amount: 10000,
+      expected_currency: "IRT",
+      reference: "bank-confirmed-123",
+    });
+  await expect(dialog).not.toBeVisible();
 });

@@ -268,7 +268,7 @@ func (s *Server) salesBotReply(ctx context.Context, cfg Data, text string, user 
 		if e != nil {
 			return failReply(e)
 		}
-		reply["text"] = fmt.Sprintf("%s\n%s\n%d %s · %s\n%s\n\n%s", str(d, "name"), str(d, "description"), num(d, "duration_days"), botText(cfg, "days", "روز"), quotaText(Data{"traffic_limit_bytes": num(d, "traffic_bytes")}), botAmount(d), botText(cfg, "Confirm to accept the purchase terms and create this invoice.", "با تأیید، شرایط خرید را می‌پذیرید و فاکتور ساخته می‌شود."))
+		reply["text"] = fmt.Sprintf("%s\n%s\n%d %s · %s\n%s\n\n%s", str(d, "name"), botAmount(d), num(d, "duration_days"), botText(cfg, "days", "روز"), quotaText(Data{"traffic_limit_bytes": num(d, "traffic_bytes")}), str(d, "description"), botText(cfg, "Confirm to accept the purchase terms and create this invoice.", "با تأیید، شرایط خرید را می‌پذیرید و فاکتور ساخته می‌شود."))
 		reply["reply_markup"] = botKeyboard([]any{Data{"text": botText(cfg, "Purchase terms", "شرایط خرید"), "url": str(store, "terms_url")}}, []any{botButton(botText(cfg, "Confirm purchase", "تأیید خرید"), "vs:confirm:"+nonce)}, []any{botButton(botText(cfg, "Back", "بازگشت"), "vs:buy")})
 		if str(d, "image_url") != "" {
 			reply["photo"] = str(d, "image_url")

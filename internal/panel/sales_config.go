@@ -93,6 +93,12 @@ func validateSalesConfig(store Data) error {
 	}
 	for _, v := range array(b, "custom_buttons") {
 		d := asData(v)
+		if e := typed(d, Data{"label": "", "url": "", "text": "", "image": ""}); e != nil {
+			return fail(400, e.Error())
+		}
+		if len(str(d, "url")) > 2048 || len(str(d, "image")) > 2048 {
+			return fail(400, "custom button URLs are too long")
+		}
 		if e := allowed(d, "label url text image"); e != nil {
 			return fail(400, e.Error())
 		}
@@ -102,6 +108,12 @@ func validateSalesConfig(store Data) error {
 	}
 	for _, v := range array(b, "tutorials") {
 		d := asData(v)
+		if e := typed(d, Data{"title": "", "url": "", "text": "", "image": ""}); e != nil {
+			return fail(400, e.Error())
+		}
+		if len(str(d, "url")) > 2048 || len(str(d, "image")) > 2048 {
+			return fail(400, "tutorial URLs are too long")
+		}
 		if e := allowed(d, "title text url image"); e != nil {
 			return fail(400, e.Error())
 		}
@@ -135,7 +147,12 @@ func salesText(store, cfg Data, key, en, fa string, user int64) string {
 	if text == "" {
 		text = botText(cfg, en, fa)
 	}
-	return strings.NewReplacer("{store}", str(store, "name"), "{user_id}", fmt.Sprint(user)).Replace(text)
+	text = strings.NewReplacer("{store}", str(store, "name"), "{user_id}", fmt.Sprint(user)).Replace(text)
+	r := []rune(text)
+	if len(r) > 900 {
+		text = string(r[:900])
+	}
+	return text
 }
 func manualMethods(store Data, currency string) []any {
 	b := salesConfig(store)
@@ -151,7 +168,7 @@ func manualMethods(store Data, currency string) []any {
 func publicSalesConfig(store Data) Data {
 	b := salesConfig(store)
 	out := Data{}
-	for _, k := range strings.Fields("welcome welcome_image catalog_text catalog_image empty_text delivery_text trial_text support_text tutorial_text tutorial_image buttons custom_buttons tutorials trial_enabled allow_toggle allow_rotate locale") {
+	for _, k := range strings.Fields("welcome welcome_image catalog_text catalog_image empty_text delivery_text trial_text support_text tutorial_text tutorial_image buttons custom_buttons tutorials trial_enabled trial_channel_url allow_toggle allow_rotate locale") {
 		out[k] = b[k]
 	}
 	return out

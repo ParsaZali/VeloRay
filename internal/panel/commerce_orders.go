@@ -59,7 +59,9 @@ func (s *Server) shopAPI(w http.ResponseWriter, r *http.Request, path string) (a
 			}
 			if s.validateOffer(ctx, s.Store.Pool, v) == nil {
 				delete(v, "cost_amount")
-				delete(v, "service_id")
+				if buyer == 0 {
+					delete(v, "service_id")
+				}
 				out = append(out, v)
 			}
 		}
@@ -446,21 +448,38 @@ func (s *Server) walletTopup(w http.ResponseWriter, r *http.Request, a Actor) (a
 	if e != nil {
 		return nil, 0, e
 	}
+	if e = allowed(d, "amount currency"); e != nil {
+		return nil, 0, fail(400, e.Error())
+	}
 	amount, e := money(d, "amount", 1)
 	if e != nil {
 		return nil, 0, e
 	}
 	currency := str(d, "currency")
-	if !oneOf(currency, "IRR", "IRT") {
-		return nil, 0, fail(400, "payment gateway supports IRR and IRT")
+	if !oneOf(currency, "IRT", "IRR") {
+		return nil, 0, fail(400, "wallet funding by bank transfer uses IRR or IRT")
+	}
+	parent := num(a.User, "parent_id")
+	if parent <= 0 || parent == num(a.User, "id") {
+		return nil, 0, fail(409, "ask an administrator to record a verified wallet settlement")
+	}
+	if _, e = seller(r.Context(), s.Store.Pool, parent); e != nil {
+		return nil, 0, e
+	}
+	store, e := getStore(r.Context(), s.Store.Pool, parent)
+	if e != nil {
+		return nil, 0, e
+	}
+	if !flag(store, "enabled") || len(manualMethods(store, currency)) == 0 {
+		return nil, 0, fail(409, "your parent seller has not enabled wallet transfer payments")
 	}
 	id, token := randomToken(24), randomToken(32)
-	_, e = s.Store.Pool.Exec(r.Context(), `INSERT INTO vr_orders(id,owner_id,payer_id,kind,amount,currency,token_hash,snapshot) VALUES($1,$2,$2,'topup',$3,$4,$5,$6)`, id, num(a.User, "id"), amount, currency, digest(token), `{"name":"Wallet top-up"}`)
-	return Data{"id": id, "token": token, "state": "pending", "amount": amount, "currency": currency}, 201, e
+	_, e = s.Store.Pool.Exec(r.Context(), `INSERT INTO vr_orders(id,owner_id,payer_id,kind,amount,currency,token_hash,snapshot) VALUES($1,$2,$3,'topup',$4,$5,$6,'{"name":"Wallet funding"}')`, id, parent, num(a.User, "id"), amount, currency, digest(token))
+	if e != nil {
+		return nil, 0, e
+	}
+	return Data{"id": id, "owner_id": parent, "token": token, "state": "pending", "amount": amount, "currency": currency}, 201, nil
 }
-
-// A paid order and its customer mutation commit together, after agents validate
-// and apply their journaled configuration. Failed deployment leaves it paid.
 func (s *Server) fulfillOrder(ctx context.Context, id string) error {
 	ctx = context.WithValue(ctx, fulfillingOrderKey{}, id)
 	o, e := getOrder(ctx, s.Store.Pool, id, false)

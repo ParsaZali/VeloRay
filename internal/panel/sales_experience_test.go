@@ -273,3 +273,42 @@ func TestIntegrationBotReceiptManagementRequiresConfirmationAndEnabledChanges(t 
 		t.Fatal(current)
 	}
 }
+
+func TestIntegrationWalletFundingIsReviewedByParentNotSelf(t *testing.T) {
+	s, ctx, parent, _, _ := commerceFixture(t)
+	enableManual(t, s, ctx, parent, Data{"card_enabled": true, "card_number": "6037991234567890", "card_holder": "Parent"})
+	if _, _, e := managementRequest(t, s, ctx, parent, "POST", "commerce/topup", Data{"amount": 1000, "currency": "IRT"}); e == nil {
+		t.Fatal("self-funded wallet accepted")
+	}
+	child := defaults("users")
+	child["username"] = "funding-child"
+	child["role"] = "reseller"
+	child["parent_id"] = num(parent.User, "id")
+	if e := save(ctx, s.Store.Pool, "users", child); e != nil {
+		t.Fatal(e)
+	}
+	actor := Actor{User: child, Scope: "write"}
+	out, _, e := managementRequest(t, s, ctx, actor, "POST", "commerce/topup", Data{"amount": 1000, "currency": "IRT"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	o := out.(Data)
+	if num(o, "owner_id") != num(parent.User, "id") {
+		t.Fatal(o)
+	}
+	proof, e := s.recordPaymentProof(ctx, str(o, "id"), Data{"method": "card", "image": receiptPNG})
+	if e != nil {
+		t.Fatal(e)
+	}
+	req := httptest.NewRequest("POST", "/", strings.NewReader(`{"reference":"bank-456","expected_amount":1000,"expected_currency":"IRT"}`)).WithContext(ctx)
+	if _, _, e = s.receiptsAPI(httptest.NewRecorder(), req, fmt.Sprintf("receipts/%d/approve", num(proof, "id")), actor, num(child, "id")); e == nil {
+		t.Fatal("child approved own deposit")
+	}
+	if _, _, e = managementRequest(t, s, ctx, parent, "POST", fmt.Sprintf("commerce/receipts/%d/approve", num(proof, "id")), Data{"reference": "bank-456", "expected_amount": 1000, "expected_currency": "IRT"}); e != nil {
+		t.Fatal(e)
+	}
+	var balance int64
+	if e = s.Store.Pool.QueryRow(ctx, `SELECT balance FROM vr_wallets WHERE user_id=$1 AND currency='IRT'`, num(child, "id")).Scan(&balance); e != nil || balance != 1000 {
+		t.Fatal(balance, e)
+	}
+}
