@@ -243,6 +243,15 @@ func (s *Server) createOrder(ctx context.Context, input Data, payer int64, publi
 	if payer == 0 && str(v, "currency") == "XTR" && buyer == 0 {
 		return nil, fail(409, "open Stars offers in the Telegram store")
 	}
+	if publicShop && buyer > 0 {
+		var pending int
+		if e = tx.QueryRow(ctx, `SELECT count(*) FROM(SELECT 1 FROM vr_orders WHERE owner_id=$1 AND snapshot->>'_telegram_user'=$2 AND state='pending' AND expires_at>now() LIMIT 3) p`, owner, strconv.FormatInt(buyer, 10)).Scan(&pending); e != nil {
+			return nil, e
+		}
+		if pending >= 3 {
+			return nil, fail(429, "you already have three unpaid invoices; finish a payment or wait for an invoice to expire")
+		}
+	}
 	if publicShop {
 		store, e := getStore(ctx, tx, owner)
 		if e != nil {

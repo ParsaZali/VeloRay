@@ -323,3 +323,55 @@ func TestIntegrationSalesImagePreviewKeepsStrictScriptPolicy(t *testing.T) {
 		t.Fatal(w.Code, csp)
 	}
 }
+
+func TestIntegrationBuyerCannotReserveUnlimitedUnpaidInvoices(t *testing.T) {
+	s, ctx, _, o, _, _, _ := starsFixture(t)
+	buyer := context.WithValue(ctx, telegramBuyerKey{}, int64(777))
+	input := Data{"offer_id": num(o, "id"), "kind": "purchase", "name": "Limited pending", "accept_terms": true}
+	var first string
+	for i := 0; i < 3; i++ {
+		created, e := s.createOrder(buyer, input, 0, true)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if i == 0 {
+			first = str(created, "id")
+		}
+	}
+	if _, e := s.createOrder(buyer, input, 0, true); e == nil {
+		t.Fatal("unbounded pending reservations accepted")
+	}
+	if _, e := s.Store.Pool.Exec(ctx, `UPDATE vr_orders SET expires_at=now()-interval '1 second' WHERE id=$1`, first); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := s.createOrder(buyer, input, 0, true); e != nil {
+		t.Fatal("expired reservation did not release buyer limit", e)
+	}
+}
+
+func TestIntegrationSupportConversationWorksInsideSameBot(t *testing.T) {
+	s, ctx, a, _, cfg, _, _ := starsFixture(t)
+	reply := s.salesBotReply(ctx, cfg, "vs:ticketnew", 777, Data{})
+	if !strings.Contains(str(reply, "text"), "2000") && !strings.Contains(str(reply, "text"), "۲۰۰۰") {
+		t.Fatal(reply)
+	}
+	reply = s.salesBotReply(ctx, cfg, "Please help with my connection", 777, Data{})
+	var id int64
+	if e := s.Store.Pool.QueryRow(ctx, `SELECT id FROM vr_support_tickets WHERE owner_id=$1 AND user_id=777`, num(a.User, "id")).Scan(&id); e != nil {
+		t.Fatal(e, reply)
+	}
+	if _, e := s.writeTicket(ctx, num(a.User, "id"), 777, id, "staff", "", "Try updating your subscription", false); e != nil {
+		t.Fatal(e)
+	}
+	s.salesBotReply(ctx, cfg, fmt.Sprintf("vs:ticketreply:%d", id), 777, Data{})
+	s.salesBotReply(ctx, cfg, "It works now, thank you", 777, Data{})
+	messages, e := s.ticketMessages(ctx, id)
+	if e != nil || len(messages) != 3 {
+		t.Fatal(messages, e)
+	}
+	s.salesBotReply(ctx, cfg, fmt.Sprintf("/start shop_%d", num(a.User, "id")), 778, Data{})
+	bad := s.salesBotReply(ctx, cfg, fmt.Sprintf("vs:ticket:%d", id), 778, Data{})
+	if !strings.Contains(str(bad, "text"), "not found") {
+		t.Fatal("other buyer read ticket", bad)
+	}
+}

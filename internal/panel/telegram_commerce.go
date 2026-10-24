@@ -303,8 +303,13 @@ func (s *Server) telegramOrderNotifications(ctx context.Context, cfg Data, token
 		if e != nil {
 			return e
 		}
+		store, err := getStore(ctx, s.Store.Pool, n.owner)
+		if err != nil {
+			return err
+		}
+		localCfg := salesLocale(cfg, store)
 		link := privateOrderURL(s.Config.PublicURL, n.owner, n.id, bearer)
-		if _, e = s.telegramRequest(ctx, token, "sendMessage", Data{"chat_id": n.user, "text": botText(cfg, "Your subscription is ready.", "اشتراک شما آماده است."), "reply_markup": botKeyboard([]any{Data{"text": botText(cfg, "View order and subscription", "مشاهدهٔ سفارش و اشتراک"), "url": link}}), "disable_web_page_preview": true}); e != nil {
+		if _, e = s.telegramRequest(ctx, token, "sendMessage", Data{"chat_id": n.user, "text": salesText(store, localCfg, "delivery_text", "Your subscription is ready.", "اشتراک شما آماده است.", n.user), "reply_markup": botKeyboard([]any{Data{"text": botText(localCfg, "View order and subscription", "مشاهدهٔ سفارش و اشتراک"), "url": link}}), "disable_web_page_preview": true}); e != nil {
 			return e
 		}
 		if _, e = s.Store.Pool.Exec(ctx, `UPDATE vr_telegram_orders SET notified_at=now() WHERE order_id=$1`, n.id); e != nil {

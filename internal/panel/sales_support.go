@@ -178,7 +178,18 @@ func (s *Server) ticketNotifications(ctx context.Context, cfg Data, token string
 			}
 		}
 		for _, id := range targets {
-			_, e = s.telegramRequest(ctx, token, "sendMessage", Data{"chat_id": id, "text": fmt.Sprintf("Ticket #%d\n%s", num(d, "ticket_id"), plain), "protect_content": true})
+			callback := fmt.Sprintf("vs:ticket:%d", num(d, "ticket_id"))
+			localCfg := cfg
+			if str(d, "author") == "customer" {
+				callback = "vr:/tickets"
+			} else {
+				store, err := getStore(ctx, s.Store.Pool, num(d, "owner_id"))
+				if err != nil {
+					return err
+				}
+				localCfg = salesLocale(cfg, store)
+			}
+			_, e = s.telegramRequest(ctx, token, "sendMessage", Data{"chat_id": id, "text": fmt.Sprintf("Ticket #%d\n%s", num(d, "ticket_id"), plain), "protect_content": true, "reply_markup": botKeyboard([]any{botButton(botText(localCfg, "View ticket", "مشاهده تیکت"), callback)})})
 			if e != nil {
 				return e
 			}

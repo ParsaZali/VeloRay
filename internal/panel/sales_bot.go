@@ -201,6 +201,14 @@ func (s *Server) salesBotReply(ctx context.Context, cfg Data, text string, user 
 		_, _ = s.Store.Pool.Exec(ctx, `DELETE FROM vr_bot_sessions WHERE owner_id=$1 AND user_id=$2`, owner, user)
 		return Data{"text": botText(cfg, "Receipt submitted. Your subscription will be delivered after administrator approval.", "رسید ثبت شد. پس از بررسی و تأیید مدیر، اشتراک تحویل داده می‌شود."), "reply_markup": home}
 	}
+	if oneOf(str(session, "step"), "ticket_new", "ticket_reply") && text != "" && !strings.HasPrefix(text, "/") && !strings.HasPrefix(text, "vs:") {
+		d, e := s.writeTicket(ctx, owner, user, num(session, "ticket_id"), "customer", "", text, false)
+		if e != nil {
+			return failReply(e)
+		}
+		_, _ = s.Store.Pool.Exec(ctx, `DELETE FROM vr_bot_sessions WHERE owner_id=$1 AND user_id=$2`, owner, user)
+		return Data{"text": fmt.Sprintf("%s #%d", botText(cfg, "Message sent", "پیام ارسال شد"), num(d, "id")), "reply_markup": botKeyboard([]any{botButton(botText(cfg, "View ticket", "مشاهده تیکت"), fmt.Sprintf("vs:ticket:%d", num(d, "id"))), botButton(botText(cfg, "Main menu", "منوی اصلی"), "vs:home")})}
+	}
 	delete(reply, "photo")
 	switch {
 	case action == "buy" || strings.HasPrefix(action, "category:"):
@@ -409,11 +417,66 @@ func (s *Server) salesBotReply(ctx context.Context, cfg Data, text string, user 
 		}
 		reply["protect_content"] = true
 		reply["reply_markup"] = botKeyboard([]any{botButton(botText(cfg, "Cancel", "انصراف"), "vs:home")})
+	case action == "tickets":
+		tickets, e := commerceRows(ctx, s.Store.Pool, `SELECT to_jsonb(t) FROM vr_support_tickets t WHERE owner_id=$1 AND user_id=$2 ORDER BY updated_at DESC LIMIT 20`, owner, user)
+		if e != nil {
+			return failReply(e)
+		}
+		rows := [][]any{}
+		for _, d := range tickets {
+			rows = append(rows, []any{botButton(fmt.Sprintf("#%d · %s", num(d, "id"), shortBotName(str(d, "subject"))), fmt.Sprintf("vs:ticket:%d", num(d, "id")))})
+		}
+		rows = append(rows, []any{botButton(botText(cfg, "New ticket", "تیکت جدید"), "vs:ticketnew"), botButton(botText(cfg, "Main menu", "منوی اصلی"), "vs:home")})
+		reply["text"] = botText(cfg, "Your support tickets", "تیکت‌های پشتیبانی شما")
+		reply["reply_markup"] = Data{"inline_keyboard": rows}
+	case action == "ticketnew" || action == "/ticket" || strings.HasPrefix(action, "ticketreply:"):
+		ticketID := int64(0)
+		if strings.HasPrefix(action, "ticketreply:") {
+			ticketID, _ = strconv.ParseInt(strings.TrimPrefix(action, "ticketreply:"), 10, 64)
+			var valid bool
+			e = s.Store.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM vr_support_tickets WHERE id=$1 AND owner_id=$2 AND user_id=$3 AND state='open')`, ticketID, owner, user).Scan(&valid)
+			if e != nil || !valid {
+				return failReply(fail(404, "open ticket not found"))
+			}
+		}
+		step := "ticket_new"
+		if ticketID > 0 {
+			step = "ticket_reply"
+		}
+		if e = s.saveSalesSession(ctx, owner, user, Data{"step": step, "ticket_id": ticketID}); e != nil {
+			return failReply(e)
+		}
+		reply["text"] = botText(cfg, "Send your support message (up to 2000 characters). /cancel", "پیام خود را بفرستید (حداکثر ۲۰۰۰ کاراکتر). /cancel")
+		reply["reply_markup"] = botKeyboard([]any{botButton(botText(cfg, "Cancel", "انصراف"), "vs:home")})
+	case strings.HasPrefix(action, "ticket:"):
+		id, _ := strconv.ParseInt(strings.TrimPrefix(action, "ticket:"), 10, 64)
+		var state string
+		e = s.Store.Pool.QueryRow(ctx, `SELECT state FROM vr_support_tickets WHERE id=$1 AND owner_id=$2 AND user_id=$3`, id, owner, user).Scan(&state)
+		if e != nil {
+			return failReply(fail(404, "ticket not found"))
+		}
+		messages, e := s.ticketMessages(ctx, id)
+		if e != nil {
+			return failReply(e)
+		}
+		lines := []string{fmt.Sprintf("Ticket #%d · %s", id, state)}
+		for _, m := range messages[max(0, len(messages)-2):] {
+			body := []rune(str(m, "text"))
+			lines = append(lines, str(m, "author")+": "+string(body[:min(len(body), 1400)]))
+		}
+		reply["text"] = strings.Join(lines, "\n\n")
+		rows := [][]any{}
+		if state == "open" {
+			rows = append(rows, []any{botButton(botText(cfg, "Reply", "پاسخ"), fmt.Sprintf("vs:ticketreply:%d", id))})
+		}
+		rows = append(rows, []any{botButton(botText(cfg, "My tickets", "تیکت‌های من"), "vs:tickets")})
+		reply["reply_markup"] = Data{"inline_keyboard": rows}
+		reply["protect_content"] = true
 	case action == "terms":
 		reply["text"] = str(store, "terms_url")
 	case action == "support":
 		reply["text"] = salesText(store, cfg, "support_text", "Send /ticket followed by your message, or contact support.", "برای ثبت تیکت، /ticket و سپس پیام خود را بفرستید یا با پشتیبانی تماس بگیرید.", user)
-		reply["reply_markup"] = botKeyboard([]any{Data{"text": botText(cfg, "Contact support", "تماس با پشتیبانی"), "url": str(store, "support_url")}}, []any{Data{"text": botText(cfg, "Support tickets", "تیکت‌های پشتیبانی"), "web_app": Data{"url": shop + "&view=support"}}}, []any{botButton(botText(cfg, "Main menu", "منوی اصلی"), "vs:home")})
+		reply["reply_markup"] = botKeyboard([]any{Data{"text": botText(cfg, "Contact support", "تماس با پشتیبانی"), "url": str(store, "support_url")}}, []any{Data{"text": botText(cfg, "Support tickets", "تیکت‌های پشتیبانی"), "callback_data": "vs:tickets"}}, []any{botButton(botText(cfg, "Main menu", "منوی اصلی"), "vs:home")})
 	case strings.HasPrefix(action, "/ticket "):
 		d, e := s.writeTicket(ctx, owner, user, 0, "customer", "", strings.TrimSpace(strings.TrimPrefix(action, "/ticket ")), false)
 		if e != nil {
