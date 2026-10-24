@@ -312,3 +312,14 @@ func TestIntegrationWalletFundingIsReviewedByParentNotSelf(t *testing.T) {
 		t.Fatal(balance, e)
 	}
 }
+
+func TestIntegrationSalesImagePreviewKeepsStrictScriptPolicy(t *testing.T) {
+	s, _ := integration(t)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/api/version", nil)
+	s.Handler().ServeHTTP(w, r)
+	csp := w.Header().Get("Content-Security-Policy")
+	if w.Code != 200 || !strings.Contains(csp, "img-src 'self' data: https:") || !strings.Contains(csp, "script-src 'self';") || strings.Contains(csp, "script-src https:") || w.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Fatal(w.Code, csp)
+	}
+}
