@@ -305,6 +305,8 @@ export function ClientsPage() {
     setTimeout(() => setCopied(null), 1200);
   }
   function openCreate() {
+    editorRequest.current?.abort();
+    setLoadingEditor(false);
     setEditor({
       ...blank(
         inbounds[0] ? String(inbounds[0].id) : "",
@@ -317,6 +319,8 @@ export function ClientsPage() {
     });
   }
   function openBatch() {
+    editorRequest.current?.abort();
+    setLoadingEditor(false);
     const first = inbounds.find((i) => i.supports_batch !== false);
     setEditor({
       ...blank(

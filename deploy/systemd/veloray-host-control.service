@@ -3,6 +3,7 @@ Description=Apply verified VeloRay server changes
 Wants=network-online.target
 After=network-online.target postgresql.service
 ConditionPathExists=/etc/veloray/veloray.env
+ConditionPathExists=/opt/veloray/current/deploy/systemd/veloray-host-control.service
 [Service]
 Type=oneshot
 User=root

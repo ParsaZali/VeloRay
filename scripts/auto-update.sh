@@ -62,13 +62,19 @@ vr_auto_restore() {
  install -m 0644 "$original_env" /etc/veloray/veloray.env
  chown root:veloray /etc/veloray/veloray.env
  chmod 0640 /etc/veloray/veloray.env
- for unit in veloray-web veloray-agent veloray-subscriptions veloray-subscription-endpoint xray sing-box;do
+ for unit in veloray-web veloray-agent veloray-subscriptions veloray-subscription-endpoint veloray-host-control xray sing-box;do
   [[ ! -f "$previous/deploy/systemd/$unit.service" ]] || install -m 0644 "$previous/deploy/systemd/$unit.service" "/etc/systemd/system/$unit.service"
  done
  if [[ -f "$previous/deploy/systemd/veloray-subscription-endpoint.timer" ]];then
   install -m 0644 "$previous/deploy/systemd/veloray-subscription-endpoint.timer" /etc/systemd/system/
  else
   rm -f /etc/systemd/system/veloray-subscription-endpoint.{service,timer}
+ fi
+ if [[ -f "$previous/deploy/systemd/veloray-host-control.timer" ]];then
+  install -m 0644 "$previous/deploy/systemd/veloray-host-control.timer" /etc/systemd/system/
+ else
+  systemctl disable --now veloray-host-control.timer 2>/dev/null || true
+  rm -f /etc/systemd/system/veloray-host-control.{service,timer}
  fi
  systemctl daemon-reload
  systemctl restart veloray-agent.service veloray-web.service xray.service sing-box.service

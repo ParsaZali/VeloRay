@@ -48,6 +48,10 @@ sudo veloray update
 
 Updates follow `main` after **that exact commit passes CI**. The updater verifies the pinned installer, creates a private backup, runs health checks and attempts application/service rollback if installation fails. Existing users, encryption keys and traffic records are preserved. Database restore remains an explicit operation.
 
+Native installations also support **Settings → System → Panel updates**. The sidebar displays the running version and reports **Up to date** or **Update available** only after checking GitHub. Unknown or unverified status is never shown as current. The first upgrade from an older installation still uses `sudo veloray update` to install the host-control service. Docker deployments update their image.
+
+**Settings → General → Panel port** changes the public HTTPS port, and **Settings → Subscription** controls the independent subscription listener. The random-port button proposes an unused candidate; **Apply port** activates it. Firewall rules remain under your control. VPN ports are edited under **Inbounds**, delivery address/port overrides under **Subscription hosts**, and remote agent addresses under **Nodes**. Config profiles and subscription policies are grouped inside Settings; services and plans appear last in the main navigation.
+
 ### Removal and reinstall
 
 `sudo veloray uninstall` stops and removes the services and program files while **keeping users, VPN configurations, keys and backups**. Reinstalling reuses this data. `sudo veloray reset` detects the current administrator even after a username change; use `sudo veloray admin-list` and `sudo veloray reset USERNAME` when multiple administrators exist.

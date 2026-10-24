@@ -3,6 +3,7 @@ package panel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -131,5 +132,58 @@ func TestIntegrationPanelPortRejectsInboundsSubscriptionsAndServicePorts(t *test
 	}
 	if err := s.validatePanelPort(ctx, 54321); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestIntegrationHostWorkerTracksFailureSuccessAndInterruptedJobs(t *testing.T) {
+	s, ctx := integration(t)
+	a := Actor{User: Data{"is_superuser": true}, Scope: "admin"}
+	_, err := s.queueHostJob(ctx, a, "panel_port", "12345", s.Config.PublicURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	called := 0
+	execute := func(_ context.Context, kind, target, previous string) error {
+		called++
+		job, err := s.lastHostJob(ctx, kind)
+		if err != nil || str(job, "state") != "running" || kind != "panel_port" || target != "12345" || previous != s.Config.PublicURL {
+			t.Fatal(job, err, kind, target, previous)
+		}
+		return errors.New("simulated install failure")
+	}
+	if err = s.runNativeHostJob(ctx, execute); err != nil {
+		t.Fatal(err)
+	}
+	job, err := s.lastHostJob(ctx, "panel_port")
+	if err != nil || str(job, "state") != "failed" || str(job, "error") != "simulated install failure" || called != 1 {
+		t.Fatal(job, err, called)
+	}
+	_, err = s.queueHostJob(ctx, a, "panel_port", "12346", s.Config.PublicURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.runNativeHostJob(ctx, func(context.Context, string, string, string) error { called++; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	job, err = s.lastHostJob(ctx, "panel_port")
+	if err != nil || str(job, "state") != "succeeded" || str(job, "error") != "" || called != 2 {
+		t.Fatal(job, err, called)
+	}
+	next, err := s.queueHostJob(ctx, a, "panel_port", "12347", s.Config.PublicURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Store.Pool.Exec(ctx, `UPDATE vr_host_jobs SET state='running' WHERE id=$1`, num(next, "id")); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.runNativeHostJob(ctx, func(context.Context, string, string, string) error {
+		t.Fatal("interrupted job executed twice")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	job, err = s.lastHostJob(ctx, "panel_port")
+	if err != nil || str(job, "state") != "failed" || !strings.Contains(str(job, "error"), "interrupted") {
+		t.Fatal(job, err)
 	}
 }

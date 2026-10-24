@@ -2,14 +2,6 @@ import { lazy, Suspense } from "react";
 import { notify } from "@/lib/notifications";
 import { PanelUpdate } from "@/components/panel-update";
 import { PanelEndpoint } from "@/components/panel-endpoint";
-const ProfilesPage = lazy(() =>
-  import("@/pages/profiles").then((m) => ({ default: m.ProfilesPage })),
-);
-const SubscriptionPoliciesPage = lazy(() =>
-  import("@/pages/subscription-policies").then((m) => ({
-    default: m.SubscriptionPoliciesPage,
-  })),
-);
 import { SubscriptionEndpoint } from "@/components/subscription-endpoint";
 import { SMTPSettings } from "@/components/smtp-settings";
 import { DatePreferences } from "@/components/date-preferences";
@@ -39,6 +31,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
 import { FaIcon } from "@/components/ui/fa-icon";
+
+const ProfilesPage = lazy(() =>
+  import("@/pages/profiles").then((m) => ({ default: m.ProfilesPage })),
+);
+const SubscriptionPoliciesPage = lazy(() =>
+  import("@/pages/subscription-policies").then((m) => ({
+    default: m.SubscriptionPoliciesPage,
+  })),
+);
 
 const fmt = (b: number) => {
   if (!b) return t("0 B");
@@ -1232,11 +1233,11 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                         <Read
                           label={t("CPU")}
                           value={
-                            sys
+                            Number.isFinite(sys?.cpu_percent)
                               ? tx(
                                   "{0}% · {1} cores",
-                                  sys.cpu_percent.toFixed(1),
-                                  sys.cpu_count,
+                                  sys!.cpu_percent.toFixed(1),
+                                  sys!.cpu_count ?? "—",
                                 )
                               : "—"
                           }
@@ -1244,16 +1245,16 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                         <Read
                           label={t("Memory")}
                           value={
-                            sys
-                              ? `${fmt(sys.memory_used_bytes)} / ${fmt(sys.memory_total_bytes)} (${sys.memory_percent.toFixed(1)}%)`
+                            Number.isFinite(sys?.memory_percent)
+                              ? `${fmt(sys!.memory_used_bytes)} / ${fmt(sys!.memory_total_bytes)} (${sys!.memory_percent.toFixed(1)}%)`
                               : "—"
                           }
                         />
                         <Read
                           label={t("Swap")}
                           value={
-                            sys
-                              ? `${fmt(sys.swap_used_bytes)} / ${fmt(sys.swap_total_bytes)} (${sys.swap_percent.toFixed(1)}%)`
+                            Number.isFinite(sys?.swap_percent)
+                              ? `${fmt(sys!.swap_used_bytes)} / ${fmt(sys!.swap_total_bytes)} (${sys!.swap_percent.toFixed(1)}%)`
                               : "—"
                           }
                         />
@@ -1273,7 +1274,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                         <Read
                           label={t("Load average")}
                           value={
-                            sys
+                            sys?.load_average?.length
                               ? sys.load_average
                                   .map((x) => x.toFixed(2))
                                   .join(" · ")

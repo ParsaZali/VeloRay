@@ -17,51 +17,189 @@ const node = {
   status: "ok",
   config_patch: {},
 };
-test("sales workspace publishes an explicit-currency offer and preserves the sidebar", async ({page}) => {
-  const offer = {id:1,owner_id:1,name:"Monthly",description:"",enabled:true,service_id:7,amount:10000,currency:"IRT",duration_days:30,traffic_bytes:107374182400,cost_amount:2000};
-  await panel(page,"/services",{
-    services:{json:[{id:7,name:"Primary",note:"",inbound_ids:[],defaults:{}}]},
-    "admin/users":{json:[{id:1,username:"admin"}]},
-    "commerce/settings":{json:{payments_enabled:false,merchant_configured:false,sandbox:false}},
-    "commerce/offers":{json:[offer]},"commerce/orders":{json:[]},"commerce/wallets":{json:[{currency:"IRT",balance:70000,credit_limit:0}]},"commerce/ledger":{json:[]},
-    "commerce/store":{json:{enabled:true,name:"My store",description:"",support_url:"",logo_url:"",url:"http://127.0.0.1:8861/shop?store=1"}},
-    "commerce/reports":{json:{summary:[{currency:"IRT",revenue:10000,orders:1,unit_cost:2000,operating_cost:1000,profit:7000}],by_offer:[],by_node:[]}},
+test("sales workspace publishes an explicit-currency offer and preserves the sidebar", async ({
+  page,
+}) => {
+  const offer = {
+    id: 1,
+    owner_id: 1,
+    name: "Monthly",
+    description: "",
+    enabled: true,
+    service_id: 7,
+    amount: 10000,
+    currency: "IRT",
+    duration_days: 30,
+    traffic_bytes: 107374182400,
+    cost_amount: 2000,
+  };
+  await panel(page, "/services", {
+    services: {
+      json: [
+        { id: 7, name: "Primary", note: "", inbound_ids: [], defaults: {} },
+      ],
+    },
+    "admin/users": { json: [{ id: 1, username: "admin" }] },
+    "commerce/settings": {
+      json: {
+        payments_enabled: false,
+        merchant_configured: false,
+        sandbox: false,
+      },
+    },
+    "commerce/offers": { json: [offer] },
+    "commerce/orders": { json: [] },
+    "commerce/wallets": {
+      json: [{ currency: "IRT", balance: 70000, credit_limit: 0 }],
+    },
+    "commerce/ledger": { json: [] },
+    "commerce/store": {
+      json: {
+        enabled: true,
+        name: "My store",
+        description: "",
+        support_url: "",
+        logo_url: "",
+        url: "http://127.0.0.1:8861/shop?store=1",
+      },
+    },
+    "commerce/reports": {
+      json: {
+        summary: [
+          {
+            currency: "IRT",
+            revenue: 10000,
+            orders: 1,
+            unit_cost: 2000,
+            operating_cost: 1000,
+            profit: 7000,
+          },
+        ],
+        by_offer: [],
+        by_node: [],
+      },
+    },
   });
-  await page.getByRole("button",{name:"Sales & billing",exact:true}).click();
-  await expect(page.getByText("7,000 toman",{exact:true})).toBeVisible();
-  await page.getByRole("button",{name:"Offers",exact:true}).click();
-  await page.getByRole("button",{name:"Edit",exact:true}).click();
-  const dialog=page.getByRole("dialog");await dialog.getByLabel("Price",{exact:true}).fill("15000");
-  let posted:any;
-  await page.route("**/api/commerce/offers/1?owner=1",async route=>{posted=route.request().postDataJSON();await route.fulfill({json:{...offer,...posted}});});
-  await dialog.getByRole("button",{name:"Save",exact:true}).click();
+  await page
+    .getByRole("button", { name: "Sales & billing", exact: true })
+    .click();
+  await expect(page.getByText("7,000 toman", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Offers", exact: true }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Price", { exact: true }).fill("15000");
+  let posted: any;
+  await page.route("**/api/commerce/offers/1?owner=1", async (route) => {
+    posted = route.request().postDataJSON();
+    await route.fulfill({ json: { ...offer, ...posted } });
+  });
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
   await expect(dialog).not.toBeVisible();
-  expect(posted.amount).toBe(15000);expect(posted.currency).toBe("IRT");expect(posted).not.toHaveProperty("id");expect(posted).not.toHaveProperty("owner_id");
-  await page.getByRole("button",{name:"Wallet & ledger",exact:true}).click();
-  await expect(page.getByText("70,000 toman",{exact:true}).first()).toBeVisible();
-  await page.setViewportSize({width:390,height:844});
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.screenshot({path:"test-results/commerce-wallet-mobile.png",fullPage:true});
+  expect(posted.amount).toBe(15000);
+  expect(posted.currency).toBe("IRT");
+  expect(posted).not.toHaveProperty("id");
+  expect(posted).not.toHaveProperty("owner_id");
+  await page
+    .getByRole("button", { name: "Wallet & ledger", exact: true })
+    .click();
+  await expect(
+    page.getByText("70,000 toman", { exact: true }).first(),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/commerce-wallet-mobile.png",
+    fullPage: true,
+  });
 });
-test("public storefront supports Persian, light theme and private order delivery",async({page})=>{
-  const errors:string[]=[];page.on("pageerror",e=>errors.push(e.message));
-  await page.addInitScript(()=>{localStorage.setItem("veloray-locale","en");localStorage.setItem("veloray-theme","dark");sessionStorage.setItem("veloray-order:order_abcdefghijklmnopqrstuvwx","private-order-token-1234567890123456789");});
-  await page.route("**/api/**",async route=>{
-    const path=new URL(route.request().url()).pathname;
-    if(path==="/api/shop/catalog")return route.fulfill({json:{enabled:true,name:"Green Connect",description:"Simple subscriptions",logo_url:"",support_url:"https://support.example",payments_enabled:true,offers:[{id:1,name:"Monthly",amount:10000,currency:"IRT",duration_days:30,traffic_bytes:107374182400}]}});
-    if(path.includes("/api/shop/orders/")){expect(route.request().headers().authorization).toContain("private-order-token");return route.fulfill({json:{id:"order_abcdefghijklmnopqrstuvwx",amount:10000,currency:"IRT",state:"fulfilled",snapshot:{name:"Monthly"},subscription_url:"https://sub.example:100/sub/private-customer-token"}});}
-    return route.fulfill({status:404,json:{detail:"unexpected route"}});
+test("public storefront supports Persian, light theme and private order delivery", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.addInitScript(() => {
+    localStorage.setItem("veloray-locale", "en");
+    localStorage.setItem("veloray-theme", "dark");
+    sessionStorage.setItem(
+      "veloray-order:order_abcdefghijklmnopqrstuvwx",
+      "private-order-token-1234567890123456789",
+    );
+  });
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/shop/catalog")
+      return route.fulfill({
+        json: {
+          enabled: true,
+          name: "Green Connect",
+          description: "Simple subscriptions",
+          logo_url: "",
+          support_url: "https://support.example",
+          payments_enabled: true,
+          offers: [
+            {
+              id: 1,
+              name: "Monthly",
+              amount: 10000,
+              currency: "IRT",
+              duration_days: 30,
+              traffic_bytes: 107374182400,
+            },
+          ],
+        },
+      });
+    if (path.includes("/api/shop/orders/")) {
+      expect(route.request().headers().authorization).toContain(
+        "private-order-token",
+      );
+      return route.fulfill({
+        json: {
+          id: "order_abcdefghijklmnopqrstuvwx",
+          amount: 10000,
+          currency: "IRT",
+          state: "fulfilled",
+          snapshot: { name: "Monthly" },
+          subscription_url:
+            "https://sub.example:100/sub/private-customer-token",
+        },
+      });
+    }
+    return route.fulfill({ status: 404, json: { detail: "unexpected route" } });
   });
   await page.goto("/shop?store=1");
-  await expect(page.getByRole("heading",{name:"Choose your subscription"})).toBeVisible();
-  await expect(page.getByRole("button",{name:"Continue to payment"})).toBeEnabled();
-  await page.getByRole("button",{name:"Change theme"}).click();await expect(page.locator("html")).toHaveClass(/light/);
-  await page.getByRole("button",{name:"Change language"}).click();await expect(page.locator("html")).toHaveAttribute("dir","rtl");
-  await expect(page.getByRole("heading",{name:"اشتراک خود را انتخاب کنید"})).toBeVisible();
-  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.screenshot({path:"test-results/storefront-persian-mobile.png",fullPage:true});
+  await expect(
+    page.getByRole("heading", { name: "Choose your subscription" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Continue to payment" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Change theme" }).click();
+  await expect(page.locator("html")).toHaveClass(/light/);
+  await page.getByRole("button", { name: "Change language" }).click();
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect(
+    page.getByRole("heading", { name: "اشتراک خود را انتخاب کنید" }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/storefront-persian-mobile.png",
+    fullPage: true,
+  });
   await page.goto("/shop?store=1&order=order_abcdefghijklmnopqrstuvwx");
-  await expect(page.locator('input[value="https://sub.example:100/sub/private-customer-token"]')).toBeVisible();
+  await expect(
+    page.locator(
+      'input[value="https://sub.example:100/sub/private-customer-token"]',
+    ),
+  ).toBeVisible();
   expect(errors).toEqual([]);
 });
 async function panel(
@@ -100,7 +238,12 @@ async function panel(
         revision: "a".repeat(64),
         observatory_configured: false,
       };
-    else if (resource === "inbounds" || resource === "clients/inbound-options" || resource === "services" || resource.startsWith("admin/"))
+    else if (
+      resource === "inbounds" ||
+      resource === "clients/inbound-options" ||
+      resource === "services" ||
+      resource.startsWith("admin/")
+    )
       json = [];
     else if (resource === "health")
       json = {
@@ -583,7 +726,10 @@ test("client IP and registered device dialogs on desktop and mobile", async ({
         default_locale: "en",
         default_expiry_days: 30,
       };
-    else if (path === "/api/inbounds" || path === "/api/clients/inbound-options")
+    else if (
+      path === "/api/inbounds" ||
+      path === "/api/clients/inbound-options"
+    )
       json = [{ id: 1, name: "main", supports_clients: true }];
     else if (path === "/api/services") json = [];
     else if (path === "/api/clients")
@@ -1090,11 +1236,21 @@ test("simple subscription page has persistent themes, copying, QR and no horizon
   await expect(page.locator("#traffic-chart")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Arman" })).toBeVisible();
   await expect(page.locator("#traffic-chart")).toHaveCount(1);
-  await page.getByLabel("Appearance").selectOption("dark");
+  await page
+    .getByRole("group", { name: "Appearance", exact: true })
+    .getByRole("button", { name: "Dark", exact: true })
+    .click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.reload();
-  await expect(page.getByLabel("Appearance")).toHaveValue("dark");
-  await page.getByLabel("Appearance").selectOption("light");
+  await expect(
+    page
+      .getByRole("group", { name: "Appearance", exact: true })
+      .getByRole("button", { name: "Dark", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByRole("group", { name: "Appearance", exact: true })
+    .getByRole("button", { name: "Light", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Copy link", exact: true })
     .first()
@@ -1116,7 +1272,10 @@ test("simple subscription page has persistent themes, copying, QR and no horizon
       fullPage: true,
     });
   }
-  await page.getByLabel("Appearance").selectOption("dark");
+  await page
+    .getByRole("group", { name: "Appearance", exact: true })
+    .getByRole("button", { name: "Dark", exact: true })
+    .click();
   await page.screenshot({
     path: "test-results/simple-subscription-mobile-dark.png",
     fullPage: true,
@@ -1209,7 +1368,9 @@ async function managementPanel(page: Page, path: string) {
   };
   await panel(page, path, {
     inbounds: { json: [inbound(1, "North"), inbound(2, "South")] },
-    "clients/inbound-options": { json: [inbound(1, "North"), inbound(2, "South")] },
+    "clients/inbound-options": {
+      json: [inbound(1, "North"), inbound(2, "South")],
+    },
     ...Object.fromEntries(Object.keys(data).map((k) => [k, { json: [] }])),
   });
   await page.route("**/api/**", async (route) => {
@@ -1294,7 +1455,6 @@ test("services keep plan defaults and managed fields in CRUD forms", async ({
   await expect(dialog).toHaveCount(0);
   expect(data.services[0].defaults.traffic_limit_bytes).toBe(10 * 1073741824);
   expect(data.services[0].defaults.renewal_period).toBe("month");
-
 });
 test("profile editor supports reusable snippets, node assignment and history", async ({
   page,
@@ -1350,11 +1510,17 @@ test("management forms remain usable at 390px with a light theme", async ({
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
-test("removed customer URL redirects to the unified users screen", async ({ page }) => {
+test("removed customer URL redirects to the unified users screen", async ({
+  page,
+}) => {
   await managementPanel(page, "/customers");
   await expect(page).toHaveURL(/\/clients$/);
-  await expect(page.getByRole("button", { name: "Customers", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Add client", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Customers", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Add client", exact: true }),
+  ).toBeVisible();
 });
 
 test("outbound traffic stays scoped to the selected core and handles unavailable telemetry", async ({
@@ -2003,7 +2169,26 @@ test("Persian picker maps leap Esfand and Nowruz to Gregorian API values with ke
   page,
 }) => {
   const data = await managementPanel(page, "/clients");
-  data.clients.push({ id: 1, account_id: 0, inbound: 1, name: "Calendar user", inbound_name: "Edge 1", node_name: "North", protocol: "vless", credential: "test-key", enabled: true, online: false, usage_metered: true, traffic_limit_bytes: 0, used_traffic_bytes: 0, raw_used_traffic_bytes: 0, traffic_multiplier: 1, expires_at: "2027-01-01T00:00:00Z", duration_days: 30, note: "" });
+  data.clients.push({
+    id: 1,
+    account_id: 0,
+    inbound: 1,
+    name: "Calendar user",
+    inbound_name: "Edge 1",
+    node_name: "North",
+    protocol: "vless",
+    credential: "test-key",
+    enabled: true,
+    online: false,
+    usage_metered: true,
+    traffic_limit_bytes: 0,
+    used_traffic_bytes: 0,
+    raw_used_traffic_bytes: 0,
+    traffic_multiplier: 1,
+    expires_at: "2027-01-01T00:00:00Z",
+    duration_days: 30,
+    note: "",
+  });
   await page.addInitScript(() =>
     localStorage.setItem("veloray-calendar", "persian"),
   );
@@ -2019,12 +2204,12 @@ test("Persian picker maps leap Esfand and Nowruz to Gregorian API values with ke
   expect(dates.leap.dates.at(-1)).toBe("2025-03-20");
   expect(dates.leap.next).toBe("2025-03-21");
   expect(dates.newYear.first).toBe("2025-03-21");
-  await page.getByRole("button", { name: "Actions for Calendar user", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Actions for Calendar user", exact: true })
+    .click();
   await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Edit client", exact: true });
-  await dialog
-    .getByRole("button", { name: "Expires at", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: "Expires at", exact: true }).click();
   const calendar = page.getByRole("dialog", {
     name: "Choose date",
     exact: true,

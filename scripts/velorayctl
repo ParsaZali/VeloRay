@@ -137,6 +137,7 @@ case "$command" in
  if subscription_wanted;then subscription_units+=("$SUBSCRIPTIONS");fi
  vr_step "${command^} services" 'مدیریت سرویس‌های پنل و Xray'
  if [[ -f /etc/systemd/system/$ENDPOINT_TIMER ]];then vr_run systemctl stop "$ENDPOINT_TIMER" veloray-subscription-endpoint.service;fi
+ if [[ -f /etc/systemd/system/veloray-host-control.timer ]];then vr_run systemctl stop veloray-host-control.timer;fi
  if [[ "$command" == stop ]];then vr_run systemctl stop "$WEB" "$AGENT" xray.service sing-box.service "${subscription_units[@]}";else
   vr_ports_check
   vr_run systemctl reset-failed xray.service
@@ -144,6 +145,7 @@ case "$command" in
   vr_wait http://127.0.0.1:8610/api/health
   vr_wait http://127.0.0.1:9191/health "$VELORAY_LOCAL_NODE_TOKEN"
   if [[ -f /etc/systemd/system/$ENDPOINT_TIMER ]];then vr_run systemctl start "$ENDPOINT_TIMER";fi
+  if [[ -f /etc/systemd/system/veloray-host-control.timer ]];then vr_run systemctl start veloray-host-control.timer;fi
   doctor
  fi
  summary;;

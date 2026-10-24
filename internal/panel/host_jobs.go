@@ -106,6 +106,10 @@ func (s *Server) RunNativeHostJob(ctx context.Context) error {
 	if os.Geteuid() != 0 || s.Config.SubscriptionDriver != "native" {
 		return errors.New("native host control requires the installed root service")
 	}
+	return s.runNativeHostJob(ctx, s.executeHostJob)
+}
+
+func (s *Server) runNativeHostJob(ctx context.Context, execute func(context.Context, string, string, string) error) error {
 	conn, err := s.Store.Pool.Acquire(ctx)
 	if err != nil {
 		return err
@@ -146,7 +150,7 @@ func (s *Server) RunNativeHostJob(ctx context.Context) error {
 	}
 	operationCtx, cancel := context.WithTimeout(ctx, 85*time.Minute)
 	defer cancel()
-	return finish(s.executeHostJob(operationCtx, kind, target, previous))
+	return finish(execute(operationCtx, kind, target, previous))
 }
 func (s *Server) executeHostJob(ctx context.Context, kind, target, previous string) error {
 	var args, extraEnv []string
