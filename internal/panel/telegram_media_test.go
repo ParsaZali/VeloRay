@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"unicode/utf16"
 )
 
 func TestReceiptPhotoUsesPrivateMultipartAndTruncatesCaption(t *testing.T) {
@@ -47,5 +48,25 @@ func TestSalesCaptionVariablesAndMenuContainBoundedData(t *testing.T) {
 	raw, _ := json.Marshal(publicSalesConfig(store))
 	if strings.Contains(string(raw), "card_number") {
 		t.Fatal("private payment configuration in general public bot view")
+	}
+}
+
+func TestBotTextLimitPreventsUnicodeSupportMessagesStallingDelivery(t *testing.T) {
+	seen := false
+	s := &Server{TelegramHTTP: &http.Client{Transport: featureTransport(func(r *http.Request) (*http.Response, error) {
+		raw, _ := io.ReadAll(r.Body)
+		d, e := decode(raw)
+		if e != nil {
+			t.Fatal(e)
+		}
+		text := str(d, "text")
+		if len(utf16.Encode([]rune(text))) > 4000 || !strings.HasSuffix(text, "…") {
+			t.Fatal("unbounded Telegram message")
+		}
+		seen = true
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true}`)), Header: http.Header{}}, nil
+	})}}
+	if _, e := s.telegramRequest(context.Background(), "fixture:token", "sendMessage", Data{"chat_id": 777, "text": strings.Repeat("😀", 3000)}); e != nil || !seen {
+		t.Fatal(e, seen)
 	}
 }

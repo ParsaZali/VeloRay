@@ -87,16 +87,22 @@ func (s *Server) telegramSendReply(ctx context.Context, token string, reply Data
 	return nil
 }
 
-func botCaption(text string) string {
+func botCaption(text string) string { return botTextBound(text, 1020) }
+func botTextBound(text string, limit int) string {
 	used := 0
 	out := []rune{}
+	truncated := false
 	for _, r := range text {
 		n := utf16.RuneLen(r)
-		if used+n > 1020 {
+		if used+n > limit-1 {
+			truncated = true
 			break
 		}
 		out = append(out, r)
 		used += n
+	}
+	if truncated {
+		out = append(out, '…')
 	}
 	return string(out)
 }

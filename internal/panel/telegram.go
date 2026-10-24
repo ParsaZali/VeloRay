@@ -20,6 +20,15 @@ func (s *Server) telegramRequest(ctx context.Context, token, method string, in a
 		defer cancel()
 		ctx = limited
 	}
+	if d, ok := in.(Data); ok && oneOf(method, "sendMessage", "sendPhoto") {
+		copy := clone(d)
+		if method == "sendMessage" {
+			copy["text"] = botTextBound(str(d, "text"), 4000)
+		} else if str(d, "caption") != "" {
+			copy["caption"] = botCaption(str(d, "caption"))
+		}
+		in = copy
+	}
 	b, e := json.Marshal(in)
 	if e != nil {
 		return nil, e
