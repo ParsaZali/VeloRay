@@ -4,10 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -248,130 +244,17 @@ func TestIntegrationCommerceFailedDeliveryRetainsPaymentAndRetries(t *testing.T)
 	}
 }
 
-type gatewayTransport struct {
-	mu         sync.Mutex
-	verifyCode int
-	reference  int64
-	calls      []Data
-	sandbox    bool
-}
-
-func (g *gatewayTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	raw, _ := io.ReadAll(r.Body)
-	d, _ := decode(raw)
-	g.calls = append(g.calls, d)
-	authority := "A" + strings.Repeat("0", 35)
-	if g.sandbox {
-		authority = "S" + strings.Repeat("0", 35)
-	}
-	out := Data{"code": 100, "authority": authority}
-	if strings.Contains(r.URL.Path, "verify") {
-		out = Data{"code": g.verifyCode, "ref_id": g.reference}
-	}
-	b, _ := json.Marshal(Data{"data": out})
-	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(b))), Header: http.Header{"Content-Type": []string{"application/json"}}}, nil
-}
-func configureGateway(t *testing.T, s *Server, ctx context.Context, a Actor, g *gatewayTransport) {
-	t.Helper()
-	s.PaymentHTTP = &http.Client{Transport: g}
-	if _, _, e := managementRequest(t, s, ctx, a, "PATCH", "commerce/settings", Data{"merchant_id": "11111111-1111-4111-8111-111111111111", "payments_enabled": true, "sandbox": g.sandbox}); e != nil {
-		t.Fatal(e)
-	}
-}
-func TestIntegrationCommerceGatewayVerifiesAmountAndRejectsForgedCallback(t *testing.T) {
-	s, ctx, a, o, _ := commerceFixture(t)
-	g := &gatewayTransport{verifyCode: 100, reference: 888}
-	configureGateway(t, s, ctx, a, g)
-	created, e := s.createOrder(ctx, Data{"offer_id": num(o, "id"), "kind": "purchase", "name": "Paid"}, 0, true)
-	if e != nil {
-		t.Fatal(e)
-	}
-	id := str(created, "id")
-	pay, _, e := s.requestPayment(ctx, id)
-	if e != nil || !strings.HasPrefix(str(pay.(Data), "url"), "https://payment.zarinpal.com/pg/StartPay/A") {
-		t.Fatal(pay, e)
-	}
-	// Editing the offer never alters the amount of an already created invoice.
-	if _, _, e = managementRequest(t, s, ctx, a, "PATCH", fmt.Sprintf("commerce/offers/%d", num(o, "id")), Data{"amount": 77777}); e != nil {
-		t.Fatal(e)
-	}
-	if e = s.verifyPayment(ctx, id, "A"+strings.Repeat("9", 35)); e == nil {
-		t.Fatal("forged authority accepted")
-	}
-	current, _ := getOrder(ctx, s.Store.Pool, id, false)
-	if str(current, "state") != "pending" {
-		t.Fatal(current)
-	}
-	g.verifyCode = -51
-	if e = s.verifyPayment(ctx, id, ""); e == nil {
-		t.Fatal("unpaid order accepted")
-	}
-	g.verifyCode = 101
-	if e = s.verifyPayment(ctx, id, ""); e != nil {
-		t.Fatal(e)
-	}
-	if e = s.verifyPayment(ctx, id, ""); e != nil {
-		t.Fatal(e)
-	}
-	current, _ = getOrder(ctx, s.Store.Pool, id, false)
-	if str(current, "state") != "fulfilled" {
-		t.Fatal(current)
-	}
-	for _, call := range g.calls {
-		if num(call, "amount") != 100000 {
-			t.Fatal("toman/rial amount mismatch", call)
-		}
-	}
-	raw, _ := json.Marshal(orderView(current))
-	if strings.Contains(string(raw), "merchant") || strings.Contains(string(raw), "_token_hash") {
-		t.Fatal("private payment metadata leaked")
-	}
-	// A token protects the delivered subscription, including against another shopper.
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/api/shop/orders/"+id, nil)
-	s.Handler().ServeHTTP(w, r)
-	if w.Code != 404 {
-		t.Fatal(w.Code, w.Body.String())
-	}
-	w = httptest.NewRecorder()
-	r = httptest.NewRequest("GET", "/api/shop/orders/"+id, nil)
-	r.Header.Set("Authorization", "Bearer "+str(created, "token"))
-	s.Handler().ServeHTTP(w, r)
-	if w.Code != 200 || !strings.Contains(w.Body.String(), "subscription_url") {
-		t.Fatal(w.Code, w.Body.String())
-	}
-}
-func TestIntegrationCommerceSandboxNeverCreditsOrProvisions(t *testing.T) {
+func TestIntegrationCommerceGatewayIsUnavailable(t *testing.T) {
 	s, ctx, a, _, _ := commerceFixture(t)
-	g := &gatewayTransport{verifyCode: 100, reference: 777, sandbox: true}
-	configureGateway(t, s, ctx, a, g)
-	out, _, e := managementRequest(t, s, ctx, a, "POST", "commerce/topup", Data{"amount": 10000, "currency": "IRT"})
-	if e != nil {
-		t.Fatal(e)
+	out, _, e := managementRequest(t, s, ctx, a, "GET", "commerce/settings", nil)
+	if e != nil || str(out.(Data), "gateway") != "soon" {
+		t.Fatal(out, e)
 	}
-	id := str(out.(Data), "id")
-	if _, _, e = s.requestPayment(ctx, id); e != nil {
-		t.Fatal(e)
+	if _, _, e = managementRequest(t, s, ctx, a, "PATCH", "commerce/settings", Data{"payments_enabled": true}); e == nil {
+		t.Fatal("retired gateway could be enabled")
 	}
-	if e = s.verifyPayment(ctx, id, ""); e != nil {
-		t.Fatal(e)
-	}
-	if e = s.fulfillOrder(ctx, id); e == nil {
-		t.Fatal("sandbox fulfilled")
-	}
-	if e = s.fulfillPaidOrders(ctx); e != nil {
-		t.Fatal(e)
-	}
-	var n int
-	s.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM vr_ledger`).Scan(&n)
-	if n != 0 {
-		t.Fatal("sandbox created real credit", n)
-	}
-	d, _ := getOrder(ctx, s.Store.Pool, id, false)
-	if !flag(orderView(d), "test_mode") {
-		t.Fatal(d)
+	if e = s.verifyPayment(ctx, randomToken(24), "forged-authority"); e == nil {
+		t.Fatal("removed gateway accepted payment")
 	}
 }
 func TestIntegrationCommerceSnapshotAndReportExcludeWalletTopups(t *testing.T) {

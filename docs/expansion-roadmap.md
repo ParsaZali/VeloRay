@@ -4,7 +4,7 @@ This tracker distinguishes working features from planned integrations. Existing 
 
 | # | Capability | Status / dependencies |
 |---|---|---|
-| 1 | Storefront, verified payments, purchase/renew/traffic top-up | Available: storefront, verified Zarinpal, wallet purchase, renewal and traffic grants; merchant configuration required |
+| 1 | Storefront, verified payments, purchase/renew/traffic top-up | Available: storefront, verified Stars, reviewed bank/USDT transfers, wallet purchase, renewal and traffic grants; external gateways are coming soon |
 | 2 | Reseller wallets, credit, immutable ledger and settlement | Available: scoped wallets/credit, immutable ledger, manual settlements and seller-specific offers |
 | 3 | Subreseller hierarchy and inherited limits | Available: bounded nested delegation, inherited inbounds, reserved capacity, descendant commerce access and atomic parent-to-child wallet transfers |
 | 4 | Per-reseller storefront/subscription branding and domains | Available: individual store and subscription branding; domain activation requires DNS ownership, valid HTTPS and matching instance proof; configure proxy and certificates first |

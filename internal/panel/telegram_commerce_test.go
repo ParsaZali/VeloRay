@@ -162,6 +162,9 @@ func TestIntegrationStarsCheckoutReceiptReplayAndDelivery(t *testing.T) {
 	if str(d, "state") != "fulfilled" || num(d, "customer_id") == 0 {
 		t.Fatal(d)
 	}
+	if _, _, e = managementRequest(t, s, ctx, a, "PATCH", "commerce/store", Data{"bot": Data{"delivery_text": "Ready at {store}; buyer {user_id}"}}); e != nil {
+		t.Fatal(e)
+	}
 	for i := 0; i < 2; i++ {
 		if e = s.telegramOrderNotifications(ctx, cfg, token); e != nil {
 			t.Fatal(e)
@@ -169,6 +172,9 @@ func TestIntegrationStarsCheckoutReceiptReplayAndDelivery(t *testing.T) {
 	}
 	if len(m.sent) != 1 {
 		t.Fatal("delivery notification replayed", m.sent)
+	}
+	if !strings.Contains(str(m.sent[0], "text"), "buyer 777") {
+		t.Fatal("custom delivery text was not used", m.sent)
 	}
 	raw, _ := json.Marshal(m.sent[0])
 	if !strings.Contains(string(raw), "#token=") {

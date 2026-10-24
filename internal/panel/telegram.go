@@ -20,6 +20,15 @@ func (s *Server) telegramRequest(ctx context.Context, token, method string, in a
 		defer cancel()
 		ctx = limited
 	}
+	if d, ok := in.(Data); ok && oneOf(method, "sendMessage", "sendPhoto") {
+		copy := clone(d)
+		if method == "sendMessage" {
+			copy["text"] = botTextBound(str(d, "text"), 4000)
+		} else if str(d, "caption") != "" {
+			copy["caption"] = botCaption(str(d, "caption"))
+		}
+		in = copy
+	}
 	b, e := json.Marshal(in)
 	if e != nil {
 		return nil, e
@@ -71,7 +80,7 @@ func botText(cfg Data, en, fa string) string {
 func botButton(label, callback string) Data { return Data{"text": label, "callback_data": callback} }
 func botKeyboard(rows ...[]any) Data        { return Data{"inline_keyboard": rows} }
 func botHome(cfg Data) Data {
-	return botKeyboard([]any{botButton(botText(cfg, "Status", "وضعیت"), "vr:/status"), botButton(botText(cfg, "Clients", "کلاینت‌ها"), "vr:/clients 1")}, []any{botButton(botText(cfg, "Nodes", "نودها"), "vr:/nodes"), botButton(botText(cfg, "Help", "راهنما"), "vr:/help")})
+	return botKeyboard([]any{botButton(botText(cfg, "Status", "وضعیت"), "vr:/status"), botButton(botText(cfg, "Clients", "کلاینت‌ها"), "vr:/clients 1")}, []any{botButton(botText(cfg, "Nodes", "نودها"), "vr:/nodes"), botButton(botText(cfg, "Sales", "فروش"), "vr:/sales")}, []any{botButton(botText(cfg, "Receipts", "رسیدها"), "vr:/receipts"), botButton(botText(cfg, "Support tickets", "تیکت‌ها"), "vr:/tickets")}, []any{botButton(botText(cfg, "Help", "راهنما"), "vr:/help")})
 }
 
 func (s *Server) telegram(ctx context.Context, cfg Data) error {
@@ -119,6 +128,9 @@ func (s *Server) telegramReplies(ctx context.Context, cfg Data) error {
 			}
 		}
 		sales := s.telegramSalesRoute(ctx, text, m, from)
+		if telegramPermitted(cfg, m, from) && !strings.HasPrefix(text, "/start shop_") && (text == "/start" || oneOf(strings.SplitN(text, " ", 2)[0], "/help", "/status", "/clients", "/search", "/client", "/link", "/node", "/nodes", "/usage", "/ips", "/devices", "/sales", "/receipts", "/receipt", "/tickets", "/reply", "/confirm", "/cancel")) {
+			sales = false
+		}
 		permitted := sales || telegramPermitted(cfg, m, from)
 		owner := strconv.FormatInt(num(from, "id"), 10)
 		var cached []byte
@@ -135,14 +147,14 @@ func (s *Server) telegramReplies(ctx context.Context, cfg Data) error {
 				reply := Data{"text": botText(cfg, "Too many commands; try again shortly", "تعداد درخواست‌ها زیاد است؛ کمی بعد دوباره تلاش کنید"), "reply_markup": botHome(cfg)}
 				if e = rateLimit(ctx, s.Store.Pool, "telegram:"+owner, 30, time.Minute); e == nil {
 					if sales {
-						reply = s.telegramSalesReply(ctx, cfg, text, num(from, "id"))
+						reply = s.salesBotReply(ctx, cfg, text, num(from, "id"), m)
 					} else {
 						reply = s.telegramReply(ctx, cfg, text, owner)
 					}
 				}
 				reply["chat_id"], reply["disable_web_page_preview"] = num(obj(m, "chat"), "id"), true
 				cached, _ = json.Marshal(reply)
-				if sales {
+				if permitted {
 					sealed, err := seal(s.Config.FieldKey, string(cached))
 					if err != nil {
 						return err
@@ -167,7 +179,7 @@ func (s *Server) telegramReplies(ctx context.Context, cfg Data) error {
 					return e
 				}
 			}
-			if _, e = s.telegramRequest(ctx, token, "sendMessage", reply); e != nil {
+			if e = s.telegramSendReply(ctx, token, reply); e != nil {
 				return e
 			}
 		}
@@ -181,6 +193,12 @@ func (s *Server) telegramReplies(ctx context.Context, cfg Data) error {
 	if e = s.telegramOrderNotifications(ctx, cfg, token); e != nil {
 		return e
 	}
+	if e = s.proofNotifications(ctx, cfg, token); e != nil {
+		return e
+	}
+	if e = s.ticketNotifications(ctx, cfg, token); e != nil {
+		return e
+	}
 	if e = s.telegramAlerts(ctx, cfg, token); e != nil {
 		return e
 	}
@@ -189,6 +207,9 @@ func (s *Server) telegramReplies(ctx context.Context, cfg Data) error {
 }
 
 func (s *Server) telegramReply(ctx context.Context, cfg Data, text, owner string) Data {
+	if reply, handled := s.advancedTelegramReply(ctx, cfg, text, owner); handled {
+		return reply
+	}
 	reply := Data{"text": botText(cfg, "Use /help", "از /help استفاده کنید"), "reply_markup": botHome(cfg)}
 	p := strings.Fields(text)
 	if len(p) == 0 {
@@ -198,7 +219,7 @@ func (s *Server) telegramReply(ctx context.Context, cfg Data, text, owner string
 	message := ""
 	switch cmd {
 	case "/help", "/start":
-		message = botText(cfg, "VeloRay "+Version+"\n/status · /nodes · /clients [page] · /search name\n/client ID · /link ID\n/client ID enable|disable|reset\n/node ID deploy|restart\nChanges require confirmation and enabled bot management.", "VeloRay "+Version+"\n/status وضعیت · /nodes نودها\n/clients [page] کلاینت‌ها · /search name جستجو\n/client ID جزئیات · /link ID اشتراک\n/client ID enable|disable|reset\n/node ID deploy|restart\nتغییرات نیازمند فعال‌سازی مدیریت و تأیید جداگانه هستند.")
+		message = botText(cfg, "VeloRay "+Version+"\n/status · /nodes · /clients [page] · /search name\n/client ID · /link ID\n/client ID enable|disable|reset\n/node ID deploy|restart\n/usage ID · /ips ID · /devices ID\n/sales · /receipts · /tickets · /reply ID text\nChanges require confirmation and enabled bot management.", "VeloRay "+Version+"\n/status وضعیت · /nodes نودها\n/clients [page] کلاینت‌ها · /search name جستجو\n/client ID جزئیات · /link ID اشتراک\n/client ID enable|disable|reset\n/node ID deploy|restart\n/usage ID · /ips ID · /devices ID\n/sales · /receipts · /tickets · /reply ID text\nتغییرات نیازمند فعال‌سازی مدیریت و تأیید جداگانه هستند.")
 	case "/status":
 		o, e := s.overview(ctx)
 		if e != nil {
@@ -296,7 +317,7 @@ func (s *Server) telegramReply(ctx context.Context, cfg Data, text, owner string
 		}
 		rate := effectiveTrafficMultiplier(c)
 		message = fmt.Sprintf("%d · %s\nEnabled: %t\nBilled: %s / %s\nActual: %s\nMultiplier: %v → %.3fx\nExpiry: %s", id, str(c, "name"), flag(c, "enabled"), fmtBytes(num(c, "used_traffic_bytes")), quotaText(c), fmtBytes(num(c, "raw_used_traffic_bytes")), c["traffic_multiplier"], rate, fallback(str(c, "expires_at"), "Never"))
-		reply["reply_markup"] = botKeyboard([]any{botButton("Enable", fmt.Sprintf("vr:/client %d enable", id)), botButton("Disable", fmt.Sprintf("vr:/client %d disable", id))}, []any{botButton("Reset usage", fmt.Sprintf("vr:/client %d reset", id)), botButton("Subscription", fmt.Sprintf("vr:/link %d", id))}, []any{botButton("‹ Clients", "vr:/clients 1")})
+		reply["reply_markup"] = botKeyboard([]any{botButton("Enable", fmt.Sprintf("vr:/client %d enable", id)), botButton("Disable", fmt.Sprintf("vr:/client %d disable", id))}, []any{botButton("Reset usage", fmt.Sprintf("vr:/client %d reset", id)), botButton("Subscription", fmt.Sprintf("vr:/link %d", id))}, []any{botButton("IPs", fmt.Sprintf("vr:/ips %d", id)), botButton("Devices", fmt.Sprintf("vr:/devices %d", id)), botButton("Usage", fmt.Sprintf("vr:/usage %d", id))}, []any{botButton("‹ Clients", "vr:/clients 1")})
 	case "/confirm":
 		if len(p) != 2 {
 			break
@@ -367,20 +388,29 @@ func (s *Server) telegramExecute(ctx context.Context, cfg Data, owner, nonce str
 	}
 	req, _ := http.NewRequestWithContext(ctx, "POST", "http://localhost/", strings.NewReader("{}"))
 	var e error
-	if kind == "clients" {
+	if kind == "receipts" {
+		e = s.executeBotReceipt(ctx, cfg, owner, id, action)
+	} else if kind == "clients" {
 		c, err := get(ctx, s.Store.Pool, "clients", id)
 		if err != nil {
 			reply["text"] = "Client not found"
 			return reply
 		}
-		node, err := inboundNode(ctx, s.Store.Pool, num(c, "inbound"))
+		nodes, err := clientNodes(ctx, s.Store.Pool, c)
 		if err != nil {
 			reply["text"] = "Inbound not found"
 			return reply
 		}
-		_, e = s.change(ctx, []int64{node}, Actor{}, "telegram.client-"+action, owner, func(tx pgx.Tx) (any, error) {
+		_, e = s.change(ctx, nodes, Actor{}, "telegram.client-"+action, owner, func(tx pgx.Tx) (any, error) {
 			c, err := get(ctx, tx, "clients", id)
 			if err != nil {
+				return nil, err
+			}
+			related, err := clientNodes(ctx, tx, c)
+			if err != nil {
+				return nil, err
+			}
+			if err = ensureCovered(related, nodes); err != nil {
 				return nil, err
 			}
 			if err = applyClientAction(c, action); err != nil {
@@ -444,6 +474,15 @@ func (s *Server) telegramAPI(w http.ResponseWriter, r *http.Request, path string
 	}
 	if path == "telegram/setup" && webhook {
 		return nil, 0, fail(409, "This token has a webhook. Remove it in the existing bot service before using VeloRay polling")
+	}
+	if path == "telegram/setup" {
+		commands := []any{}
+		for _, pair := range [][2]string{{"start", "Open store"}, {"buy", "Buy a subscription"}, {"services", "My subscriptions"}, {"orders", "My orders"}, {"free", "Free trial"}, {"support", "Support"}, {"terms", "Purchase terms"}} {
+			commands = append(commands, Data{"command": pair[0], "description": pair[1]})
+		}
+		if _, e = s.telegramRequest(ctx, token, "setMyCommands", Data{"commands": commands, "scope": Data{"type": "default"}}); e != nil {
+			return nil, 0, fail(502, "Telegram command setup failed")
+		}
 	}
 	for owner := range telegramOwners(cfg) {
 		if path == "telegram/test" {

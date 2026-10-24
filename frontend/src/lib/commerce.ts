@@ -1,5 +1,9 @@
+import type { SalesBot, ManualMethod, PaymentProof } from "./sales";
 import { localeName, t } from "./i18n";
 export type Offer = {
+  category?: string;
+  image_url?: string;
+  sort_order?: number;
   id: number;
   owner_id: number;
   name: string;
@@ -13,6 +17,8 @@ export type Offer = {
   cost_amount: number;
 };
 export type Order = {
+  manual_payments?: ManualMethod[];
+  receipt?: PaymentProof | null;
   id: string;
   token?: string;
   owner_id: number;
@@ -38,6 +44,7 @@ export type Order = {
   test_mode?: boolean;
 };
 export type StoreBrand = {
+  bot?: Partial<SalesBot>;
   telegram_sales?: boolean;
   telegram_url?: string;
   terms_url?: string;
@@ -116,11 +123,13 @@ export function amountLabel(amount: number | string, currency: string) {
     const formatter = new Intl.NumberFormat(localeName(), {
       maximumFractionDigits: 0,
     });
-    if (["USD", "EUR"].includes(currency)) {
+    if (["USD", "EUR", "USDT"].includes(currency)) {
       const negative = integer < 0n,
         absolute = negative ? -integer : integer,
-        whole = absolute / 100n,
-        remainder = absolute % 100n;
+        scale = currency === "USDT" ? 1000000n : 100n,
+        digits = currency === "USDT" ? 6 : 2,
+        whole = absolute / scale,
+        remainder = absolute % scale;
       value = formatter.format(
         negative && whole === 0n ? -0 : negative ? -whole : whole,
       );
@@ -132,7 +141,7 @@ export function amountLabel(amount: number | string, currency: string) {
         value +=
           separator +
           new Intl.NumberFormat(localeName(), {
-            minimumIntegerDigits: 2,
+            minimumIntegerDigits: digits,
             useGrouping: false,
           }).format(remainder);
       }

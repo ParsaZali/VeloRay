@@ -10,7 +10,6 @@ import {
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  CreditCard,
   ExternalLink,
   Package,
   Plus,
@@ -27,7 +26,6 @@ import {
   commerceError,
   rememberOrder,
   tokenFromURL,
-  type Gateway,
   type LedgerEntry,
   type Offer,
   type Order,
@@ -41,8 +39,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog } from "@/components/common/dialog";
 import { CommerceBreakdown } from "@/components/commerce-breakdown";
 import { StoreDomain } from "@/components/store-domain";
-import { StoreTelegram } from "@/components/store-telegram";
+import { StoreTelegram, SalesPayments } from "@/components/store-telegram";
 
+const SalesReview = lazy(() =>
+  import("@/components/sales-review").then((m) => ({ default: m.SalesReview })),
+);
 const ResellerTeam = lazy(() =>
   import("@/components/reseller-team").then((module) => ({
     default: module.ResellerTeam,
@@ -55,6 +56,8 @@ type Tab =
   | "wallet"
   | "store"
   | "gateway"
+  | "receipts"
+  | "tickets"
   | "team";
 const emptyStore: StoreBrand = {
   enabled: false,
@@ -97,7 +100,7 @@ function Currency({
       value={value}
       onChange={(e) => onChange(e.target.value)}
     >
-      {["IRT", "IRR", "USD", "EUR", "XTR"].map((v) => (
+      {["IRT", "IRR", "USD", "EUR", "XTR", "USDT"].map((v) => (
         <option key={v} value={v}>
           {v === "IRT"
             ? t("Toman", "تومان")
@@ -105,7 +108,9 @@ function Currency({
               ? t("Rial", "ریال")
               : v === "XTR"
                 ? t("Telegram Stars", "استارز تلگرام")
-                : `${v} (${t("cents", "سنت")})`}
+                : v === "USDT"
+                  ? "USDT"
+                  : `${v} (${t("cents", "سنت")})`}
         </option>
       ))}
     </Select>
@@ -129,13 +134,7 @@ export function CommerceWorkspace() {
       by_offer: [],
       by_node: [],
     });
-  const [services, setServices] = useState<{ id: number; name: string }[]>([]),
-    [gateway, setGateway] = useState<Gateway>({
-      payments_enabled: false,
-      merchant_configured: false,
-      sandbox: false,
-    }),
-    [merchant, setMerchant] = useState("");
+  const [services, setServices] = useState<{ id: number; name: string }[]>([]);
   const [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -203,11 +202,6 @@ export function CommerceWorkspace() {
         .catch((e) => {
           if (!c.signal.aborted) setError(commerceError(e));
         });
-      void api<Gateway>("/commerce/settings", { signal: c.signal })
-        .then(setGateway)
-        .catch((e) => {
-          if (!c.signal.aborted) setError(commerceError(e));
-        });
     } else if (can(user, "resellers.read")) {
       void api<Pick<AdminUser, "id" | "username">[]>("/resellers", {
         signal: c.signal,
@@ -272,6 +266,9 @@ export function CommerceWorkspace() {
       duration_days,
       traffic_bytes,
       cost_amount,
+      category: editor.category || "",
+      image_url: editor.image_url || "",
+      sort_order: editor.sort_order || 0,
     };
     await mutate(async () => {
       await api(`/commerce/offers${id ? `/${id}` : ""}${scope}`, {
@@ -303,12 +300,9 @@ export function CommerceWorkspace() {
           body: JSON.stringify({ amount: Number(amount), currency }),
         });
         rememberOrder(order);
-        const pay = await api<{ url: string }>(`/shop/orders/${order.id}/pay`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${order.token}` },
-          body: "{}",
-        });
-        window.location.assign(pay.url);
+        window.location.assign(
+          `/shop?store=${order.owner_id}&order=${order.id}#token=${encodeURIComponent(order.token || "")}`,
+        );
       } else {
         const endpoint =
           dialog === "credit"
@@ -338,6 +332,8 @@ export function CommerceWorkspace() {
     ["overview", t("Revenue", "درآمد")],
     ["offers", t("Offers", "بسته‌های فروش")],
     ["orders", t("Orders", "سفارش‌ها")],
+    ["receipts", t("Receipts", "رسیدها")],
+    ["tickets", t("Support", "پشتیبانی")],
     ["wallet", t("Wallet & ledger", "کیف پول و تراکنش‌ها")],
     ["store", t("Storefront", "فروشگاه")],
     ...(can(user, "resellers.read")
@@ -743,7 +739,7 @@ export function CommerceWorkspace() {
                     </Button>
                   </>
                 )}
-                {editable && owner === user?.id && (
+                {editable && !admin && owner === user?.id && (
                   <Button onClick={() => open("topup")}>
                     <Plus className="h-4 w-4" />
                     {t("Top up wallet", "شارژ کیف پول")}
@@ -850,6 +846,7 @@ export function CommerceWorkspace() {
                           subscription_origin: brand.subscription_origin || "",
                           telegram_sales: !!brand.telegram_sales,
                           terms_url: brand.terms_url || "",
+                          bot: brand.bot || {},
                         }),
                       }),
                     );
@@ -859,7 +856,7 @@ export function CommerceWorkspace() {
                     <input
                       type="checkbox"
                       checked={brand.enabled}
-                      disabled={!editable}
+                      disabled={!editable || busy}
                       onChange={(e) =>
                         setBrand({ ...brand, enabled: e.target.checked })
                       }
@@ -872,7 +869,7 @@ export function CommerceWorkspace() {
                       required
                       maxLength={96}
                       value={brand.name}
-                      disabled={!editable}
+                      disabled={!editable || busy}
                       onChange={(e) =>
                         setBrand({ ...brand, name: e.target.value })
                       }
@@ -883,7 +880,7 @@ export function CommerceWorkspace() {
                       className="input"
                       maxLength={1200}
                       value={brand.description}
-                      disabled={!editable}
+                      disabled={!editable || busy}
                       onChange={(e) =>
                         setBrand({ ...brand, description: e.target.value })
                       }
@@ -901,7 +898,7 @@ export function CommerceWorkspace() {
                         type="url"
                         placeholder="https://"
                         value={brand[key]}
-                        disabled={!editable}
+                        disabled={!editable || busy}
                         onChange={(e) =>
                           setBrand({ ...brand, [key]: e.target.value })
                         }
@@ -923,7 +920,7 @@ export function CommerceWorkspace() {
                     key={owner}
                     owner={owner}
                     brand={brand}
-                    editable={editable}
+                    editable={editable && !busy}
                     onChange={(patch) =>
                       setBrand((current) => ({ ...current, ...patch }))
                     }
@@ -931,9 +928,17 @@ export function CommerceWorkspace() {
                       setBrand((current) => ({ ...current, ...result }))
                     }
                   />
-                  <StoreTelegram
+                  <SalesPayments
                     brand={brand}
-                    editable={editable}
+                    editable={editable && !busy}
+                    onChange={(patch) =>
+                      setBrand((current) => ({ ...current, ...patch }))
+                    }
+                  />
+                  <StoreTelegram
+                    services={services}
+                    brand={brand}
+                    editable={editable && !busy}
                     onChange={(patch) =>
                       setBrand((current) => ({ ...current, ...patch }))
                     }
@@ -950,88 +955,30 @@ export function CommerceWorkspace() {
           {tab === "gateway" && admin && (
             <Card>
               <CardHeader>
-                <CardTitle>{t("Zarinpal", "زرین‌پال")}</CardTitle>
-                <CreditCard className="h-5 w-5 text-emerald-500" />
+                <CardTitle>{t("Payment gateway", "درگاه پرداخت")}</CardTitle>
               </CardHeader>
-              <CardContent>
-                <form
-                  className="max-w-xl space-y-4"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void mutate(async () => {
-                      const result = await api<Gateway>("/commerce/settings", {
-                        method: "PATCH",
-                        body: JSON.stringify({
-                          payments_enabled: gateway.payments_enabled,
-                          sandbox: gateway.sandbox,
-                          ...(merchant ? { merchant_id: merchant } : {}),
-                        }),
-                      });
-                      setGateway(result);
-                      setMerchant("");
-                    });
-                  }}
-                >
-                  <Field label={t("Merchant ID", "شناسهٔ پذیرنده")}>
-                    <Input
-                      className="input"
-                      type="password"
-                      autoComplete="off"
-                      value={merchant}
-                      placeholder={
-                        gateway.merchant_configured
-                          ? t(
-                              "Configured · enter to replace",
-                              "تنظیم شده · برای جایگزینی وارد کنید",
-                            )
-                          : "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                      }
-                      onChange={(e) => setMerchant(e.target.value)}
-                    />
-                  </Field>
-                  <label className="flex gap-2 text-[12px]">
-                    <input
-                      type="checkbox"
-                      checked={gateway.payments_enabled}
-                      onChange={(e) =>
-                        setGateway({
-                          ...gateway,
-                          payments_enabled: e.target.checked,
-                        })
-                      }
-                    />
-                    {t("Enable online payments", "فعال‌سازی پرداخت آنلاین")}
-                  </label>
-                  <label className="flex gap-2 text-[12px]">
-                    <input
-                      type="checkbox"
-                      checked={gateway.sandbox}
-                      onChange={(e) =>
-                        setGateway({ ...gateway, sandbox: e.target.checked })
-                      }
-                    />
-                    {t("Sandbox mode", "حالت آزمایشی")}
-                  </label>
-                  {gateway.sandbox && (
-                    <p className="rounded-lg bg-amber-500/10 p-3 text-[12px] text-amber-500">
-                      {t(
-                        "Test payments never add wallet credit or create customers.",
-                        "پرداخت آزمایشی، اعتبار کیف پول یا حساب مشتری ایجاد نمی‌کند.",
-                      )}
-                    </p>
+              <CardContent className="space-y-3 py-10">
+                <p className="text-2xl font-semibold">Soon...</p>
+                <p className="text-[13px] leading-7 text-[var(--muted)]">
+                  {t(
+                    "If you would like a payment gateway added, let us know through Telegram.",
+                    "اگر درگاهی مد نظرتان هست که اضافه شود، از طریق تلگرام اطلاع دهید.",
                   )}
-                  <p className="text-[11px] text-[var(--muted)]">
-                    {t(
-                      "Invoices keep their currency. Zarinpal is charged in rials with explicit toman conversion.",
-                      "واحد فاکتور حفظ می‌شود. مبلغ زرین‌پال با تبدیل صریح تومان به ریال ارسال می‌شود.",
-                    )}
-                  </p>
-                  <Button disabled={busy} type="submit">
-                    {t("Save")}
-                  </Button>
-                </form>
+                </p>
               </CardContent>
             </Card>
+          )}
+          {(tab === "receipts" || tab === "tickets") && (
+            <Suspense fallback={<p role="status">{t("Loading…")}</p>}>
+              <SalesReview
+                key={`${owner}:${tab}`}
+                owner={owner}
+                editable={editable && !busy}
+                orders={orders}
+                mode={tab}
+                onReviewed={() => void load()}
+              />
+            </Suspense>
           )}
         </>
       )}
@@ -1050,6 +997,39 @@ export function CommerceWorkspace() {
                 maxLength={96}
                 value={editor.name}
                 onChange={(e) => setEditor({ ...editor, name: e.target.value })}
+              />
+            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t("Category", "دسته‌بندی")}>
+                <Input
+                  maxLength={96}
+                  value={editor.category || ""}
+                  onChange={(e) =>
+                    setEditor({ ...editor, category: e.target.value })
+                  }
+                />
+              </Field>
+              <Field label={t("Display order", "ترتیب نمایش")}>
+                <Input
+                  type="number"
+                  min={0}
+                  max={10000}
+                  value={editor.sort_order || 0}
+                  onChange={(e) =>
+                    setEditor({ ...editor, sort_order: Number(e.target.value) })
+                  }
+                />
+              </Field>
+            </div>
+            <Field label={t("Product image URL", "نشانی تصویر بسته")}>
+              <Input
+                type="url"
+                dir="ltr"
+                placeholder="https://"
+                value={editor.image_url || ""}
+                onChange={(e) =>
+                  setEditor({ ...editor, image_url: e.target.value })
+                }
               />
             </Field>
             <Field label={t("Service", "سرویس")}>
@@ -1074,12 +1054,22 @@ export function CommerceWorkspace() {
                   className="input"
                   type="number"
                   required
-                  min={1}
-                  max={1e12}
-                  step={1}
-                  value={editor.amount || ""}
+                  min={editor.currency === "USDT" ? 0.000001 : 1}
+                  max={editor.currency === "USDT" ? 1e6 : 1e12}
+                  step={editor.currency === "USDT" ? 0.000001 : 1}
+                  value={
+                    editor.currency === "USDT"
+                      ? editor.amount / 1000000 || ""
+                      : editor.amount || ""
+                  }
                   onChange={(e) =>
-                    setEditor({ ...editor, amount: Number(e.target.value) })
+                    setEditor({
+                      ...editor,
+                      amount: Math.round(
+                        Number(e.target.value) *
+                          (editor.currency === "USDT" ? 1000000 : 1),
+                      ),
+                    })
                   }
                 />
               </Field>
@@ -1134,13 +1124,20 @@ export function CommerceWorkspace() {
                   className="input"
                   type="number"
                   min={0}
-                  max={1e12}
-                  step={1}
-                  value={editor.cost_amount}
+                  max={editor.currency === "USDT" ? 1e6 : 1e12}
+                  step={editor.currency === "USDT" ? 0.000001 : 1}
+                  value={
+                    editor.currency === "USDT"
+                      ? editor.cost_amount / 1000000
+                      : editor.cost_amount
+                  }
                   onChange={(e) =>
                     setEditor({
                       ...editor,
-                      cost_amount: Number(e.target.value),
+                      cost_amount: Math.round(
+                        Number(e.target.value) *
+                          (editor.currency === "USDT" ? 1000000 : 1),
+                      ),
                     })
                   }
                 />

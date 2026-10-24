@@ -108,7 +108,7 @@ Screenshots use demonstration accounts, not production credentials.
 | Area | What you can manage |
 |---|---|
 | **Users & subscriptions** | Shared accounts across nodes, quotas, expiry, first-use activation, scheduled renewal, IP/HWID limits, bulk actions and token rotation |
-| **Sales & billing** | React storefront, verified Zarinpal checkout, reserved inventory, wallet purchase/renew/top-up, immutable ledger, reseller hierarchy, credit transfers and currency-separated profit reports |
+| **Sales & billing** | Optional customizable sales bot and Mini App, verified Stars, reviewed card/USDT receipts, trials, support tickets, reserved inventory, wallet purchase/renew/top-up, immutable ledger, reseller hierarchy, credit transfers and currency-separated profit reports |
 | **Seller branding** | Individual store/subscription name, logo, support link and DNS/HTTPS-verified subscription domains |
 | **Telegram sales** | Customer bot and Mini App, verified Stars payments, private order history and automatic delivery with the same fulfillment workflow |
 | **Passkeys** | Device-verified WebAuthn sign-in, key enrollment/revocation, required-MFA protections and host-console recovery |
