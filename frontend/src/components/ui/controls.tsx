@@ -1,3 +1,4 @@
+import { cn } from "@/lib/cn";
 import { datePreferences } from "@/lib/dates";
 import {
   calendarMonth,
@@ -155,7 +156,7 @@ export function Select({
         id={id}
         type="button"
         disabled={disabled}
-        className={`custom-select ${className}`}
+        className={cn("input custom-select", className)}
         aria-label={controlLabel}
         aria-activedescendant={open ? `${uid}-${active}` : undefined}
         role="combobox"
@@ -259,10 +260,23 @@ export function Select({
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   const ref = useRef<HTMLInputElement>(null);
   const label = useControlLabel(ref, props["aria-label"]);
-  const { type, ...rest } = props;
+  const { type, className, ...rest } = props;
   if (type === "datetime-local" || type === "date")
     return <DateInput {...props} />;
-  return <input type={type} {...rest} ref={ref} aria-label={label} />;
+  return (
+    <input
+      type={type}
+      {...rest}
+      className={cn(
+        !["checkbox", "radio", "hidden", "file", "range", "color"].includes(
+          type || "text",
+        ) && "input",
+        className,
+      )}
+      ref={ref}
+      aria-label={label}
+    />
+  );
 }
 function DateInput({
   value,
@@ -343,7 +357,7 @@ function DateInput({
         aria-required={required}
         ref={trigger}
         aria-label={label}
-        className={`date-trigger ${className}`}
+        className={cn("input date-trigger", className)}
         onClick={() => {
           if (!open) {
             const selected = date.slice(0, 10) || civilToday();
@@ -511,5 +525,12 @@ function DateInput({
 export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   const ref = useRef<HTMLTextAreaElement>(null),
     label = useControlLabel(ref, props["aria-label"]);
-  return <textarea {...props} ref={ref} aria-label={label} />;
+  return (
+    <textarea
+      {...props}
+      className={cn("input", props.className)}
+      ref={ref}
+      aria-label={label}
+    />
+  );
 }

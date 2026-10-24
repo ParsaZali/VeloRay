@@ -24,7 +24,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUpRight,
   ArrowDownLeft,
-  CircleGauge,
   RefreshCw,
   Server,
   WifiOff,
@@ -32,9 +31,7 @@ import {
 import {
   api,
   API_BASE,
-  distinctAccounts,
   type AppSettings,
-  type ClientItem,
   type NodeItem,
   type SystemInfo,
 } from "@/lib/api";
@@ -406,7 +403,6 @@ export function Dashboard() {
   const reseller = isReseller(session);
   const [o, setO] = useState<Overview | null>(null),
     [nodes, setNodes] = useState<NodeItem[]>([]),
-    [clients, setClients] = useState<ClientItem[]>([]),
     [history, setHistory] = useState<TrafficPoint[]>([]),
     [cfg, setCfg] = useState<AppSettings | null>(null),
     [sys, setSys] = useState<SystemInfo | null>(null),
@@ -441,13 +437,10 @@ export function Dashboard() {
     const options = { signal: controller.signal };
     setBusy(true);
     try {
-      const [ov, n, c, h, s, system] = await Promise.allSettled([
+      const [ov, n, h, s, system] = await Promise.allSettled([
         api<Overview>("/overview", options),
         can(session, "nodes.read")
           ? api<NodeItem[]>("/nodes/", options)
-          : Promise.resolve([]),
-        can(session, "clients.read")
-          ? api<ClientItem[]>("/clients/", options)
           : Promise.resolve([]),
         api<TrafficPoint[]>("/traffic-history?hours=24", options),
         api<AppSettings>("/settings", options),
@@ -459,7 +452,6 @@ export function Dashboard() {
       // A server-info or client-list failure must not discard valid history.
       if (ov.status === "fulfilled") setO(ov.value);
       if (n.status === "fulfilled") setNodes(n.value);
-      if (c.status === "fulfilled") setClients(c.value);
       if (h.status === "fulfilled") {
         setHistory(
           (Array.isArray(h.value) ? h.value : []).filter((point) =>
@@ -475,7 +467,7 @@ export function Dashboard() {
         );
       if (s.status === "fulfilled") setCfg(s.value);
       if (system.status === "fulfilled") setSys(system.value);
-      const failure = [ov, n, c, s, system].find(
+      const failure = [ov, n, s, system].find(
         (result) => result.status === "rejected",
       );
       setMsg(
@@ -506,15 +498,7 @@ export function Dashboard() {
     );
     return () => clearInterval(id);
   }, [cfg?.dashboard_refresh_seconds, load]);
-  const top = useMemo(
-      () =>
-        distinctAccounts(clients)
-          .sort((a, b) => b.raw_used_traffic_bytes - a.raw_used_traffic_bytes)
-          .slice(0, 5),
-      [clients],
-    ),
-    max = Math.max(1, ...top.map((x) => x.raw_used_traffic_bytes)),
-    local = nodes.find((n) => n.is_local),
+  const local = nodes.find((n) => n.is_local),
     disabled = Math.max(0, (o?.clients_total ?? 0) - (o?.clients_active ?? 0)),
     maxProto = Math.max(1, ...(o?.protocols || []).map((x) => x.count));
   return (
@@ -770,7 +754,7 @@ export function Dashboard() {
           </section>
         </>
       )}
-      <section className="grid gap-4 xl:grid-cols-[1.55fr_.65fr]">
+      <section className="grid gap-4">
         <Card>
           <CardHeader>
             <div>
@@ -823,41 +807,8 @@ export function Dashboard() {
             />
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>{t("Client health")}</CardTitle>
-            </div>
-            <CircleGauge className="h-4 w-4 text-[var(--muted)]" />
-          </CardHeader>
-          <CardContent>
-            <div className="grid place-items-center py-2">
-              <div
-                className="relative grid h-36 w-36 place-items-center rounded-full"
-                style={{
-                  background: `conic-gradient(var(--brand) ${pct(o?.clients_active ?? 0, o?.clients_total ?? 0)}%, var(--surface-3) 0)`,
-                }}
-              >
-                <div className="grid h-[116px] w-[116px] place-items-center rounded-full bg-[var(--card)] text-center">
-                  <div>
-                    <div className="text-[28px] font-semibold">
-                      {o?.clients_active ?? 0}
-                    </div>
-                    <div className="text-[9px] uppercase tracking-[.12em] text-[var(--muted)]">
-                      {t("active")}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <Box label={t("Total")} value={o?.clients_total ?? 0} />
-              <Box label={t("Disabled")} value={disabled} />
-            </div>
-          </CardContent>
-        </Card>
       </section>
-      <section className={`grid gap-4 ${reseller ? "" : "xl:grid-cols-3"}`}>
+      <section className={reseller ? "hidden" : "grid gap-4 lg:grid-cols-2"}>
         {!reseller && (
           <>
             <Card className="xl:col-span-1">
@@ -955,45 +906,6 @@ export function Dashboard() {
             </Card>
           </>
         )}
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>{t("Top consumers")}</CardTitle>
-            </div>
-            <ArrowUpRight className="h-4 w-4 text-[var(--muted)]" />
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {top.length ? (
-              top.map((c, index) => (
-                <div key={c.id}>
-                  <div className="flex min-w-0 items-center justify-between gap-3 text-[10px]">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded bg-[var(--surface-2)] text-[9px] text-[var(--muted)]">
-                        {index + 1}
-                      </span>
-                      <span className="truncate font-medium">{c.name}</span>
-                    </div>
-                    <span className="shrink-0 text-[var(--muted)]">
-                      {fmt(c.raw_used_traffic_bytes)}
-                    </span>
-                  </div>
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--surface-2)]">
-                    <div
-                      className="h-full rounded-full bg-[var(--brand)]"
-                      style={{
-                        width: `${Math.max(2, (c.raw_used_traffic_bytes / max) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="py-8 text-center text-[11px] text-[var(--muted)]">
-                {t("Traffic appears after clients start using the node.")}
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </section>
     </div>
   );

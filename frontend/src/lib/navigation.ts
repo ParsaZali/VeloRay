@@ -14,6 +14,7 @@ export type RouteKey =
   | "nodes"
   | "xray"
   | "security"
+  | "updates"
   | "settings"
   | "api"
   | "accounts"
@@ -25,6 +26,7 @@ const administratorRoutes = new Set<RouteKey>([
   "profiles",
   "subscription-policies",
   "operations",
+  "updates",
 ]);
 const resellerRoutes = new Set<RouteKey>([
   "dashboard",

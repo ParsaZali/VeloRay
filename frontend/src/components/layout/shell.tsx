@@ -1,3 +1,4 @@
+import { Notifications } from "@/components/notifications";
 import { useLocale, t } from "@/lib/i18n";
 import type { ReactNode, CSSProperties } from "react";
 import { useState } from "react";
@@ -32,6 +33,7 @@ export function Shell({
   };
   return (
     <div className="veloray-shell min-h-screen text-[var(--fg)]">
+      <Notifications />
       <a href="#main-content" className="skip-link">
         {t("Skip to content")}
       </a>

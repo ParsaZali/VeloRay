@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { usePanelUpdates } from "@/lib/panel-updates";
 import { isReseller, useSession } from "@/lib/session";
 import { canVisit, type RouteKey } from "@/lib/navigation";
 export type { RouteKey } from "@/lib/navigation";
@@ -14,7 +17,6 @@ const groups = [
   {
     label: "Management",
     items: [
-      { key: "services", label: "Services and plans", icon: "layer-group" },
       { key: "clients", label: "Clients", icon: "users" },
       { key: "inbounds", label: "Inbounds", icon: "diagram-project" },
       {
@@ -30,12 +32,6 @@ const groups = [
     items: [
       { key: "nodes", label: "Nodes", icon: "server" },
       { key: "operations", label: "Operations", icon: "gauge-high" },
-      { key: "profiles", label: "Config profiles", icon: "file-code" },
-      {
-        key: "subscription-policies",
-        label: "Subscription policies",
-        icon: "link",
-      },
       { key: "xray", label: "Cores", icon: "microchip" },
     ],
   },
@@ -46,6 +42,12 @@ const groups = [
       { key: "api", label: "API", icon: "code" },
       { key: "accounts", label: "Accounts", icon: "user-shield" },
       { key: "settings", label: "Settings", icon: "gear" },
+    ],
+  },
+  {
+    label: "Commerce",
+    items: [
+      { key: "services", label: "Services and plans", icon: "layer-group" },
     ],
   },
 ] as const;
@@ -66,6 +68,17 @@ export function Sidebar({
 }) {
   useLocale();
   const session = useSession();
+  const { status } = usePanelUpdates(Boolean(session?.is_superuser));
+  const [version, setVersion] = useState("");
+  useEffect(() => {
+    const c = new AbortController();
+    void api<{ version: string }>("/version", { signal: c.signal })
+      .then((data) => {
+        if (!c.signal.aborted) setVersion(data.version);
+      })
+      .catch(() => {});
+    return () => c.abort();
+  }, []);
   const visibleGroups = groups
     .map((group) => ({
       ...group,
@@ -78,8 +91,40 @@ export function Sidebar({
       : t(label);
   const body = (compact: boolean) => (
     <>
-      <div className="flex h-16 items-center justify-between px-4">
-        <VeloRayWordmark compact={compact} />
+      <div className="flex min-h-20 shrink-0 items-center justify-between px-4 py-3">
+        <div className="min-w-0">
+          <VeloRayWordmark compact={compact} />
+          {!compact && (
+            <div
+              className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]"
+              dir="ltr"
+            >
+              <span className="text-[var(--muted)]">
+                {version ? `v${version}` : "…"}
+              </span>
+              {status?.state === "up_to_date" ? (
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  (Up to date)
+                </span>
+              ) : status?.state === "available" ? (
+                <button
+                  type="button"
+                  className="text-amber-600 dark:text-amber-400 hover:underline"
+                  onClick={() => {
+                    setRoute("updates");
+                    setMobileOpen(false);
+                  }}
+                >
+                  (Update available)
+                </button>
+              ) : status?.state === "verifying" ? (
+                <span className="text-amber-600 dark:text-amber-400">
+                  (Verification pending)
+                </span>
+              ) : null}
+            </div>
+          )}
+        </div>
         <button
           aria-label={t("Close menu")}
           className="grid h-8 w-8 place-items-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-2)] lg:hidden"
@@ -99,7 +144,15 @@ export function Sidebar({
             )}
             <div className="space-y-1">
               {g.items.map((item) => {
-                const active = route === item.key;
+                const active =
+                  route === item.key ||
+                  (item.key === "settings" &&
+                    [
+                      "profiles",
+                      "subscription-policies",
+                      "imports",
+                      "updates",
+                    ].includes(route));
                 return (
                   <button
                     key={item.key}

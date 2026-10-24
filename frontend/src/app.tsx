@@ -19,21 +19,13 @@ const OperationsPage = lazy(() =>
     default: module.OperationsPage,
   })),
 );
-const SubscriptionPoliciesPage = lazy(() =>
-  import("@/pages/subscription-policies").then((module) => ({
-    default: module.SubscriptionPoliciesPage,
-  })),
-);
+
 const ServicesPage = lazy(() =>
   import("@/pages/customers").then((module) => ({
     default: module.ServicesPage,
   })),
 );
-const ProfilesPage = lazy(() =>
-  import("@/pages/profiles").then((module) => ({
-    default: module.ProfilesPage,
-  })),
-);
+
 const OutboundsPage = lazy(() =>
   import("@/pages/network").then((module) => ({
     default: module.OutboundsPage,
@@ -83,9 +75,9 @@ const AdminPage = lazy(() =>
 
 const meta: Record<RouteKey, [string, string]> = {
   operations: ["Operations", ""],
-  "subscription-policies": ["Subscription policies", ""],
+  "subscription-policies": ["Settings", ""],
   services: ["Services and plans", ""],
-  profiles: ["Config profiles", ""],
+  profiles: ["Settings", ""],
   dashboard: ["Dashboard", "Traffic and server status"],
   imports: ["Import data", "Review and migrate panel backups"],
   clients: ["Clients", "Credentials, quotas, expiry and subscription access"],
@@ -96,6 +88,7 @@ const meta: Record<RouteKey, [string, string]> = {
   xray: ["Cores", "Service health and configuration"],
   security: ["Security", "Administrator 2FA and account protection"],
   api: ["API", "REST endpoints and automation reference"],
+  updates: ["Settings", ""],
   settings: ["Settings", "Panel defaults and server information"],
   accounts: ["Accounts", "Panel operators, roles and account security"],
 };
@@ -105,6 +98,8 @@ const routes: Record<string, RouteKey> = {
   "/dashboard": "dashboard",
   "/clients": "clients",
   "/subscription-policies": "subscription-policies",
+  "/settings/subscription-policies": "subscription-policies",
+  "/settings/profiles": "profiles",
   "/customers": "clients",
   "/services": "services",
   "/profiles": "profiles",
@@ -120,6 +115,7 @@ const routes: Record<string, RouteKey> = {
   "/security": "security",
   "/api-docs": "api",
   "/settings": "settings",
+  "/settings/system": "updates",
   "/admin": "accounts",
   "/accounts": "accounts",
 };
@@ -127,9 +123,9 @@ const paths: Record<RouteKey, string> = {
   operations: "/operations",
   dashboard: "/dashboard",
   clients: "/clients",
-  "subscription-policies": "/subscription-policies",
+  "subscription-policies": "/settings/subscription-policies",
   services: "/services",
-  profiles: "/profiles",
+  profiles: "/settings/profiles",
   imports: "/imports",
   inbounds: "/inbounds",
   outbounds: "/outbounds",
@@ -138,6 +134,7 @@ const paths: Record<RouteKey, string> = {
   xray: "/xray",
   security: "/security",
   api: "/api-docs",
+  updates: "/settings/system",
   settings: "/settings",
   accounts: "/accounts",
 };
@@ -233,18 +230,24 @@ function PanelApp() {
         <div role="status">{t("Access is not assigned to this account.")}</div>
       );
     switch (effectiveRoute) {
+      case "updates":
+        return <SettingsPage initialTab="system" />;
       case "operations":
         return user?.is_superuser ? <OperationsPage /> : <SettingsPage />;
       case "subscription-policies":
         return user?.is_superuser ? (
-          <SubscriptionPoliciesPage />
+          <SettingsPage initialTab="subscription-policies" />
         ) : (
           <SettingsPage />
         );
       case "services":
         return <ServicesPage />;
       case "profiles":
-        return user?.is_superuser ? <ProfilesPage /> : <SettingsPage />;
+        return user?.is_superuser ? (
+          <SettingsPage initialTab="profiles" />
+        ) : (
+          <SettingsPage />
+        );
       case "dashboard":
         return <Dashboard />;
       case "outbounds":
