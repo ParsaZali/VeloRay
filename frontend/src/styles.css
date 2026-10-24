@@ -1601,3 +1601,72 @@ nav [aria-current="page"] .lucide {
     border-top: 1px solid var(--border);
   }
 }
+
+/* Shared controls remain readable inside portaled dialogs. */
+.input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.label > .date-control {
+  margin-top: 0.45rem;
+}
+.modal-panel {
+  overscroll-behavior: contain;
+}
+.modal-panel h2,
+.modal-panel h3 {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.modal-panel textarea.input {
+  min-height: 150px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.modal-panel label {
+  overflow-wrap: anywhere;
+}
+.panel-notice {
+  position: fixed;
+  z-index: 1400;
+  top: 80px;
+  inset-inline-end: 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 14px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--fg);
+  box-shadow: 0 10px 40px #0003;
+  font-size: 13px;
+}
+.panel-notice > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.panel-notice p {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.panel-notice button {
+  padding: 2px;
+  color: var(--muted);
+}
+.notice-success > svg {
+  color: var(--brand);
+}
+.notice-error > svg {
+  color: #ef4444;
+}
+.notice-info > svg {
+  color: var(--muted-strong);
+}
+
+.label > .backup-file-field {
+  margin-top: 0.45rem;
+}

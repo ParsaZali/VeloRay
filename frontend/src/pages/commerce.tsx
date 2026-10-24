@@ -363,7 +363,7 @@ export function CommerceWorkspace() {
             {t("Sales & billing", "فروش و حسابداری")}
           </h2>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-end">
           {(admin || can(user, "resellers.read")) && (
             <Field label={t("Seller", "فروشنده")}>
               <Select

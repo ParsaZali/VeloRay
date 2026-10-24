@@ -1,3 +1,7 @@
+import { lazy, Suspense } from "react";
+import { notify } from "@/lib/notifications";
+import { PanelUpdate } from "@/components/panel-update";
+import { PanelEndpoint } from "@/components/panel-endpoint";
 import { SubscriptionEndpoint } from "@/components/subscription-endpoint";
 import { SMTPSettings } from "@/components/smtp-settings";
 import { DatePreferences } from "@/components/date-preferences";
@@ -28,6 +32,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
 import { FaIcon } from "@/components/ui/fa-icon";
 
+const ProfilesPage = lazy(() =>
+  import("@/pages/profiles").then((m) => ({ default: m.ProfilesPage })),
+);
+const SubscriptionPoliciesPage = lazy(() =>
+  import("@/pages/subscription-policies").then((m) => ({
+    default: m.SubscriptionPoliciesPage,
+  })),
+);
+
 const fmt = (b: number) => {
   if (!b) return t("0 B");
   const u = ["B", t("KB"), t("MB"), t("GB"), t("TB")];
@@ -55,13 +68,6 @@ type Health = {
   database?: string;
   uptime_seconds?: number;
   started_at?: string;
-};
-type UpdateInfo = {
-  repository: string;
-  tracking_branch: string;
-  installed_commit: string;
-  auto_update_enabled: boolean;
-  verification: string;
 };
 const defaults: AppSettings = {
   subscription_hosts: [],
@@ -129,6 +135,8 @@ const defaults: AppSettings = {
 
 type Tab =
   | "imports"
+  | "profiles"
+  | "subscription-policies"
   | "general"
   | "subscription"
   | "defaults"
@@ -141,12 +149,12 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
   const [h, setH] = useState<Health | null>(null),
     [cfg, setCfg] = useState<AppSettings>(defaults),
     [sys, setSys] = useState<SystemInfo | null>(null),
-    [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null),
     [canEdit, setCanEdit] = useState(false),
     [tab, setTab] = useState<Tab>(initialTab),
     [msg, setMsg] = useState(""),
     [busy, setBusy] = useState(false),
     [telegramToken, setTelegramToken] = useState(""),
+    [ownerIDs, setOwnerIDs] = useState(""),
     [clearTelegram, setClearTelegram] = useState(false),
     [smtpPassword, setSmtpPassword] = useState(""),
     [clearSMTP, setClearSMTP] = useState(false),
@@ -157,6 +165,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
       failed: number;
       delivered: number;
     } | null>(null);
+  useEffect(() => setTab(initialTab), [initialTab]);
   const session = useSession();
   const canReadSystem = Boolean(
     session?.is_superuser || session?.permissions?.includes("nodes.read"),
@@ -188,7 +197,10 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
         }),
       api<AppSettings>("/settings", { signal: controller.signal }).then(
         (value) => {
-          if (current()) setCfg({ ...defaults, ...value });
+          if (current()) {
+            setCfg({ ...defaults, ...value });
+            setOwnerIDs((value.telegram_owner_ids || []).join(", "));
+          }
         },
       ),
       canReadSystem
@@ -198,16 +210,6 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
             })
             .catch((error) => {
               if (current()) setSys(null);
-              throw error;
-            })
-        : Promise.resolve(null),
-      session?.is_superuser
-        ? api<UpdateInfo>("/updates/status", { signal: controller.signal })
-            .then((value) => {
-              if (current()) setUpdateInfo(value);
-            })
-            .catch((error) => {
-              if (current()) setUpdateInfo(null);
               throw error;
             })
         : Promise.resolve(null),
@@ -262,18 +264,19 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
     setMsg("");
     try {
       const result = await api<TelegramStatus>(`/telegram/${action}`, {
-        method: action === "status" ? t("GET") : t("POST"),
+        method: action === "status" ? "GET" : "POST",
       });
       setBotStatus(result);
-      setMsg(
+      notify(
         action === "status"
           ? t("Bot connection checked.")
           : action === "test"
             ? t("Test delivered to configured owners.")
             : t("Owner command menu registered."),
+        "success",
       );
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : t("Bot check failed"));
+      notify(e instanceof Error ? e.message : t("Bot check failed"), "error");
     } finally {
       setBusy(false);
     }
@@ -327,7 +330,18 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
     setBusy(true);
     setMsg("");
     try {
-      const payload: any = { ...cfg };
+      const ids = ownerIDs
+        .split(/[,،;\s]+/)
+        .map((id) => id.trim())
+        .filter(Boolean);
+      if (ids.some((id) => !/^[1-9][0-9]{0,18}$/.test(id)))
+        throw new Error(
+          t(
+            "Enter numeric Telegram user IDs separated by commas.",
+            "شناسه‌های عددی تلگرام را با ویرگول جدا کنید.",
+          ),
+        );
+      const payload: any = { ...cfg, telegram_owner_ids: [...new Set(ids)] };
       delete payload.telegram_configured;
       delete payload.webhook_configured;
       delete payload.smtp_configured;
@@ -344,13 +358,14 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
         body: JSON.stringify(payload),
       });
       setCfg({ ...defaults, ...next });
+      setOwnerIDs((next.telegram_owner_ids || []).join(", "));
       setTelegramToken("");
       setClearTelegram(false);
       setWebhookSecret("");
       setSmtpPassword("");
       setClearSMTP(false);
       setClearWebhook(false);
-      setMsg(t("Settings saved."));
+      notify(t("Settings saved."), "success");
     } catch (e: any) {
       setMsg(e.message);
     } finally {
@@ -362,6 +377,12 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
   const nav: [Tab, string, string][] = [
     ["general", t("General"), "gear"],
     ["subscription", t("Subscription"), "rss"],
+    ...(session?.is_superuser
+      ? ([
+          ["subscription-policies", t("Subscription policies"), "link"],
+          ["profiles", t("Config profiles"), "file-code"],
+        ] as [Tab, string, string][])
+      : []),
     ["defaults", t("Client defaults"), "sliders"],
     ["security", t("Security & API"), "shield-halved"],
     ["telegram", t("Telegram"), "paper-plane"],
@@ -462,10 +483,19 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
             ))}
           </div>
         </nav>
-        {tab === "imports" ? (
+        {tab === "profiles" && session?.is_superuser ? (
+          <Suspense fallback={<p role="status">{t("Loading…")}</p>}>
+            <ProfilesPage />
+          </Suspense>
+        ) : tab === "subscription-policies" && session?.is_superuser ? (
+          <Suspense fallback={<p role="status">{t("Loading…")}</p>}>
+            <SubscriptionPoliciesPage />
+          </Suspense>
+        ) : tab === "imports" ? (
           <ImportsPage embedded />
         ) : (
           <div className="settings-content min-w-0 space-y-4">
+            {tab === "general" && canEdit && !loading && <PanelEndpoint />}
             <SubscriptionEndpoint
               enabled={tab === "subscription" && canEdit && !loading}
             />
@@ -939,16 +969,9 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                       <Field label={t("Owner IDs")} className="sm:col-span-2">
                         <Input
                           className="input"
-                          value={cfg.telegram_owner_ids.join(", ")}
-                          onChange={(e) =>
-                            set(
-                              "telegram_owner_ids",
-                              e.target.value
-                                .split(",")
-                                .map((x) => x.trim())
-                                .filter(Boolean),
-                            )
-                          }
+                          value={ownerIDs}
+                          onChange={(e) => setOwnerIDs(e.target.value)}
+                          dir="ltr"
                           placeholder="123456789, 987654321"
                         />
                       </Field>
@@ -1199,104 +1222,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                 {tab === "system" && (
                   <div className="space-y-4">
                     <DatePreferences />
-                    {session?.is_superuser && (
-                      <Card>
-                        <CardHeader>
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <CardTitle>
-                                {t("Verified GitHub auto-update")}
-                              </CardTitle>
-                              <p className="mt-1 text-[12px] text-[var(--muted)]">
-                                {t(
-                                  "Daily commit checks, CI verification, restricted pre-update backup and application rollback.",
-                                )}
-                              </p>
-                            </div>
-                            <span
-                              className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${updateInfo?.auto_update_enabled ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300" : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--muted-strong)]"}`}
-                            >
-                              {updateInfo?.auto_update_enabled
-                                ? t("Automatic updates enabled")
-                                : t("Automatic updates disabled")}
-                            </span>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div className="grid gap-3 md:grid-cols-3">
-                            <Read
-                              label={t("Tracked repository")}
-                              value={
-                                updateInfo?.repository || "ParsaZali/VeloRay"
-                              }
-                            />
-                            <Read
-                              label={t("Tracked branch")}
-                              value={updateInfo?.tracking_branch || "main"}
-                            />
-                            <Read
-                              label={t("Installed GitHub commit")}
-                              value={
-                                updateInfo?.installed_commit
-                                  ? updateInfo.installed_commit.slice(0, 12)
-                                  : t("Not recorded yet")
-                              }
-                            />
-                          </div>
-                          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                            <p className="mb-3 text-[12px] font-semibold">
-                              {t(
-                                "Run once on the server to activate automatic updates:",
-                              )}
-                            </p>
-                            <code
-                              className="block select-all overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-[12px] text-[var(--fg)]"
-                              dir="ltr"
-                            >
-                              sudo veloray auto-update enable
-                            </code>
-                            <p className="mt-3 text-[12px] text-[var(--muted)]">
-                              {t(
-                                "The panel does not execute root commands from the browser. Once enabled, the Linux systemd timer checks GitHub every day. Updates are installed only after that exact commit passes CI.",
-                              )}
-                            </p>
-                          </div>
-                          <div className="grid gap-2 sm:grid-cols-3">
-                            {[
-                              "sudo veloray auto-update status",
-                              "sudo veloray auto-update check",
-                              "sudo veloray auto-update disable",
-                            ].map((cmd) => (
-                              <code
-                                key={cmd}
-                                dir="ltr"
-                                className="overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-[11px] text-[var(--muted-strong)]"
-                              >
-                                {cmd}
-                              </code>
-                            ))}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-3">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => void load()}
-                              disabled={loading}
-                            >
-                              {t("Refresh update status")}
-                            </Button>
-                            <a
-                              className="text-[12px] font-medium text-[var(--brand)] underline underline-offset-4"
-                              href="https://github.com/ParsaZali/VeloRay"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              {t("View source on GitHub")}
-                            </a>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
+                    {session?.is_superuser && <PanelUpdate />}
                     <Card>
                       <CardHeader>
                         <div>
@@ -1307,11 +1233,11 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                         <Read
                           label={t("CPU")}
                           value={
-                            sys
+                            Number.isFinite(sys?.cpu_percent)
                               ? tx(
                                   "{0}% · {1} cores",
-                                  sys.cpu_percent.toFixed(1),
-                                  sys.cpu_count,
+                                  sys!.cpu_percent.toFixed(1),
+                                  sys!.cpu_count ?? "—",
                                 )
                               : "—"
                           }
@@ -1319,16 +1245,16 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                         <Read
                           label={t("Memory")}
                           value={
-                            sys
-                              ? `${fmt(sys.memory_used_bytes)} / ${fmt(sys.memory_total_bytes)} (${sys.memory_percent.toFixed(1)}%)`
+                            Number.isFinite(sys?.memory_percent)
+                              ? `${fmt(sys!.memory_used_bytes)} / ${fmt(sys!.memory_total_bytes)} (${sys!.memory_percent.toFixed(1)}%)`
                               : "—"
                           }
                         />
                         <Read
                           label={t("Swap")}
                           value={
-                            sys
-                              ? `${fmt(sys.swap_used_bytes)} / ${fmt(sys.swap_total_bytes)} (${sys.swap_percent.toFixed(1)}%)`
+                            Number.isFinite(sys?.swap_percent)
+                              ? `${fmt(sys!.swap_used_bytes)} / ${fmt(sys!.swap_total_bytes)} (${sys!.swap_percent.toFixed(1)}%)`
                               : "—"
                           }
                         />
@@ -1348,7 +1274,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                         <Read
                           label={t("Load average")}
                           value={
-                            sys
+                            sys?.load_average?.length
                               ? sys.load_average
                                   .map((x) => x.toFixed(2))
                                   .join(" · ")

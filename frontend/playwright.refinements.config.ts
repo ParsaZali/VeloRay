@@ -7,6 +7,7 @@ export default defineConfig({
     "passkeys-workflow.spec.ts",
     "geo-updates-workflow.spec.ts",
     "reseller-workspace.spec.ts",
+    "panel-experience.spec.ts",
   ],
   workers: 1,
   retries: 0,

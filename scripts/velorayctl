@@ -137,6 +137,7 @@ case "$command" in
  if subscription_wanted;then subscription_units+=("$SUBSCRIPTIONS");fi
  vr_step "${command^} services" 'مدیریت سرویس‌های پنل و Xray'
  if [[ -f /etc/systemd/system/$ENDPOINT_TIMER ]];then vr_run systemctl stop "$ENDPOINT_TIMER" veloray-subscription-endpoint.service;fi
+ if [[ -f /etc/systemd/system/veloray-host-control.timer ]];then vr_run systemctl stop veloray-host-control.timer;fi
  if [[ "$command" == stop ]];then vr_run systemctl stop "$WEB" "$AGENT" xray.service sing-box.service "${subscription_units[@]}";else
   vr_ports_check
   vr_run systemctl reset-failed xray.service
@@ -144,6 +145,7 @@ case "$command" in
   vr_wait http://127.0.0.1:8610/api/health
   vr_wait http://127.0.0.1:9191/health "$VELORAY_LOCAL_NODE_TOKEN"
   if [[ -f /etc/systemd/system/$ENDPOINT_TIMER ]];then vr_run systemctl start "$ENDPOINT_TIMER";fi
+  if [[ -f /etc/systemd/system/veloray-host-control.timer ]];then vr_run systemctl start veloray-host-control.timer;fi
   doctor
  fi
  summary;;
@@ -294,7 +296,7 @@ TIMER
    chmod 0600 "$recovery_backup"
    vr_say "Recovery backup: $recovery_backup" "بکاپ بازیابی: $recovery_backup"
   fi
-  removal_units=(veloray-subscription-endpoint.timer veloray-reconcile.timer veloray-backup.timer veloray-auto-update.timer veloray-subscription-endpoint.service veloray-reconcile.service veloray-backup.service veloray-auto-update.service veloray-web.service veloray-agent.service veloray-subscriptions.service xray.service sing-box.service)
+  removal_units=(veloray-host-control.timer veloray-host-control.service veloray-subscription-endpoint.timer veloray-reconcile.timer veloray-backup.timer veloray-auto-update.timer veloray-subscription-endpoint.service veloray-reconcile.service veloray-backup.service veloray-auto-update.service veloray-web.service veloray-agent.service veloray-subscriptions.service xray.service sing-box.service)
   for unit in "${removal_units[@]}";do
    systemctl stop "$unit" 2>/dev/null||true
    state="$(systemctl is-active "$unit" 2>/dev/null)"||true
@@ -311,7 +313,7 @@ TIMER
    rm -rf -- /etc/veloray /etc/veloray-node /var/lib/veloray-agent /var/lib/veloray-cores /usr/local/etc/xray /usr/local/etc/sing-box
    find /var/lib/veloray -mindepth 1 -maxdepth 1 ! -name '*backup*' -exec rm -rf -- {} +
   fi
-  rm -f /etc/systemd/system/veloray-subscription-endpoint.{service,timer} /etc/systemd/system/{veloray-web,veloray-agent,veloray-subscriptions,veloray-reconcile,xray,sing-box}.service /etc/systemd/system/veloray-reconcile.timer /etc/systemd/system/veloray-backup.{service,timer} /etc/systemd/system/veloray-auto-update.{service,timer}
+  rm -f /etc/systemd/system/veloray-host-control.{service,timer} /etc/systemd/system/veloray-subscription-endpoint.{service,timer} /etc/systemd/system/{veloray-web,veloray-agent,veloray-subscriptions,veloray-reconcile,xray,sing-box}.service /etc/systemd/system/veloray-reconcile.timer /etc/systemd/system/veloray-backup.{service,timer} /etc/systemd/system/veloray-auto-update.{service,timer}
   rm -f /etc/nginx/sites-enabled/veloray /etc/nginx/sites-available/veloray /etc/letsencrypt/renewal-hooks/deploy/veloray-nginx
   systemctl daemon-reload
   if vr_run nginx -t;then vr_run systemctl reload nginx||true;fi

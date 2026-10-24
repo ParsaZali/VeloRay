@@ -10,7 +10,6 @@ import {
   RefreshCw,
   Rocket,
   Server,
-  ShieldCheck,
   Trash2,
   X,
 } from "lucide-react";
@@ -269,7 +268,7 @@ export function NodesPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("Nodes")}
-        description={t("Manage the local server and your remote nodes.")}
+        description=""
         actions={
           <>
             <NodeEnrollment />
@@ -307,14 +306,10 @@ export function NodesPage() {
           <div>
             <CardTitle>{t("Fleet")}</CardTitle>
           </div>
-          <Badge tone="green">
-            <ShieldCheck className="h-3 w-3" />
-            {t("Agent auth")}
-          </Badge>
         </CardHeader>
         <CardContent className="p-0">
           <div className="hidden md:block table-wrap">
-            <table className="data-table min-w-[900px]">
+            <table className="data-table min-w-[740px]">
               <thead>
                 <tr>
                   <th>{t("Node")}</th>
@@ -342,9 +337,6 @@ export function NodesPage() {
                               <Badge tone="blue">{t("Panel server")}</Badge>
                             )}
                           </div>
-                          <span className="block max-w-52 truncate text-[9px] text-[var(--muted)]">
-                            {n.agent_url}
-                          </span>
                         </div>
                       </div>
                     </td>
@@ -365,12 +357,11 @@ export function NodesPage() {
                       >
                         {n.status}
                       </Badge>
-                      <div
-                        className="mt-1 text-[11px] text-[var(--muted)]"
-                        title={n.last_deploy_error}
-                      >
-                        {t("Deploy:")} {n.deploy_state}
-                      </div>
+                      {n.last_deploy_error && (
+                        <p className="mt-1 max-w-52 break-words text-[11px] text-red-500">
+                          {n.last_deploy_error}
+                        </p>
+                      )}
                     </td>
                     <td>
                       <span className="truncate-cell max-w-40">

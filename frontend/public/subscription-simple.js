@@ -1,19 +1,11 @@
 (() => {
   const root = document.documentElement;
-  const select = document.getElementById("appearance");
+  const choices = [...document.querySelectorAll("[data-theme-choice]")];
   let theme = root.dataset.theme || "system";
-  try {
-    const saved = localStorage.getItem("veloray.sub.theme.v1");
-    if (["system", "light", "dark"].includes(saved)) theme = saved;
-  } catch { /* Storage may be disabled in an embedded browser. */ }
-  root.dataset.theme = theme;
-  if (select) {
-    select.value = theme;
-    select.addEventListener("change", () => {
-      root.dataset.theme = select.value;
-      try { localStorage.setItem("veloray.sub.theme.v1", select.value); } catch {}
-    });
-  }
+  try { const saved = localStorage.getItem("veloray.sub.theme.v1"); if (["system", "light", "dark"].includes(saved)) theme = saved; } catch { /* Storage may be disabled. */ }
+  function applyTheme(value) { root.dataset.theme = value; choices.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.themeChoice === value))); }
+  applyTheme(theme);
+  choices.forEach(button => button.addEventListener("click", () => { applyTheme(button.dataset.themeChoice); try { localStorage.setItem("veloray.sub.theme.v1", button.dataset.themeChoice); } catch {} }));
   const tabs = [...document.querySelectorAll("[data-sub-tab]")];
   function selectTab(tab, focus = false) {
     tabs.forEach(item => { const active = item === tab; item.setAttribute("aria-selected", String(active)); item.tabIndex = active ? 0 : -1; });

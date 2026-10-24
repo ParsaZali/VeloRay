@@ -108,6 +108,30 @@ export function SubscriptionEndpoint({ enabled }: { enabled: boolean }) {
       if (!controller.signal.aborted) setBusy(false);
     }
   }
+  async function randomPort() {
+    setBusy(true);
+    setError("");
+    try {
+      const next = await api<{ port: number }>(
+        "/subscription-endpoint/random-port",
+      );
+      setPort(String(next.port));
+      setFeedback(
+        t(
+          "Random port selected. Apply to activate it.",
+          "پورت تصادفی انتخاب شد. برای فعال‌سازی، اعمال پورت را بزنید.",
+        ),
+      );
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : t("Could not select a port", "انتخاب پورت ناموفق بود"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
   async function copy() {
     if (!endpoint) return;
     try {
@@ -212,9 +236,10 @@ export function SubscriptionEndpoint({ enabled }: { enabled: boolean }) {
         <Button
           type="button"
           variant="outline"
-          aria-label={t("Refresh endpoint status", "تازه‌سازی وضعیت پورت")}
-          onClick={() => setRevision((value) => value + 1)}
-          disabled={busy}
+          aria-label={t("Choose random port", "انتخاب پورت تصادفی")}
+          title={t("Choose random port", "انتخاب پورت تصادفی")}
+          onClick={() => void randomPort()}
+          disabled={!endpoint?.managed || busy || pending}
         >
           <RefreshCw size={15} aria-hidden="true" />
         </Button>

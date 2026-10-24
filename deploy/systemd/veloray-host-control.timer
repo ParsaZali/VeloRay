@@ -1,0 +1,8 @@
+[Unit]
+Description=Check administrator server change requests
+[Timer]
+OnBootSec=20s
+OnUnitInactiveSec=10s
+AccuracySec=1s
+[Install]
+WantedBy=timers.target

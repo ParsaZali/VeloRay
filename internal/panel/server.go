@@ -21,6 +21,7 @@ var panelProcessStartedAt = time.Now()
 
 type Server struct {
 	project      projectCache
+	updates      updateCache
 	EmailSend    func(context.Context, string, []string, []byte) error
 	alertMu      sync.Mutex
 	alertCursor  string

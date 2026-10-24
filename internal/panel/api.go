@@ -159,7 +159,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 		return s.webhooksAPI(w, r, path, a)
 	}
 	if strings.HasPrefix(path, "updates/") {
-		return s.updatesAPI(r, path)
+		return s.updatesAPI(w, r, path, a)
 	}
 	parts := strings.Split(path, "/")
 	if path == "openapi" && r.Method == "GET" {
@@ -177,7 +177,10 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 	if path == "project" && r.Method == "GET" {
 		return s.projectInfo(ctx), 200, nil
 	}
-	if path == "subscription-endpoint" {
+	if path == "panel-endpoint" {
+		return s.panelEndpointAPI(w, r, a)
+	}
+	if path == "subscription-endpoint" || path == "subscription-endpoint/random-port" {
 		return s.subscriptionEndpointAPI(w, r, a)
 	}
 	if path == "settings" {

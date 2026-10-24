@@ -466,9 +466,11 @@ printf 'operator-owned template' >"$HOST_ROOT/etc/veloray/templates/legacy/moder
 test -f "$HOST_ROOT/etc/systemd/system/veloray-subscriptions.service"
 test -f "$HOST_ROOT/etc/systemd/system/veloray-subscription-endpoint.service"
 test -f "$HOST_ROOT/etc/systemd/system/veloray-subscription-endpoint.timer"
+test -f "$HOST_ROOT/etc/systemd/system/veloray-host-control.service"
+test -f "$HOST_ROOT/etc/systemd/system/veloray-host-control.timer"
 grep -Fxq 'enable veloray-subscriptions.service' "$HOST_ROOT/service-calls"
 grep -Fxq 'restart veloray-subscriptions.service' "$HOST_ROOT/service-calls"
-grep -Fxq 'enable --now veloray-subscription-endpoint.timer' "$HOST_ROOT/service-calls"
+grep -Fxq 'enable --now veloray-subscription-endpoint.timer veloray-host-control.timer' "$HOST_ROOT/service-calls"
 pass independent-subscriptions-and-port-manager-enabled
 : >"$HOST_ROOT/app-calls"
 host_install
@@ -520,9 +522,13 @@ printf 'REMOVE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall >"$TEST
 test ! -d "$HOST_ROOT/opt/veloray"
 test ! -f "$HOST_ROOT/etc/systemd/system/veloray-subscriptions.service"
 test ! -f "$HOST_ROOT/etc/systemd/system/veloray-subscription-endpoint.timer"
+test ! -f "$HOST_ROOT/etc/systemd/system/veloray-host-control.timer"
+test ! -f "$HOST_ROOT/etc/systemd/system/veloray-host-control.service"
 grep -Eq '^disable --now .*veloray-subscription-endpoint.timer' "$HOST_ROOT/service-calls"
 grep -Eq '^disable --now .*veloray-auto-update.timer' "$HOST_ROOT/service-calls"
 grep -Eq '^disable --now .*veloray-subscriptions.service' "$HOST_ROOT/service-calls"
+grep -Eq '^disable --now .*veloray-host-control.timer' "$HOST_ROOT/service-calls"
+grep -Eq '^disable --now .*veloray-host-control.service' "$HOST_ROOT/service-calls"
 pass uninstall-stops-subscriptions-and-updater
 test -f "$HOST_ROOT/database";test -f "$HOST_ROOT/var/lib/veloray-agent/state.json"
 [[ "$(sha256sum "$HOST_ROOT/etc/veloray/veloray.env")" == "$original_env" ]]

@@ -42,6 +42,11 @@ printf '%s\n' 0000000000000000000000000000000000000000 >"$installed"
 output="$(vr_auto_update_check check ParsaZali/VeloRay "$installed")"
 expect 'Verified GitHub update available' "$output"
 
+if VELORAY_EXPECTED_UPDATE_COMMIT=2222222222222222222222222222222222222222 vr_auto_update_check check ParsaZali/VeloRay "$installed" >"$TEST_HOME/pinned-output" 2>&1;then
+ echo 'A stale UI update target was accepted.' >&2;exit 1
+fi
+expect 'branch head changed' "$(cat "$TEST_HOME/pinned-output")"
+
 mode=failure
 output="$(vr_auto_update_check check ParsaZali/VeloRay "$installed")"
 expect 'skipping unsafe update' "$output"

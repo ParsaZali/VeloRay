@@ -3,10 +3,12 @@ package panel
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/url"
@@ -71,6 +73,35 @@ func (s *Server) subscriptionEndpointAPI(w http.ResponseWriter, r *http.Request,
 		return nil, 0, fail(403, "administrator access required")
 	}
 	ctx := r.Context()
+	if r.Method == "GET" && strings.HasSuffix(strings.TrimRight(r.URL.Path, "/"), "/random-port") {
+		cfg, err := settings(ctx, s.Store.Pool)
+		if err != nil {
+			return nil, 0, err
+		}
+		endpoint := obj(cfg, "_subscription_endpoint")
+		for attempt := 0; attempt < 100; attempt++ {
+			draw, err := rand.Int(rand.Reader, big.NewInt(65536-49152))
+			if err != nil {
+				return nil, 0, err
+			}
+			port := 49152 + draw.Int64()
+			if validateSubscriptionPort(s.Config, port) != nil || port == num(endpoint, "port") || port == num(endpoint, "applied_port") {
+				continue
+			}
+			if err = subscriptionPortAvailable(ctx, s.Store.Pool, port); err != nil {
+				continue
+			}
+			if s.Config.SubscriptionDriver == "native" {
+				listener, err := net.Listen("tcp", net.JoinHostPort("0.0.0.0", strconv.FormatInt(port, 10)))
+				if err != nil {
+					continue
+				}
+				listener.Close()
+			}
+			return Data{"port": port}, 200, nil
+		}
+		return nil, 0, fail(409, "No free port could be selected. Try again.")
+	}
 	if r.Method == "GET" {
 		cfg, err := settings(ctx, s.Store.Pool)
 		return s.endpointView(cfg), 200, err

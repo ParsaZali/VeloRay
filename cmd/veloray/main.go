@@ -171,12 +171,14 @@ Run veloray serve explicitly to start the application in the foreground.`)
 		return e
 	}
 	defer store.Pool.Close()
-	if command != "sync-subscription-endpoint" {
+	if command != "sync-subscription-endpoint" && command != "sync-host-control" {
 		if e = store.Migrate(ctx); e != nil {
 			return e
 		}
 	}
 	switch command {
+	case "sync-host-control":
+		return (&panel.Server{Config: c, Store: store}).RunNativeHostJob(ctx)
 	case "render-nginx", "sync-subscription-endpoint":
 		return (&panel.Server{Config: c, Store: store}).SyncNativeSubscriptionEndpoint(ctx, command == "render-nginx")
 	case "host-audit":
