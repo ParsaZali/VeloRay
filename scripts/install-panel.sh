@@ -178,8 +178,8 @@ VELORAY_AGENT_STATE=/var/lib/veloray-agent/state.json
 VELORAY_CORE_DIRECTORY=/var/lib/veloray-cores
 ENV
 chmod 0600 /etc/veloray-node/agent.env
-install -m 0644 deploy/systemd/{veloray-web,veloray-agent,veloray-subscriptions,veloray-subscription-endpoint,xray}.service /etc/systemd/system/
-install -m 0644 deploy/systemd/veloray-subscription-endpoint.timer /etc/systemd/system/
+install -m 0644 deploy/systemd/{veloray-web,veloray-agent,veloray-subscriptions,veloray-subscription-endpoint,veloray-host-control,xray}.service /etc/systemd/system/
+install -m 0644 deploy/systemd/veloray-subscription-endpoint.timer deploy/systemd/veloray-host-control.timer /etc/systemd/system/
 ln -sfn "$release" /opt/veloray/current
 systemctl disable --now veloray-reconcile.timer 2>/dev/null||true
 vr_step 'Start HTTPS and panel services' 'راه‌اندازی HTTPS و سرویس‌های پنل'
@@ -194,7 +194,7 @@ vr_wait http://127.0.0.1:8611/api/health
 vr_run veloray render-nginx
 vr_run systemctl restart veloray-web.service
 vr_wait http://127.0.0.1:8610/api/health
-vr_run systemctl enable --now veloray-subscription-endpoint.timer
+vr_run systemctl enable --now veloray-subscription-endpoint.timer veloray-host-control.timer
 vr_step 'Check VPN ports and resolve conflicts' 'بررسی پورت‌های VPN و رفع تداخل'
 if ! vr_resolve_ports;then
  # Stop an already failing Xray loop; never stop the process occupying its port.

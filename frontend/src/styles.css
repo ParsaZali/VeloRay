@@ -1666,3 +1666,7 @@ nav [aria-current="page"] .lucide {
 .notice-info > svg {
   color: var(--muted-strong);
 }
+
+.label > .backup-file-field {
+  margin-top: 0.45rem;
+}

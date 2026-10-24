@@ -260,7 +260,7 @@ func integration(t *testing.T) (*Server, context.Context) {
 	if e = store.Migrate(ctx); e != nil {
 		t.Fatal(e)
 	}
-	_, e = store.Pool.Exec(ctx, `TRUNCATE vr_monitor_samples,vr_monitors,vr_node_billing,vr_node_billing_periods,vr_alert_states, vr_oidc_states,vr_oidc_challenges,vr_webhook_endpoints,vr_subscription_policies,vr_subscription_requests,vr_profiles,vr_snippets,vr_config_revisions,vr_services,vr_accounts,vr_nodes,vr_inbounds,vr_clients,vr_users,vr_api_keys,vr_audit,vr_sessions,vr_stats_cursors,vr_traffic_windows,vr_owner_traffic_windows,vr_jobs,vr_operations,vr_rate_limits,vr_passkey_challenges,vr_telegram_inbox,vr_telegram_updates,vr_telegram_actions,vr_webhook_deliveries RESTART IDENTITY CASCADE`)
+	_, e = store.Pool.Exec(ctx, `TRUNCATE vr_host_jobs,vr_monitor_samples,vr_monitors,vr_node_billing,vr_node_billing_periods,vr_alert_states, vr_oidc_states,vr_oidc_challenges,vr_webhook_endpoints,vr_subscription_policies,vr_subscription_requests,vr_profiles,vr_snippets,vr_config_revisions,vr_services,vr_accounts,vr_nodes,vr_inbounds,vr_clients,vr_users,vr_api_keys,vr_audit,vr_sessions,vr_stats_cursors,vr_traffic_windows,vr_owner_traffic_windows,vr_jobs,vr_operations,vr_rate_limits,vr_passkey_challenges,vr_telegram_inbox,vr_telegram_updates,vr_telegram_actions,vr_webhook_deliveries RESTART IDENTITY CASCADE`)
 	if e != nil {
 		t.Fatal(e)
 	}

@@ -10,7 +10,7 @@ func TestResellerCannotReadOrChangeInfrastructure(t *testing.T) {
 	s := &Server{}
 	user := Data{"role": "reseller", "permissions": []any{"inbounds.read", "nodes.write", "routing_rules.read"}}
 	actor := Actor{User: user, Scope: "admin"}
-	for _, path := range []string{"inbounds", "inbounds/1", "inbounds/1/reset", "nodes", "nodes/1/geo-assets", "outbounds", "routing_rules", "system-info", "outbound-traffic", "xray", "operations/nodes/1/diagnostics", "subscription-policies", "openapi"} {
+	for _, path := range []string{"inbounds", "inbounds/1", "inbounds/1/reset", "nodes", "nodes/1/geo-assets", "outbounds", "routing_rules", "system-info", "outbound-traffic", "xray", "operations/nodes/1/diagnostics", "subscription-policies", "openapi", "updates/status", "updates/check", "updates/install", "panel-endpoint", "subscription-endpoint/random-port"} {
 		for _, method := range []string{"GET", "POST", "PATCH", "DELETE", "HEAD"} {
 			if err := s.roleAuthorize(actor, method, path); err == nil {
 				t.Errorf("reseller may %s %s", method, path)

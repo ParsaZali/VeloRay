@@ -104,6 +104,10 @@ vr_auto_update_check() (
  vr_auto_download "https://api.github.com/repos/$repo/commits/main" "$tmp/commit.json" || { echo 'Could not reach GitHub; current version remains active.' >&2;return 1; }
  commit="$(jq -er '.sha' "$tmp/commit.json")" || return 1
  [[ "$commit" =~ ^[a-f0-9]{40}$ ]] || { echo 'GitHub supplied an invalid commit ID.' >&2;return 1; }
+ if [[ -n "${VELORAY_EXPECTED_UPDATE_COMMIT:-}" && "$commit" != "$VELORAY_EXPECTED_UPDATE_COMMIT" ]];then
+  echo 'The verified branch head changed. Check for updates again from the panel.' >&2
+  return 1
+ fi
  current=unknown
  if [[ -f "$installed" ]];then current="$(cat "$installed")";fi
  if [[ "$commit" == "$current" ]];then echo "Already up to date: $commit";return 0;fi

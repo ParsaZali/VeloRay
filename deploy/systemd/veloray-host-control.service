@@ -1,0 +1,16 @@
+[Unit]
+Description=Apply verified VeloRay server changes
+Wants=network-online.target
+After=network-online.target postgresql.service
+ConditionPathExists=/etc/veloray/veloray.env
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=/etc/veloray/veloray.env
+ExecStart=/usr/local/bin/veloray sync-host-control
+TimeoutStartSec=90min
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

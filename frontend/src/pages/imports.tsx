@@ -210,10 +210,7 @@ export function ImportsPage({ embedded = false }: { embedded?: boolean }) {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <form
-                onSubmit={inspect}
-                className="grid gap-4 p-4 sm:grid-cols-2"
-              >
+              <form onSubmit={inspect} className="grid gap-4 sm:grid-cols-2">
                 <label className="label">
                   {t("Target node", "نود مقصد")}
                   <Select
@@ -240,7 +237,7 @@ export function ImportsPage({ embedded = false }: { embedded?: boolean }) {
                     <span className="backup-file-button">
                       {t("Choose file", "انتخاب فایل")}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-center">
+                    <span className="min-w-0 flex-1 truncate px-3 text-start">
                       {file?.name ||
                         t("No file selected", "فایلی انتخاب نشده است")}
                     </span>
