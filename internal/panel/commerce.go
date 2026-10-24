@@ -26,7 +26,7 @@ func money(d Data, key string, minimum int64) (int64, error) {
 	}
 	return n, nil
 }
-func validCurrency(s string) bool { return oneOf(s, "IRR", "IRT", "USD", "EUR", "XTR") }
+func validCurrency(s string) bool { return oneOf(s, "IRR", "IRT", "USD", "EUR", "XTR", "USDT") }
 func commerceAdmin(a Actor) bool  { return flag(a.User, "is_superuser") && a.Scope == "admin" }
 func (s *Server) commerceOwner(r *http.Request, a Actor) (int64, error) {
 	id := num(a.User, "id")
@@ -49,7 +49,7 @@ func (s *Server) commerceOwner(r *http.Request, a Actor) (int64, error) {
 	return id, nil
 }
 func storeDefaults() Data {
-	return Data{"enabled": false, "name": "VeloRay", "support_url": "", "logo_url": "", "description": "", "subscription_branding": false, "subscription_origin": "", "subscription_verified": false, "telegram_sales": false, "terms_url": ""}
+	return Data{"enabled": false, "name": "VeloRay", "support_url": "", "logo_url": "", "description": "", "subscription_branding": false, "subscription_origin": "", "subscription_verified": false, "telegram_sales": false, "terms_url": "", "bot": Data{}}
 }
 func getStore(ctx context.Context, q Query, owner int64) (Data, error) {
 	d := storeDefaults()
@@ -90,7 +90,7 @@ func offer(ctx context.Context, q Query, id int64) (Data, error) {
 	return decode(raw)
 }
 func offers(ctx context.Context, q Query, owner int64, published bool) ([]Data, error) {
-	rows, err := q.Query(ctx, `SELECT data||jsonb_build_object('id',id,'owner_id',owner_id) FROM vr_offers WHERE owner_id=$1 ORDER BY id DESC LIMIT 500`, owner)
+	rows, err := q.Query(ctx, `SELECT data||jsonb_build_object('id',id,'owner_id',owner_id) FROM vr_offers WHERE owner_id=$1 ORDER BY COALESCE((data->>'sort_order')::int,0),id DESC LIMIT 500`, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -114,6 +114,9 @@ func offers(ctx context.Context, q Query, owner int64, published bool) ([]Data, 
 func (s *Server) validateOffer(ctx context.Context, q Query, d Data) error {
 	if e := require(d, "name", 96); e != nil {
 		return fail(400, e.Error())
+	}
+	if len(str(d, "category")) > 96 || !commerceURL(str(d, "image_url")) || len(str(d, "image_url")) > 2048 || num(d, "sort_order") < 0 || num(d, "sort_order") > 10000 {
+		return fail(400, "invalid offer category, image or order")
 	}
 	if len(str(d, "description")) > 1200 {
 		return fail(400, "description is too long")
@@ -271,6 +274,12 @@ func (s *Server) commerceAPI(w http.ResponseWriter, r *http.Request, path string
 	if part == "settings" {
 		return s.commerceSettings(w, r, a)
 	}
+	if part == "receipts" || strings.HasPrefix(part, "receipts/") {
+		return s.receiptsAPI(w, r, part, a, owner)
+	}
+	if part == "tickets" || strings.HasPrefix(part, "tickets/") {
+		return s.ticketsAPI(w, r, part, a, owner)
+	}
 	if part == "store/verify-domain" {
 		return s.verifyStoreDomain(w, r, a, owner)
 	}
@@ -298,7 +307,7 @@ func (s *Server) commerceAPI(w http.ResponseWriter, r *http.Request, path string
 		if e != nil {
 			return nil, 0, e
 		}
-		if e = allowed(input, "enabled name support_url logo_url description subscription_branding subscription_origin telegram_sales terms_url"); e != nil {
+		if e = allowed(input, "enabled name support_url logo_url description subscription_branding subscription_origin telegram_sales terms_url bot"); e != nil {
 			return nil, 0, fail(400, e.Error())
 		}
 		if e = typed(input, storeDefaults()); e != nil {
@@ -332,6 +341,23 @@ func (s *Server) commerceAPI(w http.ResponseWriter, r *http.Request, path string
 			}
 			if flag(d, "telegram_sales") && (str(d, "support_url") == "" || str(d, "terms_url") == "" || !strings.HasPrefix(s.Config.PublicURL, "https://")) {
 				return nil, fail(400, "Telegram sales require HTTPS, a support URL and a terms URL")
+			}
+			if e = validateSalesConfig(d); e != nil {
+				return nil, e
+			}
+			if flag(salesConfig(d), "trial_enabled") {
+				trial := salesConfig(d)
+				svc, err := get(ctx, tx, "services", num(trial, "trial_service_id"))
+				if err != nil {
+					return nil, fail(400, "trial service does not exist")
+				}
+				u, err := seller(ctx, tx, owner)
+				if err != nil {
+					return nil, err
+				}
+				if !visibleService(Actor{User: u}, svc) {
+					return nil, fail(403, "trial service is not assigned to this seller")
+				}
 			}
 			if _, e = seller(ctx, tx, owner); e != nil {
 				return nil, e
@@ -469,8 +495,8 @@ func (s *Server) offersAPI(w http.ResponseWriter, r *http.Request, path string, 
 	if e != nil {
 		return nil, 0, e
 	}
-	defaults := Data{"name": "", "description": "", "enabled": false, "service_id": 0, "amount": 0, "currency": "IRT", "duration_days": 30, "traffic_bytes": int64(0), "cost_amount": int64(0)}
-	if e = allowed(input, "name description enabled service_id amount currency duration_days traffic_bytes cost_amount"); e != nil {
+	defaults := Data{"name": "", "description": "", "enabled": false, "service_id": 0, "amount": 0, "currency": "IRT", "duration_days": 30, "traffic_bytes": int64(0), "cost_amount": int64(0), "category": "", "image_url": "", "sort_order": 0}
+	if e = allowed(input, "name description enabled service_id amount currency duration_days traffic_bytes cost_amount category image_url sort_order"); e != nil {
 		return nil, 0, fail(400, e.Error())
 	}
 	if e = typed(input, defaults); e != nil {

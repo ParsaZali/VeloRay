@@ -37,7 +37,6 @@ type Server struct {
 	TelegramHTTP *http.Client
 	WebhookHTTP  *http.Client
 	ExternalHTTP *http.Client
-	PaymentHTTP  *http.Client
 	LookupTXT    func(context.Context, string) ([]string, error)
 	Logger       *slog.Logger
 }

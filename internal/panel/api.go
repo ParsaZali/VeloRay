@@ -253,6 +253,13 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 	if kind == "api_keys" && len(parts) > 2 && parts[2] == "reset" {
 		return s.resetAPIKey(w, r, id, a)
 	}
+	if kind == "clients" && len(parts) == 3 && parts[2] == "usage" {
+		if r.Method != "GET" {
+			return nil, 0, fail(405, "method not allowed")
+		}
+		out, e := s.clientUsage(ctx, id)
+		return out, 200, e
+	}
 	if kind == "clients" && len(parts) == 3 && parts[2] == "subscription-history" {
 		if r.Method != "GET" {
 			return nil, 0, fail(405, "method not allowed")

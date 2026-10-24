@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { lazy, Suspense, useEffect, useState, type FormEvent } from "react";
 import {
   Check,
   CheckCircle2,
@@ -34,6 +34,14 @@ import {
   openStarsInvoice,
 } from "@/lib/telegram-miniapp";
 
+const BuyerHub = lazy(() =>
+  import("@/components/buyer-hub").then((m) => ({ default: m.BuyerHub })),
+);
+const TransferPayment = lazy(() =>
+  import("@/components/transfer-payment").then((m) => ({
+    default: m.TransferPayment,
+  })),
+);
 export function StorefrontPage() {
   const { locale, setLocale } = useLocale(),
     { theme, setTheme } = useTheme();
@@ -51,6 +59,7 @@ export function StorefrontPage() {
   const [catalog, setCatalog] = useState<Catalog | null>(null),
     [selected, setSelected] = useState<Offer | null>(null),
     [kind, setKind] = useState("purchase"),
+    [category, setCategory] = useState(""),
     [name, setName] = useState(""),
     [subscription, setSubscription] = useState("");
   const [order, setOrder] = useState<Order | null>(null),
@@ -119,7 +128,9 @@ export function StorefrontPage() {
         setOrder(result);
         if (
           (result.state === "paid" ||
-            (result.state === "pending" && result.currency === "XTR")) &&
+            (result.state === "pending" &&
+              (result.currency === "XTR" ||
+                result.receipt?.state === "pending"))) &&
           !result.test_mode
         )
           timer = setTimeout(() => void refresh(), 5000);
@@ -134,7 +145,7 @@ export function StorefrontPage() {
     };
   }, [orderID, orderToken]);
   async function pay(id: string, token: string) {
-    const response = await api<{ url: string; gateway?: string }>(
+    const response = await api<{ url?: string; gateway?: string }>(
       `/shop/orders/${id}/pay`,
       {
         method: "POST",
@@ -142,6 +153,9 @@ export function StorefrontPage() {
         body: "{}",
       },
     );
+    if (response.gateway === "manual") return;
+    if (!response.url)
+      throw new Error(t("Payment link unavailable", "لینک پرداخت موجود نیست"));
     if (response.gateway === "telegram-stars" && telegramData) {
       await openStarsInvoice(response.url, () => {
         void api<Order>(`/shop/orders/${id}`, {
@@ -186,12 +200,6 @@ export function StorefrontPage() {
     setBusy(true);
     setError("");
     try {
-      if (order?.currency !== "XTR")
-        await api(`/shop/orders/${orderID}/verify`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${orderToken}` },
-          body: "{}",
-        });
       const result = await api<Order>(`/shop/orders/${orderID}`, {
         headers: { Authorization: `Bearer ${orderToken}` },
       });
@@ -362,34 +370,56 @@ export function StorefrontPage() {
                         )}
                       </p>
                     )}
-                    {order.state === "pending" && orderToken && (
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          disabled={busy}
-                          onClick={async () => {
-                            setBusy(true);
-                            setError("");
-                            try {
-                              await pay(orderID, orderToken);
-                            } catch (e) {
-                              setError(commerceError(e));
-                            } finally {
-                              setBusy(false);
+                    {order.state === "pending" &&
+                      orderToken &&
+                      order.currency !== "XTR" && (
+                        <Suspense
+                          fallback={<p role="status">{t("Loading…")}</p>}
+                        >
+                          <TransferPayment
+                            key={order.id}
+                            order={order}
+                            token={orderToken}
+                            onSubmitted={(proof) =>
+                              setOrder((current) =>
+                                current
+                                  ? { ...current, receipt: proof }
+                                  : current,
+                              )
                             }
-                          }}
-                        >
-                          {t("Continue payment", "ادامهٔ پرداخت")}
-                        </Button>
-                        <Button
-                          disabled={busy}
-                          variant="outline"
-                          onClick={() => void verify()}
-                        >
-                          <RefreshCw className="h-4 w-4" />
-                          {t("Check payment", "بررسی پرداخت")}
-                        </Button>
-                      </div>
-                    )}
+                          />
+                        </Suspense>
+                      )}
+                    {order.state === "pending" &&
+                      orderToken &&
+                      order.currency === "XTR" && (
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            disabled={busy}
+                            onClick={async () => {
+                              setBusy(true);
+                              setError("");
+                              try {
+                                await pay(orderID, orderToken);
+                              } catch (e) {
+                                setError(commerceError(e));
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                          >
+                            {t("Continue payment", "ادامهٔ پرداخت")}
+                          </Button>
+                          <Button
+                            disabled={busy}
+                            variant="outline"
+                            onClick={() => void verify()}
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                            {t("Check payment", "بررسی پرداخت")}
+                          </Button>
+                        </div>
+                      )}
                   </>
                 )}
                 <a
@@ -404,57 +434,135 @@ export function StorefrontPage() {
         ) : (
           catalog && (
             <>
+              {telegramData && (
+                <Suspense fallback={<p role="status">{t("Loading…")}</p>}>
+                  <BuyerHub
+                    store={store}
+                    initData={telegramData}
+                    catalog={catalog}
+                    onRenew={(service) => {
+                      setKind("renewal");
+                      setSubscription(service.subscription_url);
+                      document
+                        .getElementById("store-checkout")
+                        ?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                    }}
+                    onOrder={(o) => {
+                      rememberOrder(o);
+                      setPrivateToken(o.token || null);
+                      setOrderID(o.id);
+                      history.replaceState(
+                        {},
+                        "",
+                        `/shop?store=${store}&order=${o.id}`,
+                      );
+                    }}
+                  />
+                </Suspense>
+              )}
               <div className="max-w-2xl">
                 <h1 className="text-2xl font-semibold tracking-tight">
                   {t("Choose your subscription", "اشتراک خود را انتخاب کنید")}
                 </h1>
+                {catalog.bot?.welcome_image && (
+                  <img
+                    alt=""
+                    src={catalog.bot.welcome_image}
+                    className="mb-4 max-h-52 rounded-xl object-contain"
+                  />
+                )}
                 {catalog.description && (
                   <p className="mt-3 text-[14px] leading-7 text-[var(--muted)]">
                     {catalog.description}
                   </p>
                 )}
               </div>
+              {[
+                ...new Set(
+                  catalog.offers.map((o) => o.category).filter(Boolean),
+                ),
+              ].length > 0 && (
+                <nav
+                  aria-label={t("Categories", "دسته‌بندی‌ها")}
+                  className="flex flex-wrap gap-2"
+                >
+                  <Button
+                    variant={!category ? "default" : "outline"}
+                    onClick={() => setCategory("")}
+                  >
+                    {t("All", "همه")}
+                  </Button>
+                  {[
+                    ...new Set(
+                      catalog.offers.map((o) => o.category).filter(Boolean),
+                    ),
+                  ].map((c) => (
+                    <Button
+                      key={c}
+                      variant={category === c ? "default" : "outline"}
+                      onClick={() => setCategory(c || "")}
+                    >
+                      {c}
+                    </Button>
+                  ))}
+                </nav>
+              )}
               <div className="grid items-start gap-6 lg:grid-cols-[1fr_340px]">
                 <section
                   aria-label={t("Subscription plans", "بسته‌های اشتراک")}
                   className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1"
                 >
-                  {catalog.offers.map((o) => (
-                    <button
-                      key={o.id}
-                      type="button"
-                      aria-pressed={selected?.id === o.id}
-                      onClick={() => setSelected(o)}
-                      className={`rounded-xl border bg-[var(--card)] p-5 text-start transition-colors ${selected?.id === o.id ? "border-emerald-500 ring-1 ring-emerald-500/20" : "border-[var(--border)] hover:border-emerald-500/50"}`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <h2 className="font-semibold">{o.name}</h2>
-                        <span
-                          className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${selected?.id === o.id ? "border-emerald-500 bg-emerald-500 text-white" : "border-[var(--border)]"}`}
-                        >
-                          {selected?.id === o.id && (
-                            <Check className="h-3 w-3" />
-                          )}
-                        </span>
-                      </div>
-                      <div className="mt-4 flex flex-wrap items-baseline justify-between gap-3">
-                        <p className="text-xl font-semibold">
-                          {amountLabel(o.amount, o.currency)}
-                        </p>
-                        <p className="text-[12px] text-[var(--muted)]">
-                          {o.duration_days} {t("days", "روز")} ·{" "}
-                          {o.traffic_bytes
-                            ? `${(o.traffic_bytes / 1073741824).toLocaleString()} GiB`
-                            : t("Unlimited", "نامحدود")}
-                        </p>
-                      </div>
-                      {o.description && (
-                        <p className="mt-3 text-[12px] leading-6 text-[var(--muted)]">
-                          {o.description}
-                        </p>
-                      )}
-                    </button>
-                  ))}
+                  {catalog.offers
+                    .filter((o) => !category || o.category === category)
+                    .map((o) => (
+                      <button
+                        key={o.id}
+                        type="button"
+                        aria-pressed={selected?.id === o.id}
+                        onClick={() => setSelected(o)}
+                        className={`rounded-xl border bg-[var(--card)] p-5 text-start transition-colors ${selected?.id === o.id ? "border-emerald-500 ring-1 ring-emerald-500/20" : "border-[var(--border)] hover:border-emerald-500/50"}`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            {o.image_url && (
+                              <img
+                                alt=""
+                                loading="lazy"
+                                src={o.image_url}
+                                className="mb-3 h-28 w-full rounded-lg object-cover"
+                              />
+                            )}
+                            <h2 className="font-semibold">{o.name}</h2>
+                          </div>
+                          <span
+                            className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${selected?.id === o.id ? "border-emerald-500 bg-emerald-500 text-white" : "border-[var(--border)]"}`}
+                          >
+                            {selected?.id === o.id && (
+                              <Check className="h-3 w-3" />
+                            )}
+                          </span>
+                        </div>
+                        <div className="mt-4 flex flex-wrap items-baseline justify-between gap-3">
+                          <p className="text-xl font-semibold">
+                            {amountLabel(o.amount, o.currency)}
+                          </p>
+                          <p className="text-[12px] text-[var(--muted)]">
+                            {o.duration_days} {t("days", "روز")} ·{" "}
+                            {o.traffic_bytes
+                              ? `${(o.traffic_bytes / 1073741824).toLocaleString()} GiB`
+                              : t("Unlimited", "نامحدود")}
+                          </p>
+                        </div>
+                        {o.description && (
+                          <p className="mt-3 text-[12px] leading-6 text-[var(--muted)]">
+                            {o.description}
+                          </p>
+                        )}
+                      </button>
+                    ))}
                   {!catalog.offers.length && (
                     <p className="py-10 text-[var(--muted)]">
                       {t(
@@ -469,7 +577,11 @@ export function StorefrontPage() {
                     <h2 className="font-semibold">
                       {t("Checkout", "خرید اشتراک")}
                     </h2>
-                    <form onSubmit={checkout} className="space-y-4">
+                    <form
+                      id="store-checkout"
+                      onSubmit={checkout}
+                      className="space-y-4"
+                    >
                       <label className="label">
                         {t("Action", "عملیات")}
                         <Select

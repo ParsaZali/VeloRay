@@ -1,31 +1,43 @@
-# Telegram sales and Mini App
+# Sales bot, Mini App and owner management
 
-The customer bot shares the existing panel bot token but has separate customer routes and payment processing. Telegram users never receive a panel identity or staff permissions. The same immutable offers, inventory reservations and paid-order fulfillment serve web and Telegram purchases.
+The sales bot is **optional and off by default**. It uses the panel's existing Telegram token. Owner management remains available when a seller turns sales off. Customers never receive a panel identity, owner access or infrastructure permissions.
 
-## Setup
+## Set up
 
-1. Configure and test the bot in **Settings → Telegram**, then enable it. Keep its token dedicated to this panel's polling service; an existing webhook or another poller conflicts with it.
-2. Serve the public panel/store URL over trusted HTTPS. Configure the Mini App domain for your bot through BotFather if required by the Telegram client.
-3. In **Sales & billing → Storefront**, provide HTTPS purchase terms and support links and enable **Telegram store**.
-4. Publish an offer in **Telegram Stars (XTR)**, priced at 1–10,000 whole Stars. Price and cost entries retain their explicit currency; there is no automatic conversion to tomans or wallet currencies.
-5. Share the generated `t.me/BOT?start=shop_SELLER` link. A customer starts that private chat, opens the Mini App, accepts the terms and pays the Stars invoice.
+1. Connect and check the bot in **Settings → Telegram**. Owner IDs are administrator allowlists; do not add buyers there.
+2. Serve the panel and Mini App on a trusted HTTPS domain. Keep this token dedicated to VeloRay polling; another poller/webhook conflicts with it.
+3. Create a service with the inbounds to sell, then publish offers in **Services and plans → Sales & billing → Offers**. Set categories, display order and optional product images.
+4. In **Storefront**, enable the store and, separately, **Sales bot & Mini App**. Add purchase terms and support links. Share the generated `t.me/BOT?start=shop_SELLER` link.
+5. Configure **Payment methods**. Publish an XTR offer for Stars, an IRT/IRR offer for bank transfer, or a USDT offer for Tether. Prices are separate; no exchange rate is guessed.
 
-Digital purchases inside Telegram use Stars. The regular web store shows IRR/IRT offers for Zarinpal; matching-currency staff wallet purchases can also use USD/EUR/XTR. A Stars accounting balance is panel credit denominated in Stars, not an automated transfer of a bot's actual Stars balance. All online Stars payments reach the configured bot; seller settlement and cash-out remain operator responsibilities.
+The same private bot presents the catalog, invoice confirmation, payment choices, receipt submission, service usage, trial, tutorials and support. Customers can also use the Mini App. Commands include `/buy`, `/services`, `/orders`, `/account`, `/free`, `/tutorial`, `/support`, `/ticket MESSAGE`, `/terms` and `/cancel`.
 
-## Verification and delivery
+## Customization
 
-The server validates raw Mini App `initData` with Telegram's HMAC algorithm, a one-hour age bound, duplicate-field rejection and a positive user ID. Checkout also requires that customer to have started the selected store's private bot chat. Browser-submitted user IDs, a callback, or an `invoiceClosed` status never prove payment.
+Storefront settings include customer language, inline buttons or a persistent reply keyboard, message templates, HTTPS images, main-button text/visibility/row order, content/link buttons, device tutorials, optional service enable/disable and subscription-link rotation. A menu preview is available before saving. Templates accept `{store}` and `{user_id}`; leave a message blank to use its default. Media is referenced by an operator-supplied HTTPS URL. Telegram may reject media it cannot fetch.
 
-Invoices bind the order, bot, buyer, currency and exact integer amount. A short pre-checkout check confirms the pending invoice and reserved capacity. Only a matching `successful_payment` receipt from authenticated Bot API polling records a Stars payment. Its unique charge identifier is retained; replaying it cannot create another order or delivery. Recurring invoices are not enabled.
+Trials have a service, finite traffic grant, 1–168 hours, once-per-Telegram-user policy, optional existing-customer requirement and optional channel membership. Make the bot an administrator of that channel to check membership. Claiming again returns the original trial; deleting the subscription does not reset eligibility. Free-trial delivery and quota validation use the normal compensated deployment.
 
-Payment polling and acknowledgements run independently of node operations and ordinary bot replies. Provider updates enter an encrypted PostgreSQL inbox before its polling offset advances. Pending messages survive process restart. Bot IDs namespace updates, preventing collisions when an administrator switches bots. Finish outstanding payments before replacing a production bot; the panel retains earlier invoices and receipts.
+## Payments
 
-Paid orders use the normal retryable node deployment. Once fulfilled, the bot sends a private order link; its bearer is encrypted at rest and carried in a URL fragment, which the browser imports into tab storage and removes from the address. `/orders` shows only that buyer's recent orders for the selected store. Delivery notification retries may repeat the same private link after a lost send acknowledgement; payment and account creation stay idempotent.
+- **Stars:** XTR offers use whole Stars, 1–10,000 per invoice. The server binds the bot, buyer, currency, amount and invoice. Only a matching `successful_payment` from Bot API polling proves payment. Pre-checkout acknowledgement, a browser callback or an invoice-closed event does not. Unique charge IDs prevent duplicate fulfillment.
+- **Bank transfer:** set the receiving card and cardholder. The customer sends a JPG/PNG/WebP receipt photo up to 1 MiB in the bot or Mini App. A receipt remains unpaid until reviewed. The reviewer supplies the bank reference and confirms the invoice amount/currency.
+- **USDT:** explicitly choose TRC20, ERC20 or BEP20 and its receiving address. The customer submits a transaction hash in the same bot or Mini App. USDT is stored in integer millionths (1 USDT = 1,000,000 units). VeloRay does **not** claim to verify the chain automatically. The operator checks token, network, recipient, amount and transaction finality before approval. Reused network/hash pairs are rejected.
 
-Customers use `/shop`, `/orders`, `/terms` and `/paysupport`. Refunds, chargebacks and Telegram cash-out are handled by the operator using the retained charge IDs and Telegram's official tools/APIs; this release does not automatically revoke a subscription or reconcile a refunded payment. Test requests in the automated suite use a mocked Bot API and never charge a live Telegram account.
+**Receipts** contains private evidence and approve/reject actions. A rejection requires a reason. Submitted evidence is encrypted at rest and is excluded from list responses. Submission extends the existing inventory reservation to 24 hours for review. Approval uses the invoice's persisted amount and normal retryable delivery. A second approval cannot create another account. Existing financial records remain retained.
 
-## Official references
+Telegram's published platform rules require Stars for digital sales inside Telegram. Operators remain responsible for platform compliance and the payment methods they enable. External provider gateways have been retired; **Payment gateway** displays `Soon...` and asks users to suggest providers through Telegram. Old provider callback URLs return unavailable and cannot mark an order paid.
 
-- [Telegram digital goods and Stars](https://core.telegram.org/bots/payments-stars)
-- [Mini App data validation](https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app)
-- [Bot API invoices and payment receipts](https://core.telegram.org/bots/api#payments)
+## Customer and owner access
+
+The Mini App validates raw Telegram `initData` using HMAC, duplicate-field rejection and a one-hour age bound. Buyer IDs are never trusted from JSON. Every service action checks the signed buyer's association with that seller's fulfilled order or trial. Link changes and enable/disable operations require explicit confirmation. The UI never exposes infrastructure credentials to a customer. IPs describe observed connections; registered devices describe subscription/HWID records, not a guaranteed physical-device inventory.
+
+Customer support tickets are available in both bot and Mini App. Staff reply in **Support** or use `/reply TICKET_ID MESSAGE`; ticket bodies are encrypted. The owner management bot adds `/usage ID`, `/ips ID`, `/devices ID`, `/sales`, `/receipts` and `/tickets`. USDT approval prompts a one-use confirmation; bank approval requires `/receipt ID approve BANK_REFERENCE`. Verify receipt photos in the panel before approving. Changes require owner allowlisting, enabled bot management and no enforced administrator MFA; when MFA is required, use the authenticated panel.
+
+Payment polling remains separate from slow node operations. Updates and private sales replies are encrypted and survive restart. Payment/account creation is idempotent; after a lost Telegram send acknowledgement a notification can repeat. Refunds, settlement, chargebacks and cash-out remain operator responsibilities. Tests use a mocked Bot API and do not charge a live account.
+
+## API
+
+Panel APIs use scoped API keys plus the linked user's permissions. Read-only keys cannot mutate data. See `/api/openapi` and [API integration](api-integrations.md) for order, receipt, support, device, IP and exact-byte usage endpoints.
+
+Official references: [Stars](https://core.telegram.org/bots/payments-stars), [Mini App validation](https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app), [Bot API](https://core.telegram.org/bots/api).
