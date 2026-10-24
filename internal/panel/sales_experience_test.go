@@ -203,6 +203,11 @@ func TestIntegrationSupportTicketOwnershipAndEncryptedMessages(t *testing.T) {
 	if e != nil || len(messages) != 2 || str(messages[0], "text") != "sensitive support text" {
 		t.Fatal(messages, e)
 	}
+	var subject string
+	s.Store.Pool.QueryRow(ctx, `SELECT subject FROM vr_support_tickets WHERE id=$1`, num(ticket, "id")).Scan(&subject)
+	if strings.Contains(subject, "sensitive") {
+		t.Fatal("support body copied into plaintext subject")
+	}
 	var ciphertext string
 	s.Store.Pool.QueryRow(ctx, `SELECT body_ciphertext FROM vr_ticket_messages WHERE ticket_id=$1 ORDER BY id LIMIT 1`, num(ticket, "id")).Scan(&ciphertext)
 	if strings.Contains(ciphertext, "sensitive") {

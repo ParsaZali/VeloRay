@@ -42,7 +42,7 @@ func (s *Server) writeTicket(ctx context.Context, owner, user, id int64, author,
 	defer tx.Rollback(ctx)
 	if id == 0 {
 		if subject == "" {
-			subject = string([]rune(text)[:min(70, len([]rune(text)))])
+			subject = "Support request"
 		}
 		if e = tx.QueryRow(ctx, `INSERT INTO vr_support_tickets(owner_id,user_id,subject) VALUES($1,$2,$3) RETURNING id`, owner, user, subject).Scan(&id); e != nil {
 			return nil, e
