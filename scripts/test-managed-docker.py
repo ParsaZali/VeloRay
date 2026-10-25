@@ -146,6 +146,9 @@ try:
     assert request('GET', '/api/clients') == [], 'Archived native users returned after explicit purge'
     print('Managed Docker installer, migration/identity, custom ports, backup/restore, reset, restart, retained reinstall and fresh purge/reinstall passed.')
 finally:
+    for timer in ('veloray-docker-control.timer', 'veloray-docker-certificates.timer'):
+        subprocess.run(['systemctl', 'disable', '--now', timer], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    subprocess.run(['systemctl', 'stop', 'veloray-docker-control.service', 'veloray-docker-certificates.service'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     if Path('/etc/veloray/docker/.env').exists():
         with __import__('contextlib').suppress(Exception):
             m.compose('down', '--volumes', '--remove-orphans')

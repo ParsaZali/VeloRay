@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import tarfile
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -52,6 +53,29 @@ class ManagerTests(unittest.TestCase):
                 m.write_env({'VALUE': value})
         self.assertEqual(m.read_env(self.config / '.env'), self.values)
         self.assertEqual((self.config / '.env').stat().st_mode & 0o777, 0o600)
+
+    def test_foreground_command_waits_for_short_maintenance_and_keeps_exclusion(self):
+        path = self.root/'operation.lock'
+        with path.open('a') as first, path.open('a') as second:
+            m.fcntl.flock(first, m.fcntl.LOCK_EX)
+            self.assertFalse(m.acquire_operation_lock(second, background=True))
+            release = threading.Timer(0.15, lambda: m.fcntl.flock(first, m.fcntl.LOCK_UN))
+            release.start()
+            try:
+                self.assertTrue(m.acquire_operation_lock(second))
+                with self.assertRaises(BlockingIOError):
+                    m.fcntl.flock(first, m.fcntl.LOCK_EX | m.fcntl.LOCK_NB)
+            finally:
+                release.join()
+
+    def test_foreground_lock_wait_is_bounded_and_does_not_interrupt_active_work(self):
+        path = self.root/'operation.lock'
+        with path.open('a') as first, path.open('a') as second:
+            m.fcntl.flock(first, m.fcntl.LOCK_EX)
+            with patch.object(m.time, 'monotonic', side_effect=[0, 16]), self.assertRaises(ValueError):
+                m.acquire_operation_lock(second)
+            with self.assertRaises(BlockingIOError):
+                m.fcntl.flock(second, m.fcntl.LOCK_EX | m.fcntl.LOCK_NB)
 
     def test_random_ports_are_free_and_distinct(self):
         one = m.random_port()

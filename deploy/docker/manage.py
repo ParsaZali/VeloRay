@@ -1034,6 +1034,20 @@ def menu():
         input('Press Enter to return…')
 
 
+def acquire_operation_lock(lock, background=False):
+    deadline = time.monotonic() + 15
+    while True:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except BlockingIOError:
+            if background:
+                return False
+            if time.monotonic() >= deadline:
+                raise ValueError('Another VeloRay operation is running; retry when it finishes')
+            time.sleep(0.1)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', nargs='?', default='menu')
@@ -1061,13 +1075,8 @@ def main():
         lock_context = open('/run/lock/veloray-docker.lock', 'a')
     # A single lock covers install, migration, CLI, timers and panel requests.
     with lock_context as lock:
-        if lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                if command in ('host-jobs', 'certificate-sync'):
-                    return
-                raise ValueError('Another VeloRay operation is running; retry when it finishes')
+        if lock and not acquire_operation_lock(lock, background=command in ('host-jobs', 'certificate-sync')):
+            return
         if command == 'recover-migration':
             return recover_migration()
         if command == 'install':
