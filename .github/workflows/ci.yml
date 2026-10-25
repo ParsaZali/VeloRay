@@ -64,7 +64,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        host: [ubuntu-22.04, ubuntu-24.04]
+        include:
+          - {host: ubuntu-22.04, scenario: fresh}
+          - {host: ubuntu-24.04, scenario: migration}
+          - {host: ubuntu-24.04, scenario: retained}
     runs-on: ${{ matrix.host }}
     steps:
       - uses: actions/checkout@v4
@@ -85,8 +88,11 @@ jobs:
         if: steps.bundle.outputs.ready == 'true'
         run: VELORAY_DOCKER_TEST=1 bash scripts/test-docker.sh
       - name: Verify automatic Docker installation and coordinated recovery
-        if: steps.bundle.outputs.ready == 'true' && matrix.host == 'ubuntu-22.04'
+        if: steps.bundle.outputs.ready == 'true' && matrix.scenario == 'fresh'
         run: sudo env VELORAY_MANAGED_DOCKER_TEST=1 python3 scripts/test-managed-docker.py fresh
       - name: Verify native to Docker migration and coordinated recovery
-        if: steps.bundle.outputs.ready == 'true' && matrix.host == 'ubuntu-24.04'
+        if: steps.bundle.outputs.ready == 'true' && matrix.scenario == 'migration'
         run: sudo env VELORAY_MANAGED_DOCKER_TEST=1 python3 scripts/test-managed-docker.py migration
+      - name: Verify migration after retained native uninstall
+        if: steps.bundle.outputs.ready == 'true' && matrix.scenario == 'retained'
+        run: sudo env VELORAY_MANAGED_DOCKER_TEST=1 python3 scripts/test-managed-docker.py retained

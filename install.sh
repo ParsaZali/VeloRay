@@ -3,7 +3,8 @@ set -Eeuo pipefail
 
 vr_text() { if [[ "${VELORAY_INSTALL_LANG:-${VELORAY_LANGUAGE:-en}}" == fa ]];then printf '%s' "$2";else printf '%s' "$1";fi; }
 vr_say() { vr_text "$1" "$2";printf '\n'; }
-vr_step() { VR_STEP="$(vr_text "$1" "$2")";printf '\n  • %s\n' "$VR_STEP"; }
+vr_color() { if [[ -t 1 && -z "${NO_COLOR:-}" ]];then printf '\033[%sm%s\033[0m' "$1" "$2";else printf '%s' "$2";fi; }
+vr_step() { VR_STEP="$(vr_text "$1" "$2")";printf '\n  ';vr_color 36 '•';printf ' %s\n' "$VR_STEP"; }
 vr_log_init() {
  local previous_mask="$(umask)"
  umask 077
@@ -17,11 +18,11 @@ vr_log_init() {
  umask "$previous_mask"
 }
 vr_run() { "$@" >>"$VELORAY_INSTALL_LOG" 2>&1; }
-vr_run_visible() { "$@" 2>&1 | tee -a "$VELORAY_INSTALL_LOG"; }
+vr_run_visible() { if [[ "${VELORAY_VERBOSE:-0}" == 1 ]];then "$@" 2>&1 | tee -a "$VELORAY_INSTALL_LOG";else vr_run "$@";fi; }
 vr_error() {
  local line="$1" status="${2:-1}"
  printf 'Failure: step=%s line=%s status=%s\n' "${VR_STEP:-operation}" "$line" "$status" >>"$VELORAY_INSTALL_LOG"
- vr_say "Failed: ${VR_STEP:-operation}." "مرحله ناموفق: ${VR_STEP:-عملیات}." >&2
+ vr_color 31 "$(vr_text "Failed: ${VR_STEP:-operation}." "مرحله ناموفق: ${VR_STEP:-عملیات}.")" >&2;printf '\n' >&2
  vr_say "Details: sudo tail -n 60 $VELORAY_INSTALL_LOG" "جزئیات: sudo tail -n 60 $VELORAY_INSTALL_LOG" >&2
  exit "$status"
 }
@@ -43,7 +44,7 @@ version_at_least() { [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" ==
 fetch() {
  local status=0 timeout="${3:-900}" log="${VELORAY_INSTALL_LOG:-/dev/null}"
  printf '  Download: %s\n' "$1" | tee -a "$log"
- curl --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --location --show-error --no-silent --no-progress-bar --progress-meter \
+ curl --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --location --silent --show-error --no-progress-meter \
   --retry 2 --retry-max-time 120 --connect-timeout 15 --max-time "$timeout" \
   --speed-time 30 --speed-limit 1024 --write-out '  Received %{size_download} bytes in %{time_total}s (%{speed_download} bytes/s)\n' \
   "$1" -o "$2" 2> >(tee -a "$log" >&2) || status=$?
@@ -150,8 +151,11 @@ if [[ "$action" == install && "$mode" == docker ]];then
  [[ -f "$source_directory/deploy/docker/manage.py" ]]||fail 'This revision does not include the Docker installer.'
  vr_step 'Verify container runtime bundles' 'بررسی بسته‌های اجرای کانتینری'
  vr_run bash "$source_directory/scripts/verify-runtime.sh" "$arch"
+ vr_step 'Check existing installation' 'بررسی نصب قبلی'
+ python3 "$source_directory/deploy/docker/manage.py" preflight
  vr_step 'Install Docker Engine and Compose' 'نصب Docker و Compose'
  vr_run_visible bash "$source_directory/deploy/docker/install-engine.sh"
+ vr_step 'Install or migrate VeloRay' 'نصب یا انتقال VeloRay'
  if { true </dev/tty; } 2>/dev/null;then
   python3 "$source_directory/deploy/docker/manage.py" install --source "$source_directory" </dev/tty
  else

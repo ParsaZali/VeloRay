@@ -75,6 +75,22 @@ def fixture():
     return request('POST', '/api/clients', {'name': 'preserved-release-client', 'inbound': inbound['id'], 'traffic_limit_bytes': 10485760, 'enabled': True}, 201), node
 
 
+def install_panel(mode):
+    result = subprocess.run(['bash', 'install.sh', '--mode', mode], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    console = result.stdout.decode()
+    print(console, flush=True)
+    if result.returncode:
+        # Synthetic disposable CI data only; production details stay private.
+        logs = sorted(Path('/var/log/veloray').glob('install-*.log'))
+        if logs:
+            print('\n'.join(logs[-1].read_text().splitlines()[-100:]), flush=True)
+        result.check_returncode()
+    if mode == 'docker':
+        assert 'Panel: https://127.0.0.1:25443' in console, console
+        assert 'Management: sudo veloray' in console, console
+        assert 'Reading package lists' not in console and 'Pulling fs layer' not in console, console
+
+
 mode = sys.argv[1] if len(sys.argv) > 1 else 'fresh'
 original_unprivileged_port = subprocess.check_output(['sysctl', '-n', 'net.ipv4.ip_unprivileged_port_start']).decode().strip()
 try:
@@ -82,8 +98,8 @@ try:
     # not accidentally pass because a CI host permits every unprivileged bind.
     subprocess.run(['sysctl', '-w', 'net.ipv4.ip_unprivileged_port_start=1024'], stdout=subprocess.DEVNULL, check=True)
     previous = None
-    if mode == 'migration':
-        subprocess.run(['bash', 'install.sh', '--mode', 'native'], cwd=ROOT, env=env, check=True)
+    if mode in ('migration', 'retained'):
+        install_panel('native')
         login(env['VELORAY_ADMIN_PASSWORD'])
         previous, node = fixture()
         # Preserve administrator-selected TLS file paths as well as plain listeners.
@@ -99,7 +115,20 @@ try:
         connection.request('GET', '/xray/stats', headers={'Authorization': 'Bearer ' + agent_env['VELORAY_AGENT_TOKEN']})
         ledger = json.loads(connection.getresponse().read())['ledger_id']
         connection.close()
-    subprocess.run(['bash', 'install.sh', '--mode', 'docker'], cwd=ROOT, env=env, check=True)
+        request('POST', '/api/inbounds', {'name':'unused-tls','node':node['id'],'core':'xray','protocol':'trojan','transport':'raw','security':'tls','flow':'','listen':'127.0.0.1','port':25448,'tls_server_name':'127.0.0.1','tls_cert_file':'/missing/unused.crt','tls_key_file':'/missing/unused.key','enabled':False}, 201)
+        saved = certificate.with_suffix('.preserved')
+        certificate.rename(saved)
+        try:
+            check = subprocess.run(['python3', 'deploy/docker/manage.py', 'preflight'], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            assert check.returncode != 0 and str(certificate) in check.stdout.decode()
+            assert 'Saved panel address' in check.stdout.decode()
+            login(env['VELORAY_ADMIN_PASSWORD'])
+        finally:
+            saved.rename(certificate)
+        if mode == 'retained':
+            subprocess.run(['/usr/local/bin/veloray', 'uninstall'], input=b'REMOVE\n', check=True)
+            assert not Path('/usr/local/bin/veloray').exists()
+    install_panel('docker')
     subprocess.run(['/usr/local/bin/veloray', 'doctor'], check=True)
     login(env['VELORAY_ADMIN_PASSWORD'])
     deployment = request('GET', '/api/deployment')
@@ -157,11 +186,11 @@ try:
     with tempfile.TemporaryDirectory(prefix='veloray-retained-backup-') as tmp:
         subprocess.run(['/usr/local/bin/veloray', 'backup', str(Path(tmp) / 'removed.tar.gz')], check=True)
         assert (Path(tmp) / 'removed.tar.gz').is_file()
-    subprocess.run(['bash', 'install.sh', '--mode', 'docker'], cwd=ROOT, env=env, check=True)
+    install_panel('docker')
     login(password)
     assert request('GET', '/api/clients/' + str(previous['id']))['credential'] == previous['credential']
     subprocess.run(['/usr/local/bin/veloray', 'uninstall', '--purge'], input=b'PURGE\n', check=True)
-    subprocess.run(['bash', 'install.sh', '--mode', 'docker'], cwd=ROOT, env=env, check=True)
+    install_panel('docker')
     login(env['VELORAY_ADMIN_PASSWORD'])
     assert request('GET', '/api/clients') == [], 'Archived native users returned after explicit purge'
     print('Managed Docker installer, migration/identity, custom ports, backup/restore, reset, restart, retained reinstall and fresh purge/reinstall passed.')
