@@ -52,6 +52,21 @@ def login(password):
     assert request('GET', '/api/auth/me')['is_superuser']
 
 
+def change_panel_port(target):
+    global panel_port
+    job = request('PUT', '/api/panel-endpoint', {'port': target}, 202)
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        subprocess.run(['/usr/local/bin/veloray', 'host-jobs'], check=True)
+        state = m.sql(f"SELECT state FROM vr_host_jobs WHERE id={int(job['id'])};")
+        assert state != 'failed', m.sql(f"SELECT error FROM vr_host_jobs WHERE id={int(job['id'])};")
+        if state == 'succeeded':
+            panel_port = target
+            return
+        time.sleep(0.25)
+    raise AssertionError('Panel port job did not complete')
+
+
 def fixture():
     node = next(n for n in request('GET', '/api/nodes') if n['is_local'])
     inbound = request('POST', '/api/inbounds', {'name': 'managed-release', 'node': node['id'], 'core': 'xray', 'protocol': 'vless', 'transport': 'raw', 'security': 'none', 'flow': '', 'listen': '127.0.0.1', 'port': 25445, 'enabled': True}, 201)
@@ -98,15 +113,11 @@ try:
     manager = request('GET', f'/api/nodes/{node["id"]}/core-manager')
     assert 'cores' in manager
     # The UI job is processed by the root host worker, without a socket mount.
-    subprocess.run(['systemctl', 'stop', 'veloray-docker-control.timer'], check=True)
-    request('PUT', '/api/panel-endpoint', {'port': 25446}, 202)
-    subprocess.run(['/usr/local/bin/veloray', 'host-jobs'], check=True)
-    panel_port = 25446
+    subprocess.run(['systemctl', 'stop', 'veloray-docker-control.timer', 'veloray-docker-control.service'], check=True)
+    change_panel_port(25446)
     login(env['VELORAY_ADMIN_PASSWORD'])
     assert request('GET', '/api/panel-endpoint')['job']['state'] == 'succeeded'
-    request('PUT', '/api/panel-endpoint', {'port': 25443}, 202)
-    subprocess.run(['/usr/local/bin/veloray', 'host-jobs'], check=True)
-    panel_port = 25443
+    change_panel_port(25443)
     login(env['VELORAY_ADMIN_PASSWORD'])
     with tempfile.TemporaryDirectory(prefix='veloray-managed-test-') as tmp:
         archive = Path(tmp) / 'recovery.tar.gz'
@@ -125,7 +136,15 @@ try:
     subprocess.run(['/usr/local/bin/veloray', 'restart'], check=True)
     login(password)
     assert request('GET', '/api/clients/' + str(previous['id']))['credential'] == previous['credential']
-    print('Managed Docker installer, migration/identity, custom ports, backup/restore, password reset and durable restart passed.')
+    subprocess.run(['/usr/local/bin/veloray', 'uninstall'], input=b'REMOVE\n', check=True)
+    subprocess.run(['bash', 'install.sh', '--mode', 'docker'], cwd=ROOT, env=env, check=True)
+    login(password)
+    assert request('GET', '/api/clients/' + str(previous['id']))['credential'] == previous['credential']
+    subprocess.run(['/usr/local/bin/veloray', 'uninstall', '--purge'], input=b'PURGE\n', check=True)
+    subprocess.run(['bash', 'install.sh', '--mode', 'docker'], cwd=ROOT, env=env, check=True)
+    login(env['VELORAY_ADMIN_PASSWORD'])
+    assert request('GET', '/api/clients') == [], 'Archived native users returned after explicit purge'
+    print('Managed Docker installer, migration/identity, custom ports, backup/restore, reset, restart, retained reinstall and fresh purge/reinstall passed.')
 finally:
     if Path('/etc/veloray/docker/.env').exists():
         with __import__('contextlib').suppress(Exception):

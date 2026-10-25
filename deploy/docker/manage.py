@@ -351,10 +351,11 @@ def install(source):
             up()
             install_tools()
             (CONFIG / 'installing').unlink()
+            (STATE / 'purged').unlink(missing_ok=True)
             return show_credentials(read_env(CONFIG / '.env'))
         return upgrade(source, sha)
     native_path = Path('/etc/veloray/veloray.env')
-    native = read_env(native_path) if native_path.exists() else None
+    native = native_environment_for_install(native_path)
     if native:
         return migrate(source, sha, native)
     if captured_project_exists():
@@ -372,7 +373,18 @@ def install(source):
     install_tools()
     sync_certificate()
     (CONFIG / 'installing').unlink()
+    (STATE / 'purged').unlink(missing_ok=True)
     show_credentials(values)
+
+
+def native_environment_for_install(path):
+    if not path.is_file():
+        return None
+    if (STATE / 'native-migration.json').exists():
+        if (STATE / 'purged').exists():
+            return None
+        raise ValueError('Docker configuration is missing after a completed native migration. Restore /etc/veloray/docker; the archived native database will not be imported again')
+    return read_env(path)
 
 
 def show_credentials(values, migrated=False):
@@ -586,6 +598,7 @@ def restore(path, confirmed=False):
         link(source)
         up()
         install_tools()
+        (STATE / 'purged').unlink(missing_ok=True)
         say('✓ Recovery completed.', '✓ بازیابی کامل شد.', '32')
 
 
@@ -632,6 +645,7 @@ def upgrade(source, sha):
     if values.get('VELORAY_INSTALLED_COMMIT') == sha:
         up()
         install_tools()
+        show_credentials(values, migrated=True)
         return
     before = dict(values)
     # Build while the previous services remain live. Revisions have unique tags.
@@ -943,10 +957,9 @@ def migrate_native(source, sha, native):
         if nginx_active:
             run(['systemctl', 'disable', 'nginx'])
         install_tools()
+        sync_certificate()
         atomic(STATE / 'native-migration.json', json.dumps({'backup': str(recovery), 'source': sha, 'native_enabled': enabled}))
         (CONFIG / 'migration-pending.json').unlink()
-        show_credentials(values, migrated=True)
-        sync_certificate()
     except BaseException:
         for timer in ('veloray-docker-control.timer', 'veloray-docker-certificates.timer'):
             subprocess.run(['systemctl', 'disable', '--now', timer], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
@@ -969,6 +982,7 @@ def migrate_native(source, sha, native):
         shutil.move(CONFIG, failed)
         say(f'Migration failed. Native services restored; recovery: {recovery}', f'انتقال ناموفق بود؛ سرویس‌های قبلی بازیابی شدند. پشتیبان: {recovery}', '31')
         raise
+    show_credentials(values, migrated=True)
 
 
 def recover_migration():
@@ -1148,6 +1162,7 @@ def main():
             for timer in ('veloray-auto-update.timer', 'veloray-backup.timer', 'veloray-docker-certificates.timer'):
                 subprocess.run(['systemctl', 'disable', '--now', timer], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
             if args.purge:
+                atomic(STATE / 'purged', time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
                 shutil.rmtree(CONFIG)
                 say('VeloRay application data removed. Recovery backups and Docker itself were preserved.', 'اطلاعات VeloRay حذف شد؛ بکاپ‌های بازیابی و خود Docker حفظ شدند.', '32')
                 return

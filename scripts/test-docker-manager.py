@@ -27,7 +27,7 @@ class ManagerTests(unittest.TestCase):
         self.source = self.root / 'release'
         self.source.mkdir()
         self.current.symlink_to(self.source)
-        self.patches = [patch.object(m, 'CONFIG', self.config), patch.object(m, 'CURRENT', self.current), patch.object(m, 'BACKUPS', self.root / 'backups')]
+        self.patches = [patch.object(m, 'CONFIG', self.config), patch.object(m, 'CURRENT', self.current), patch.object(m, 'BACKUPS', self.root / 'backups'), patch.object(m, 'STATE', self.root/'state')]
         for item in self.patches:
             item.start()
         self.values = {'VELORAY_DOMAIN': 'vpn.example', 'VELORAY_PANEL_PORT': '24443', 'VELORAY_SUBSCRIPTION_PORT': '24444', 'VELORAY_DATABASE_PORT': '24543', 'VELORAY_INSTALLED_COMMIT': 'a' * 40}
@@ -69,6 +69,17 @@ class ManagerTests(unittest.TestCase):
         with patch.object(m.socket, 'socket', side_effect=ipv4_only):
             number = m.random_port()
         self.assertGreaterEqual(number, 1024)
+
+    def test_purge_never_reimports_archived_native_accounts(self):
+        native = self.root/'native.env'
+        native.write_text('POSTGRES_DB=veloray\n')
+        self.assertEqual(m.native_environment_for_install(native), {'POSTGRES_DB': 'veloray'})
+        m.STATE.mkdir()
+        (m.STATE/'native-migration.json').write_text('{}')
+        with self.assertRaises(ValueError):
+            m.native_environment_for_install(native)
+        (m.STATE/'purged').write_text('confirmed')
+        self.assertIsNone(m.native_environment_for_install(native))
 
     def test_failed_image_build_keeps_previous_services_and_configuration(self):
         with patch.object(m, 'compose', side_effect=subprocess.CalledProcessError(1, ['docker'])), patch.object(m, 'backup') as backup:
