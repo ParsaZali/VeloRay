@@ -45,7 +45,7 @@ The old native database and files remain available for recovery; they are not a 
 
 ## VPN TLS certificates and core updates
 
-The automatic installer exports the matching Caddy certificate into `/etc/veloray/docker/certificates/HOST/`, mounted read-only inside the agent at `/etc/veloray/certificates/HOST/`. Use `fullchain.pem` and `privkey.pem` there in TLS inbounds. A host timer refreshes renewed certificates daily and restarts the agent only when the key pair changes. Certificate export does not expose Caddy's complete private storage to the panel or cores. Import an operator-provided pair with:
+The automatic installer exports the matching Caddy certificate into `/etc/veloray/docker/certificates/HOST/`, mounted read-only inside the agent at `/etc/veloray/certificates/HOST/`. Use `fullchain.pem` and `privkey.pem` there in TLS inbounds. A host timer checks renewed certificates every five minutes and restarts the agent only when the key pair changes. This also covers short-lived local certificates. Certificate export does not expose Caddy's complete private storage to the panel or cores. Import an operator-provided pair with:
 
 ```bash
 sudo veloray certificate-import vpn.example.com /private/fullchain.pem /private/privkey.pem

@@ -3,6 +3,7 @@
 import importlib.util
 import io
 import json
+import shutil
 from pathlib import Path
 import subprocess
 import tarfile
@@ -58,6 +59,16 @@ class ManagerTests(unittest.TestCase):
         self.assertNotEqual(one, two)
         self.assertNotIn(one, m.RESERVED)
         self.assertGreaterEqual(one, 1024)
+
+    def test_random_ports_work_on_ipv4_only_hosts(self):
+        original = m.socket.socket
+        def ipv4_only(family, kind):
+            if family == m.socket.AF_INET6:
+                raise OSError(m.errno.EAFNOSUPPORT, 'IPv6 disabled')
+            return original(family, kind)
+        with patch.object(m.socket, 'socket', side_effect=ipv4_only):
+            number = m.random_port()
+        self.assertGreaterEqual(number, 1024)
 
     def test_failed_image_build_keeps_previous_services_and_configuration(self):
         with patch.object(m, 'compose', side_effect=subprocess.CalledProcessError(1, ['docker'])), patch.object(m, 'backup') as backup:
@@ -161,6 +172,26 @@ class ManagerTests(unittest.TestCase):
         self.assertTrue(m.import_certificate('vpn.example', certificate, key))
         self.assertFalse(m.import_certificate('vpn.example', certificate, key))
         self.assertEqual((self.config/'certificates/vpn.example/privkey.pem').stat().st_mode & 0o777, 0o444)
+
+    def test_certificate_sync_prefers_public_pair_and_restarts_only_on_change(self):
+        source = self.root/'caddy'
+        for issuer, days in (('local', '3'), ('acme', '2')):
+            directory = source/issuer/'vpn.example'
+            directory.mkdir(parents=True)
+            subprocess.run(['openssl','req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes','-days',days,'-keyout',str(directory/'vpn.example.key'),'-out',str(directory/'vpn.example.crt'),'-subj','/CN=vpn.example','-addext','subjectAltName=DNS:vpn.example'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        m.write_env(dict(self.values, VELORAY_TLS_MODE='auto'))
+        original = m.run
+        def transport(args, **kwargs):
+            if args[:2] == ['docker', 'cp']:
+                shutil.copytree(source, args[-1], dirs_exist_ok=True)
+                return subprocess.CompletedProcess(args, 0)
+            return original(args, **kwargs)
+        with patch.object(m,'run',side_effect=transport), patch.object(m,'cid',return_value='synthetic-proxy'), patch.object(m,'compose') as compose, patch.object(m,'up'):
+            m.sync_certificate()
+            self.assertEqual((self.config/'certificates/vpn.example/fullchain.pem').read_bytes(), (source/'acme/vpn.example/vpn.example.crt').read_bytes())
+            compose.assert_called_once_with('restart','agent')
+            m.sync_certificate()
+            compose.assert_called_once_with('restart','agent')
 
 
 if __name__ == '__main__':

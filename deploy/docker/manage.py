@@ -4,6 +4,7 @@ import argparse
 import contextlib
 import datetime
 import fcntl
+import errno
 import hashlib
 import ipaddress
 import json
@@ -121,10 +122,15 @@ def port(value, excluded=(), check=True):
     if check:
         for family, address in ((socket.AF_INET, '0.0.0.0'), (socket.AF_INET6, '::')):
             for kind in (socket.SOCK_STREAM, socket.SOCK_DGRAM):
-                with socket.socket(family, kind) as listener:
-                    if family == socket.AF_INET6:
-                        listener.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
-                    listener.bind((address, number))
+                try:
+                    with socket.socket(family, kind) as listener:
+                        if family == socket.AF_INET6:
+                            listener.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+                        listener.bind((address, number))
+                except OSError as exc:
+                    if family == socket.AF_INET6 and exc.errno in (errno.EAFNOSUPPORT, errno.EPROTONOSUPPORT, errno.EADDRNOTAVAIL):
+                        continue
+                    raise
     return number
 
 
@@ -311,7 +317,7 @@ WantedBy=timers.target
     run(['systemctl', 'daemon-reload'])
     run(['systemctl', 'enable', '--now', 'veloray-docker-control.timer'])
     atomic('/etc/systemd/system/veloray-docker-certificates.service', '[Unit]\nDescription=Refresh VeloRay VPN TLS certificates from Caddy\nAfter=docker.service\n[Service]\nType=oneshot\nUMask=0077\nExecStart=/usr/local/bin/veloray certificate-sync\n', 0o644)
-    atomic('/etc/systemd/system/veloray-docker-certificates.timer', '[Unit]\nDescription=Refresh renewed VeloRay certificates\n[Timer]\nOnCalendar=daily\nRandomizedDelaySec=20m\nPersistent=true\n[Install]\nWantedBy=timers.target\n', 0o644)
+    atomic('/etc/systemd/system/veloray-docker-certificates.timer', '[Unit]\nDescription=Refresh renewed VeloRay certificates\n[Timer]\nOnBootSec=2min\nOnUnitInactiveSec=5min\nRandomizedDelaySec=30s\n[Install]\nWantedBy=timers.target\n', 0o644)
     run(['systemctl', 'daemon-reload'])
     run(['systemctl', 'enable', '--now', 'veloray-docker-certificates.timer'])
 
@@ -701,17 +707,32 @@ def import_certificate(name, certificate, key):
 
 
 def sync_certificate():
-    name = read_env(CONFIG / '.env')['VELORAY_DOMAIN']
+    values = read_env(CONFIG / '.env')
+    name = values['VELORAY_DOMAIN']
     with tempfile.TemporaryDirectory(prefix='veloray-caddy-certificate-') as tmp:
         root = Path(tmp)
         run(['docker', 'cp', f'{cid("proxy")}:/data/.', root])
+        candidates = []
         for certificate in root.rglob('*.crt'):
             if certificate.stem != name or certificate.stat().st_size > 1024 * 1024:
                 continue
             key = certificate.with_suffix('.key')
             if not key.is_file() or key.stat().st_size > 65536:
                 continue
-            if import_certificate(name, certificate, key):
+            try:
+                date = output(['openssl', 'x509', '-in', certificate, '-noout', '-enddate'], stderr=subprocess.DEVNULL, env=dict(os.environ, LC_ALL='C')).decode().strip().split('=', 1)[1]
+                expires = datetime.datetime.strptime(date, '%b %d %H:%M:%S %Y %Z')
+                is_local = 'local' in certificate.relative_to(root).parts
+                preferred = is_local if values.get('VELORAY_TLS_MODE') == 'local' else not is_local
+                candidates.append((preferred, expires, certificate, key))
+            except (ValueError, IndexError, subprocess.SubprocessError):
+                continue
+        for _, _, certificate, key in sorted(candidates, key=lambda item: (item[0], item[1]), reverse=True):
+            try:
+                changed = import_certificate(name, certificate, key)
+            except (ValueError, subprocess.CalledProcessError):
+                continue
+            if changed:
                 # Certificate files are mounted only into the agent. Restarting
                 # the agent makes every core pick up the renewed key pair.
                 compose('restart', 'agent')
@@ -1030,7 +1051,7 @@ def main():
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
-                if command == 'host-jobs':
+                if command in ('host-jobs', 'certificate-sync'):
                     return
                 raise ValueError('Another VeloRay operation is running; retry when it finishes')
         if command == 'recover-migration':
