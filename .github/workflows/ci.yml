@@ -55,6 +55,7 @@ jobs:
       - run: bash scripts/test-auto-update.sh
       - run: python3 scripts/test-setup.py
       - run: python3 scripts/test-deployment.py
+      - run: python3 scripts/test-docker-manager.py
       - run: |
           go build -buildvcs=false -o /tmp/veloray-cli ./cmd/veloray
           VELORAY_TEST_PANEL_BINARY=/tmp/veloray-cli bash scripts/test-installer.sh
@@ -82,3 +83,9 @@ jobs:
       - name: Verify HTTPS, native traffic and durable restart in containers
         if: steps.bundle.outputs.ready == 'true'
         run: VELORAY_DOCKER_TEST=1 bash scripts/test-docker.sh
+      - name: Verify automatic Docker installation and coordinated recovery
+        if: steps.bundle.outputs.ready == 'true' && matrix.host == 'ubuntu-22.04'
+        run: sudo env VELORAY_MANAGED_DOCKER_TEST=1 python3 scripts/test-managed-docker.py fresh
+      - name: Verify native to Docker migration and coordinated recovery
+        if: steps.bundle.outputs.ready == 'true' && matrix.host == 'ubuntu-24.04'
+        run: sudo env VELORAY_MANAGED_DOCKER_TEST=1 python3 scripts/test-managed-docker.py migration

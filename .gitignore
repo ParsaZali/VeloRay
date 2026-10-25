@@ -17,4 +17,5 @@ __pycache__/
 *.pem
 coverage.out
 deploy/docker/secrets/
+deploy/docker/certificates/
 deploy/docker/generated/

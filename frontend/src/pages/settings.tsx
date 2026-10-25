@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { notify } from "@/lib/notifications";
+import { DeploymentStatus } from "@/components/deployment-status";
 import { PanelUpdate } from "@/components/panel-update";
 import { PanelEndpoint } from "@/components/panel-endpoint";
 import { SubscriptionEndpoint } from "@/components/subscription-endpoint";
@@ -1287,32 +1288,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Tab }) {
                         />
                       </CardContent>
                     </Card>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>{t("Server management")}</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                          {[
-                            t("veloray status"),
-                            t("veloray doctor"),
-                            t("veloray backup"),
-                            t("veloray port PORT"),
-                            t("veloray logs web"),
-                            t("veloray logs agent"),
-                            t("veloray ssl EMAIL"),
-                            t("veloray update"),
-                          ].map((x) => (
-                            <div
-                              key={x}
-                              className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 mono text-[10px] text-[var(--muted-strong)]"
-                            >
-                              {x}
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
+                    {session?.is_superuser && <DeploymentStatus />}
                   </div>
                 )}
               </fieldset>

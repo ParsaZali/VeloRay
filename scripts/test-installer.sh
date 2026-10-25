@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Offline bootstrap tests: all host commands and downloads use temporary fixtures.
 set -Eeuo pipefail
+export VELORAY_INSTALL_MODE=native
 project="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_ROOT="$(mktemp -d)";export TEST_ROOT
 trap 'rm -rf -- "$TEST_ROOT"' EXIT

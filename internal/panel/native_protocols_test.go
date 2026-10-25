@@ -67,7 +67,7 @@ func TestIntegrationNativeProtocolsWithPinnedSingBox(t *testing.T) {
 	if binary == "" {
 		t.Skip("set VELORAY_TEST_SINGBOX_BINARY")
 	}
-	for _, p := range []string{"tuic", "naive", "snell"} {
+	for _, p := range []string{"tuic", "anytls", "naive", "snell"} {
 		t.Run(p, func(t *testing.T) {
 			s, ctx := integration(t)
 			n, i, c := fixture(t, s, ctx, &nodeMock{running: true, stats: []any{}})

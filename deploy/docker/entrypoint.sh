@@ -9,7 +9,26 @@ case "${1:-panel}" in
   exec veloray serve
   ;;
  subscriptions) exec veloray serve ;;
- agent) exec veloray-agent ;;
+ agent)
+  # Writable, durable executable slots preserve official updates across recreation.
+  for core in xray singbox;do
+   binary=/usr/local/bin/xray;[[ "$core" != singbox ]]||binary=/usr/local/bin/sing-box
+   slot="/var/lib/veloray-agent/cores/$core"
+   mkdir -p "$slot"
+   if [[ ! -e "$slot/current" && ! -L "$slot/current" ]];then
+    digest="$(sha256sum "$binary" | cut -d' ' -f1)"
+    cp "$binary" "$slot/binary-$digest";chmod 0755 "$slot/binary-$digest"
+    ln -s "$slot/binary-$digest" "$slot/current"
+    printf '{"tag":"bundled","source":"bundled","sha256":"%s"}\n' "$digest" >"$slot/active.json"
+   fi
+   [[ -L "$slot/entry" ]]||ln -s "$slot/current" "$slot/entry"
+  done
+  mkdir -p /var/lib/veloray-agent/assets/xray
+  for asset in geoip.dat geosite.dat;do
+   [[ -f "/var/lib/veloray-agent/assets/xray/$asset" ]]||cp "/opt/veloray/xray/$asset" "/var/lib/veloray-agent/assets/xray/$asset"
+  done
+  exec veloray-agent
+  ;;
  health-panel) exec curl --fail --silent --show-error --max-time 3 "http://${VELORAY_LISTEN:-127.0.0.1:8610}/api/health" ;;
  health-agent)
   token="$(cat "${VELORAY_AGENT_TOKEN_FILE:?}")"

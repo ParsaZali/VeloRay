@@ -4,6 +4,7 @@
 .env.*
 !**/.env.example
 deploy/docker/secrets
+deploy/docker/certificates
 deploy/docker/generated
 frontend/node_modules
 frontend/dist

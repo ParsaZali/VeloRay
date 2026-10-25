@@ -3314,3 +3314,39 @@ test("login preview and subscription tabs stay accessible on mobile", async ({
     ).toBe(true);
   }
 });
+
+test("AnyTLS preset selects its supported core and preserves TLS on mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await panel(page, "/inbounds");
+  await page.getByRole("button", { name: "New inbound", exact: true }).click();
+  await choose(page, "Connection preset", "anytls");
+  const dialog = page.getByRole("dialog", { name: "New inbound", exact: true });
+  await expect(
+    dialog.getByRole("combobox", { name: "Core", exact: true }),
+  ).toContainText("sing-box");
+  await expect(
+    dialog.getByRole("combobox", { name: "Protocol", exact: true }),
+  ).toContainText("AnyTLS");
+  await dialog
+    .getByLabel("TLS certificate", { exact: true })
+    .fill("/etc/veloray/certificates/server/fullchain.pem");
+  await dialog
+    .getByLabel("TLS private key", { exact: true })
+    .fill("/etc/veloray/certificates/server/privkey.pem");
+  const submitted = page.waitForRequest(
+    (r) => r.method() === "POST" && r.url().includes("/api/inbounds/"),
+  );
+  await dialog
+    .getByRole("button", { name: "Create & deploy", exact: true })
+    .click();
+  const body = (await submitted).postDataJSON();
+  expect(body.core).toBe("singbox");
+  expect(body.protocol).toBe("anytls");
+  expect(body.security).toBe("tls");
+  expect(body.transport).toBe("raw");
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+});

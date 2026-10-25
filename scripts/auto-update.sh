@@ -178,7 +178,7 @@ vr_auto_update_check() (
  if systemctl is-active --quiet veloray-subscriptions.service;then subscriptions_active=true;fi
  echo "Starting pinned update $commit (backup: $backup)"
  if VELORAY_INSTALL_REPO="$repo" VELORAY_TRACKING_REF=main \
-     bash "$tmp/install.sh" install --repo "$repo" --ref "$commit" --lang en \
+     bash "$tmp/install.sh" install --mode native --repo "$repo" --ref "$commit" --lang en \
      && /usr/local/bin/velorayctl doctor;then
   install -d -m 0750 /var/lib/veloray
   printf '%s\n' "$commit" >"$installed"

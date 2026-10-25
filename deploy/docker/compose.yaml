@@ -1,8 +1,8 @@
 name: veloray
 x-app: &app
-  image: veloray:local
+  image: ${VELORAY_APP_IMAGE:-veloray:local}
   build:
-    context: ../..
+    context: ${VELORAY_SOURCE_DIRECTORY:-../..}
     target: runtime
   network_mode: host
   read_only: true
@@ -16,14 +16,18 @@ x-app: &app
     options: {max-size: 5m, max-file: "2"}
 x-panel-env: &panel-env
   POSTGRES_HOST: 127.0.0.1
+  POSTGRES_PORT: ${VELORAY_DATABASE_PORT:-5432}
   POSTGRES_DB: veloray
   POSTGRES_USER: veloray
   POSTGRES_PASSWORD_FILE: /run/secrets/database_password
   VELORAY_SECRET_KEY_FILE: /run/secrets/secret_key
   VELORAY_FIELD_KEY_FILE: /run/secrets/field_key
   VELORAY_PUBLIC_HOST: ${VELORAY_DOMAIN:?Generate the Docker environment first}
-  VELORAY_PUBLIC_URL: https://${VELORAY_DOMAIN}
-  VELORAY_PANEL_PORT: "443"
+  VELORAY_PUBLIC_URL: ${VELORAY_PUBLIC_URL:-https://${VELORAY_DOMAIN}}
+  VELORAY_PANEL_PORT: ${VELORAY_PANEL_PORT:-443}
+  VELORAY_DEPLOYMENT: docker
+  VELORAY_INSTALLED_COMMIT: ${VELORAY_INSTALLED_COMMIT:-}
+  VELORAY_HOST_CONTROL: ${VELORAY_HOST_CONTROL:-false}
   VELORAY_COOKIE_SECURE: "true"
   VELORAY_SUBSCRIPTION_DRIVER: caddy
   VELORAY_SUBSCRIPTION_PORT: ${VELORAY_SUBSCRIPTION_PORT:-8444}
@@ -36,7 +40,7 @@ services:
     tmpfs: ["/tmp:rw,noexec,nosuid,size=64m,mode=1777", "/var/run/postgresql:rw,noexec,nosuid,size=16m,mode=1777"]
     shm_size: 256m
     network_mode: host
-    command: [postgres, -c, listen_addresses=127.0.0.1]
+    command: [postgres, -c, listen_addresses=127.0.0.1, -p, "${VELORAY_DATABASE_PORT:-5432}"]
     environment:
       POSTGRES_USER: veloray
       POSTGRES_DB: veloray
@@ -46,7 +50,7 @@ services:
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
     healthcheck:
-      test: [CMD-SHELL, "pg_isready -U veloray -d veloray -h 127.0.0.1"]
+      test: [CMD-SHELL, "pg_isready -U veloray -d veloray -h 127.0.0.1 -p ${VELORAY_DATABASE_PORT:-5432}"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -61,8 +65,12 @@ services:
       VELORAY_AGENT_TOKEN_FILE: /run/secrets/agent_token
       VELORAY_XRAY_CONFIG: /var/lib/veloray-agent/xray/config.json
       VELORAY_SINGBOX_CONFIG: /var/lib/veloray-agent/singbox/config.json
+      XRAY_LOCATION_ASSET: /var/lib/veloray-agent/assets/xray
+      VELORAY_CORE_DIRECTORY: /var/lib/veloray-agent/cores
+      VELORAY_XRAY_BINARY: /var/lib/veloray-agent/cores/xray/entry
+      VELORAY_SINGBOX_BINARY: /var/lib/veloray-agent/cores/singbox/entry
     secrets: [agent_token]
-    volumes: [agent-data:/var/lib/veloray-agent]
+    volumes: [agent-data:/var/lib/veloray-agent, "${VELORAY_CERTIFICATE_DIRECTORY:-./certificates}:/etc/veloray/certificates:ro"]
     healthcheck:
       test: [CMD, /bin/bash, /usr/local/bin/veloray-container, health-agent]
       interval: 10s
@@ -76,11 +84,11 @@ services:
     environment:
       <<: *panel-env
       VELORAY_LISTEN: 127.0.0.1:8610
-      VELORAY_ADMIN_USERNAME: admin
+      VELORAY_ADMIN_USERNAME: ${VELORAY_ADMIN_USERNAME:-admin}
       VELORAY_ADMIN_PASSWORD_FILE: /run/secrets/admin_password
       VELORAY_LOCAL_NODE_TOKEN_FILE: /run/secrets/agent_token
     secrets: [database_password, secret_key, field_key, admin_password, agent_token]
-    volumes: [../../examples/subscription:/etc/veloray/templates:ro, proxy-control:/run/veloray-proxy:ro]
+    volumes: ["${VELORAY_TEMPLATE_DIRECTORY:-../../examples/subscription}:/etc/veloray/templates:ro", proxy-control:/run/veloray-proxy:ro]
     depends_on:
       db: {condition: service_healthy}
       agent: {condition: service_healthy}
@@ -99,7 +107,7 @@ services:
       VELORAY_LISTEN: 127.0.0.1:8612
       VELORAY_SUBSCRIPTION_ONLY: "true"
     secrets: [database_password, secret_key, field_key]
-    volumes: [../../examples/subscription:/etc/veloray/templates:ro]
+    volumes: ["${VELORAY_TEMPLATE_DIRECTORY:-../../examples/subscription}:/etc/veloray/templates:ro"]
     depends_on:
       panel: {condition: service_healthy}
     healthcheck:
@@ -108,8 +116,8 @@ services:
       timeout: 5s
       retries: 12
   proxy:
-    image: veloray-proxy:local
-    build: {context: ../.., target: proxy}
+    image: ${VELORAY_PROXY_IMAGE:-veloray-proxy:local}
+    build: {context: "${VELORAY_SOURCE_DIRECTORY:-../..}", target: proxy}
     user: "10003:10001"
     network_mode: host
     read_only: true
@@ -119,6 +127,8 @@ services:
     security_opt: [no-new-privileges:true]
     environment:
       VELORAY_DOMAIN: ${VELORAY_DOMAIN}
+      VELORAY_PANEL_PORT: ${VELORAY_PANEL_PORT:-443}
+      VELORAY_TLS_MODE: ${VELORAY_TLS_MODE:-auto}
       VELORAY_SUBSCRIPTION_PORT: ${VELORAY_SUBSCRIPTION_PORT:-8444}
     tmpfs: ["/tmp:rw,noexec,nosuid,size=16m,mode=1777"]
     volumes: [caddy-data:/data, caddy-config:/config, proxy-control:/run/veloray-proxy]

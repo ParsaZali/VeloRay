@@ -36,6 +36,7 @@ def generate(directory: Path, domain: str) -> None:
         with env.open("x", encoding="utf-8") as stream:
             stream.write(f"VELORAY_DOMAIN={domain.lower()}\n")
         env.chmod(0o600)
+        (directory / "certificates").mkdir(mode=0o755)
     except BaseException:
         # Leave partial state for explicit operator recovery; never replace keys.
         raise

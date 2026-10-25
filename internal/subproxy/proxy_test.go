@@ -92,6 +92,21 @@ func TestConfigurationIsFixedAndDomainValidated(t *testing.T) {
 	}
 }
 
+func TestCustomPanelPortAndLocalTLSRemainIndependent(t *testing.T) {
+	raw := configurationFor("2001:db8::1", 100, 24443, "local")
+	for _, expected := range []string{"https://[2001:db8::1]:24443 {", "https://[2001:db8::1]:100 {", "tls internal", "auto_https disable_redirects", "reverse_proxy 127.0.0.1:8610", "reverse_proxy 127.0.0.1:8612"} {
+		if !strings.Contains(raw, expected) {
+			t.Fatalf("missing %s: %s", expected, raw)
+		}
+	}
+	c := &controller{domain: "example.com", port: 8444, panelPort: 24443}
+	w := httptest.NewRecorder()
+	c.ServeHTTP(w, httptest.NewRequest("PUT", "/port", strings.NewReader(`{"port":24443}`)))
+	if w.Code != 400 {
+		t.Fatal("subscription took panel port", w.Code)
+	}
+}
+
 func TestUnavailableSubscriptionBackendDoesNotMoveListener(t *testing.T) {
 	called := false
 	c := &controller{domain: "example.com", port: 8444, health: func(context.Context) error { return errors.New("backend offline") }, reload: func(context.Context, string) error { called = true; return nil }, persist: func(int) error { called = true; return nil }}

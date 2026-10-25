@@ -14,6 +14,7 @@ func salesExperienceSpec(paths, schemas Data) {
 	id := []any{Data{"name": "id", "in": "path", "required": true, "schema": integer}}
 	owner := Data{"name": "owner", "in": "query", "schema": integer, "description": "Authorized seller; omit for self"}
 	schemas["ClientUsage"] = object(Data{"client_id": integer, "account_id": integer, "used_bytes": integer, "limit_bytes": integer, "remaining_bytes": Data{"type": []any{"integer", "null"}}, "unlimited": boolean, "raw_upload_bytes": integer, "raw_download_bytes": integer, "raw_used_bytes": integer, "used_bytes_exact": text, "remaining_bytes_exact": Data{"type": []any{"string", "null"}}, "telemetry_at": Data{"type": []any{"string", "null"}}, "telemetry_fresh": boolean, "account_shared": boolean, "online": Data{"type": []any{"boolean", "null"}}, "usage_metered": boolean})
+	paths["/api/deployment"] = Data{"get": Data{"summary": "Administrator-only deployment metadata; does not expose Docker daemon access or secrets", "responses": response}}
 	paths["/api/clients/{id}/usage"] = Data{"parameters": id, "get": Data{"summary": "Owner-scoped exact-byte accounting, remaining quota and telemetry freshness; null remaining means unlimited; shared account billing must not be counted per connection", "responses": response}}
 	botProps := Data{}
 	for k, v := range salesDefaults() {

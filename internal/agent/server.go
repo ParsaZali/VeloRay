@@ -499,6 +499,21 @@ func Serve(ctx context.Context, version string) (serveErr error) {
 			if err = initializeProcessCore(manager); err != nil {
 				return err
 			}
+
+		}
+	}
+	var updater *CoreUpdater
+	if directory := os.Getenv("VELORAY_CORE_DIRECTORY"); directory != "" {
+		updater, err = NewCoreUpdater(ctx, directory, map[string]*Manager{"xray": m, "singbox": second})
+		if err != nil {
+			return err
+		}
+	}
+	if processes != nil {
+		for _, manager := range []*Manager{m, second} {
+			if manager == nil {
+				continue
+			}
 			raw, readErr := os.ReadFile(manager.ConfigPath)
 			if readErr != nil {
 				return readErr
@@ -509,13 +524,6 @@ func Serve(ctx context.Context, version string) (serveErr error) {
 			if err = manager.Restart(ctx); err != nil {
 				return err
 			}
-		}
-	}
-	var updater *CoreUpdater
-	if directory := os.Getenv("VELORAY_CORE_DIRECTORY"); directory != "" && mode == "systemd" {
-		updater, err = NewCoreUpdater(ctx, directory, map[string]*Manager{"xray": m, "singbox": second})
-		if err != nil {
-			return err
 		}
 	}
 	go m.Poll(ctx)

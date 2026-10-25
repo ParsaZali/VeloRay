@@ -77,7 +77,7 @@ func (s *Server) validateOrderCapacity(ctx context.Context, q Query, owner Data,
 	return validateClientOwner(ctx, q, Actor{User: owner, Scope: "admin"}, c, kind == "purchase")
 }
 func supportsClientDevices(protocol string) bool {
-	return oneOf(protocol, "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell", "shadowtls", "mtproto")
+	return oneOf(protocol, "vless", "vmess", "trojan", "hysteria", "tuic", "anytls", "naive", "snell", "shadowtls", "mtproto")
 }
 func offeredPolicy(protocol string, policy Data, grant int64) error {
 	if grant > 0 && !metered(protocol) {

@@ -33,8 +33,9 @@ fail() {
 usage() {
  cat <<'HELP'
 VeloRay installer
-  install.sh [install|node] [--database postgresql] [--lang en|fa]
+  install.sh [install|node] [--mode docker|native] [--database postgresql] [--lang en|fa]
              [--repo OWNER/REPOSITORY] [--ref BRANCH_OR_TAG_OR_COMMIT]
+Docker is the default for panel installations. Existing native data is migrated with a recovery backup.
 PostgreSQL is the supported database. Default repository: ParsaZali/VeloRay, ref: main.
 HELP
 }
@@ -77,27 +78,29 @@ check_archive() {
 action=install
 database=postgresql
 language=en
+mode="${VELORAY_INSTALL_MODE:-docker}"
 repository="${VELORAY_REPO:-ParsaZali/VeloRay}"
 reference="${VELORAY_REF:-main}"
 if [[ "${1:-}" == install || "${1:-}" == node ]];then action="$1";shift;fi
 while [[ $# -gt 0 ]];do
  case "$1" in
   --help|-h) usage;exit 0;;
-  --database|--lang|--repo|--ref)
+  --database|--lang|--repo|--ref|--mode)
    [[ $# -ge 2 && -n "$2" && "$2" != --* ]]||fail "Missing value for $1."
-   case "$1" in --database) database="$2";;--lang) language="$2";;--repo) repository="$2";;--ref) reference="$2";;esac
+   case "$1" in --database) database="$2";;--lang) language="$2";;--repo) repository="$2";;--ref) reference="$2";;--mode) mode="$2";;esac
    shift 2;;
   *) fail "Unknown argument: $1. Run install.sh --help.";;
  esac
 done
 [[ "$database" == postgresql ]]||fail 'Only PostgreSQL is supported; SQLite, MySQL, MariaDB and TimescaleDB options are unavailable.'
 [[ "$language" == en || "$language" == fa ]]||fail 'Language must be en or fa.'
+[[ "$mode" == docker || "$mode" == native ]]||fail 'Mode must be docker or native.'
 [[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ && "$repository" != *..* ]]||fail 'Invalid repository name.'
 [[ "$reference" =~ ^[A-Za-z0-9_.-]+$ && "$reference" != *..* ]]||fail 'Invalid ref; use a simple branch, tag or full commit SHA.'
 [[ ${EUID:-$(id -u)} -eq 0 ]]||fail 'Run the installer with sudo.'
 [[ -r /etc/os-release ]]||fail 'Cannot identify the operating system.'
 source /etc/os-release
-[[ "${ID:-}" == ubuntu && "${VERSION_ID:-}" == 24.04 ]]||fail 'This installer supports Ubuntu 24.04.'
+[[ "${ID:-}" == ubuntu && ( "${VERSION_ID:-}" == 24.04 || ( "$mode" == docker && "$action" == install && "${VERSION_ID:-}" == 22.04 ) ) ]]||fail 'Docker supports Ubuntu 22.04/24.04; native and node installation require Ubuntu 24.04.'
 case "$(uname -m)" in x86_64) arch=amd64;node_arch=x64;xray_asset=Xray-linux-64.zip;;aarch64|arm64) arch=arm64;node_arch=arm64;xray_asset=Xray-linux-arm64-v8a.zip;;*) fail 'Unsupported CPU architecture.';;esac
 
 temporary="$(mktemp -d)"
@@ -113,7 +116,7 @@ vr_say 'Server installation' 'نصب روی سرور'
 vr_say "Log: $VELORAY_INSTALL_LOG" "گزارش: $VELORAY_INSTALL_LOG"
 vr_step 'Prepare system packages' 'آماده‌سازی بسته‌های سیستم'
 packages=(ca-certificates curl jq tar xz-utils unzip openssl iproute2 python3)
-[[ "$action" != install ]]||packages+=(postgresql postgresql-client nginx certbot python3)
+[[ "$action" != install || "$mode" == docker ]]||packages+=(postgresql postgresql-client nginx certbot python3)
 apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
 vr_run_visible env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get "${apt_options[@]}" update
 vr_run_visible env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get "${apt_options[@]}" install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "${packages[@]}"
@@ -141,6 +144,21 @@ if [[ -z "$source_directory" || ! -f "$source_directory/go.mod" || ! -f "$source
  tar --no-same-owner --no-same-permissions -xzf "$temporary/source.tar.gz" -C "$source_directory" --strip-components=1
 fi
 [[ -f "$source_directory/go.mod" && -f "$source_directory/frontend/package-lock.json" && -f "$source_directory/scripts/install-panel.sh" ]]||fail 'The selected repository does not contain a complete VeloRay project.'
+
+if [[ "$action" == install && "$mode" == docker ]];then
+ export VELORAY_INSTALL_REPO="$repository" VELORAY_INSTALL_REF="$reference"
+ [[ -f "$source_directory/deploy/docker/manage.py" ]]||fail 'This revision does not include the Docker installer.'
+ vr_step 'Verify container runtime bundles' 'بررسی بسته‌های اجرای کانتینری'
+ vr_run bash "$source_directory/scripts/verify-runtime.sh" "$arch"
+ vr_step 'Install Docker Engine and Compose' 'نصب Docker و Compose'
+ vr_run_visible bash "$source_directory/deploy/docker/install-engine.sh"
+ if { true </dev/tty; } 2>/dev/null;then
+  python3 "$source_directory/deploy/docker/manage.py" install --source "$source_directory" </dev/tty
+ else
+  python3 "$source_directory/deploy/docker/manage.py" install --source "$source_directory"
+ fi
+ exit 0
+fi
 
 prepare_runtime() {
  local archive="$source_directory/runtime/linux-$arch.tar.xz" checksum bundle="$temporary/runtime"

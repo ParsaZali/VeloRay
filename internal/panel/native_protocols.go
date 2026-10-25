@@ -62,14 +62,14 @@ func normalizeNaiveTelemetry(stats Data) {
 
 func validateNativeProtocol(d Data) error {
 	p := str(d, "protocol")
-	if !oneOf(p, "tuic", "naive", "snell") {
+	if !oneOf(p, "tuic", "anytls", "naive", "snell") {
 		return nil
 	}
 	if str(d, "core") != "singbox" || str(d, "transport") != "raw" {
-		return errors.New("TUIC, Naive and Snell require sing-box and RAW transport")
+		return errors.New("TUIC, AnyTLS, Naive and Snell require sing-box and RAW transport")
 	}
-	if oneOf(p, "tuic", "naive") && str(d, "security") != "tls" {
-		return errors.New("TUIC and Naive require TLS")
+	if oneOf(p, "tuic", "anytls", "naive") && str(d, "security") != "tls" {
+		return errors.New("TUIC, AnyTLS and Naive require TLS")
 	}
 	if p == "snell" && str(d, "security") != "none" {
 		return errors.New("Snell v6 uses its own encryption; stream security must be none")
@@ -108,6 +108,8 @@ func nativeSingInbound(v, i Data, accounts []any) bool {
 		v["zero_rtt_handshake"] = flag(ps, "zero_rtt_handshake")
 		v["auth_timeout"] = "3s"
 		v["heartbeat"] = "10s"
+	case "anytls":
+		// The core supplies its safe default padding scheme.
 	case "naive":
 		v["network"] = "tcp"
 	case "snell":

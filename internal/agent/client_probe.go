@@ -46,7 +46,7 @@ func (m *Manager) probeClientAt(ctx context.Context, raw []byte, target *url.URL
 	if len(entries) > 16 {
 		return nil, errors.New("too many client test dependencies")
 	}
-	allowed := map[string]bool{"vless": true, "vmess": true, "trojan": true, "shadowsocks": true, "http": true, "socks": true, "hysteria2": true, "tuic": true, "snell": true, "shadowtls": true}
+	allowed := map[string]bool{"vless": true, "vmess": true, "trojan": true, "shadowsocks": true, "http": true, "socks": true, "hysteria2": true, "tuic": true, "anytls": true, "snell": true, "shadowtls": true}
 	for _, value := range entries {
 		entry, _ := value.(map[string]any)
 		protocol, _ := entry["protocol"].(string)

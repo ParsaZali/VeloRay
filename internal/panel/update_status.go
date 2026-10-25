@@ -27,6 +27,9 @@ type updateCache struct {
 }
 
 func installedCommit() string {
+	if value := os.Getenv("VELORAY_INSTALLED_COMMIT"); os.Getenv("VELORAY_DEPLOYMENT") == "docker" && commitIDPattern.MatchString(value) {
+		return value
+	}
 	raw, _ := os.ReadFile(installedCommitPath)
 	candidate := strings.TrimSpace(string(raw))
 	if commitIDPattern.MatchString(candidate) {
@@ -35,6 +38,9 @@ func installedCommit() string {
 	return ""
 }
 func (s *Server) nativeControlAvailable() bool {
+	if os.Getenv("VELORAY_DEPLOYMENT") == "docker" {
+		return s.Config.SubscriptionDriver == "caddy" && os.Getenv("VELORAY_HOST_CONTROL") == "true"
+	}
 	_, err := os.Lstat(hostControlTimerLink)
 	return s.Config.SubscriptionDriver == "native" && err == nil
 }
@@ -144,7 +150,7 @@ func (s *Server) updatesAPI(w http.ResponseWriter, r *http.Request, path string,
 		return nil, 0, fail(405, "method not allowed")
 	}
 	if !s.nativeControlAvailable() {
-		return nil, 0, fail(409, "Web updates require the native VeloRay host control service.")
+		return nil, 0, fail(409, "Web updates require the VeloRay host control service.")
 	}
 	in, err := readBody(w, r)
 	if err != nil {
