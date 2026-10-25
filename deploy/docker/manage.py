@@ -278,7 +278,16 @@ def health():
 
 
 def up():
-    compose('up', '-d', '--no-build', '--wait', '--wait-timeout', '240')
+    try:
+        compose('up', '-d', '--no-build', '--wait', '--wait-timeout', '240')
+    except subprocess.SubprocessError:
+        # The disposable CI fixture contains synthetic accounts only. Capture
+        # its startup failure before migration rollback removes the container;
+        # production core output stays out of installation logs.
+        if os.environ.get('VELORAY_MANAGED_DOCKER_TEST') == '1':
+            with contextlib.suppress(Exception):
+                compose('logs', '--tail', '20', 'agent')
+        raise
     for attempt in range(40):
         try:
             health()
@@ -410,6 +419,10 @@ def backup(path=None):
     path = Path(path or BACKUPS / ('docker-' + time.strftime('%Y%m%dT%H%M%SZ', time.gmtime()) + '-' + secrets.token_hex(3) + '.tar.gz')).resolve()
     if path.exists():
         raise ValueError('Backup already exists; choose another filename')
+    # A retained uninstall removes the containers, including PostgreSQL.
+    # Recreate the verified previous deployment before taking its coordinated
+    # snapshot so reinstalling a newer revision succeeds on the first attempt.
+    up()
     compose('stop', '-t', '30', *SERVICES)
     try:
         with tempfile.TemporaryDirectory(prefix='veloray-docker-backup-') as tmp:

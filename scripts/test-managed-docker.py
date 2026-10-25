@@ -154,6 +154,9 @@ try:
     login(password)
     assert request('GET', '/api/clients/' + str(previous['id']))['credential'] == previous['credential']
     subprocess.run(['/usr/local/bin/veloray', 'uninstall'], input=b'REMOVE\n', check=True)
+    with tempfile.TemporaryDirectory(prefix='veloray-retained-backup-') as tmp:
+        subprocess.run(['/usr/local/bin/veloray', 'backup', str(Path(tmp) / 'removed.tar.gz')], check=True)
+        assert (Path(tmp) / 'removed.tar.gz').is_file()
     subprocess.run(['bash', 'install.sh', '--mode', 'docker'], cwd=ROOT, env=env, check=True)
     login(password)
     assert request('GET', '/api/clients/' + str(previous['id']))['credential'] == previous['credential']
