@@ -7,10 +7,12 @@ import json
 import os
 from pathlib import Path
 import ssl
+import socket
 import subprocess
 import sys
 import tempfile
 import time
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 if os.geteuid() != 0 or os.environ.get('VELORAY_MANAGED_DOCKER_TEST') != '1':
@@ -114,6 +116,17 @@ try:
         connection.close()
     else:
         previous, node = fixture()
+    # Exercise both protected listeners, including the actual subscription
+    # response. Panel health alone would miss a failed low-port proxy bind.
+    subscription = urlsplit(previous['subscription_url'])
+    assert subscription.port == 100, subscription
+    connection = http.client.HTTPSConnection('127.0.0.1', 100, timeout=10, context=ssl._create_unverified_context())
+    connection.request('GET', subscription.path + '?format=raw')
+    response = connection.getresponse()
+    assert response.status == 200 and b'vless://' in response.read()
+    connection.close()
+    with socket.create_connection(('127.0.0.1', 101), timeout=10):
+        pass
     manager = request('GET', f'/api/nodes/{node["id"]}/core-manager')
     assert 'cores' in manager
     # The UI job is processed by the root host worker, without a socket mount.
