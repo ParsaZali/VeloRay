@@ -62,6 +62,7 @@ jobs:
       - run: go build -buildvcs=false ./cmd/veloray && go build -buildvcs=false ./cmd/veloray-agent
   containers:
     strategy:
+      fail-fast: false
       matrix:
         host: [ubuntu-22.04, ubuntu-24.04]
     runs-on: ${{ matrix.host }}
