@@ -158,7 +158,10 @@ test ! -s "$TEST_ROOT/calls";pass concurrent-installation-blocked
 export TEST_APT_FAILURE=1
 : >"$TEST_ROOT/requests"
 if bash "$TEST_ROOT/bootstrap.sh" install >"$TEST_ROOT/result" 2>&1;then echo 'Failed packages accepted' >&2;exit 1;fi
-grep -Fq 'Package repository unavailable' "$TEST_ROOT/result"
+if grep -Fq 'Package repository unavailable' "$TEST_ROOT/result";then echo 'Raw package errors leaked into the summary' >&2;exit 1;fi
+operation_log="$(sed -n 's/^Log: //p' "$TEST_ROOT/result" | head -n 1)"
+grep -Fq 'Package repository unavailable' "$operation_log"
+test "$(stat -c %a "$operation_log")" = 600
 grep -Fq 'Failed: Prepare system packages' "$TEST_ROOT/result"
 test ! -s "$TEST_ROOT/requests";test ! -s "$TEST_ROOT/calls"
 pass visible-package-failure-stops-installation
@@ -195,7 +198,7 @@ grep -Fq -- '--max-time 45' "$TEST_ROOT/curl-options"
 grep -Fq -- '--max-time 900' "$TEST_ROOT/curl-options"
 grep -F 'codeload.github.com/' "$TEST_ROOT/curl-options" | grep -Fq -- '--max-time 3600'
 if grep -vF -- '--speed-time 30 --speed-limit 1024' "$TEST_ROOT/curl-options" | grep -q .;then echo 'Download lacks a stall timeout' >&2;exit 1;fi
-if grep -vF -- '--no-silent --no-progress-bar --progress-meter' "$TEST_ROOT/curl-options" | grep -q .;then echo 'Download lacks a byte and speed meter' >&2;exit 1;fi
+if grep -vF -- '--silent --show-error --no-progress-meter' "$TEST_ROOT/curl-options" | grep -q .;then echo 'Downloads must use concise summaries and show failures' >&2;exit 1;fi
 pass visible-downloads-and-stall-timeouts
 export TEST_SOURCE_ROUTE=unavailable
 : >"$TEST_ROOT/calls"

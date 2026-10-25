@@ -10,6 +10,10 @@ Supported hosts are Ubuntu 22.04/24.04 on amd64/arm64. Enter a domain or public 
 
 The panel, subscription process, agent, Xray/sing-box/native protocol runtimes, PostgreSQL and HTTPS proxy run inside containers. Docker Engine and small root-only maintenance timers run on the host. The default preserves host networking for arbitrary operator-selected TCP/UDP listener ports. It does not mount the Docker socket or run privileged containers.
 
+Installation shows concise stages and a final **Panel / Username / Management** summary. Package and image-build details go to the private log printed at startup; set `VELORAY_VERBOSE=1` for live command output. Native certificate checks run before Docker installation. Missing files needed by active TLS or the saved core configuration are reported by exact path; unused TLS fields on disabled/plain/Reality inbounds do not block migration. Restore a required missing certificate or correct its active inbound path before retrying. The failure summary labels any saved panel address as unverified rather than claiming a successful installation.
+
+Retained native uninstalls are supported even after `veloray` was removed: migration uses the verified bundled CLI to create its recovery backup. Original native configuration and database are preserved through preflight failures.
+
 ## Management
 
 ```bash

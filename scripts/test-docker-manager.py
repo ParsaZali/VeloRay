@@ -11,6 +11,7 @@ import tarfile
 import tempfile
 import threading
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +55,71 @@ class ManagerTests(unittest.TestCase):
                 m.write_env({'VALUE': value})
         self.assertEqual(m.read_env(self.config / '.env'), self.values)
         self.assertEqual((self.config / '.env').stat().st_mode & 0o777, 0o600)
+
+    def test_installation_output_hides_commands_and_keeps_captured_secrets_out_of_logs(self):
+        log = self.root/'install.log'
+        log.touch(mode=0o600)
+        console = io.StringIO()
+        with patch.dict(os.environ, {'VELORAY_INSTALL_LOG':str(log)}), redirect_stdout(console), m.installation_output():
+            m.install_step('Build images', 'ساخت ایمیج')
+            m.run(['/bin/sh','-c','echo package-progress; echo build-warning >&2'])
+            value = m.output(['/bin/sh','-c','printf captured-private-token'])
+        self.assertEqual(value, b'captured-private-token')
+        self.assertIn('Build images', console.getvalue())
+        self.assertNotIn('package-progress', console.getvalue())
+        self.assertIn('package-progress', log.read_text())
+        self.assertIn('build-warning', log.read_text())
+        self.assertNotIn('captured-private-token', log.read_text())
+        log.chmod(0o644)
+        with patch.dict(os.environ, {'VELORAY_INSTALL_LOG':str(log)}), self.assertRaises(ValueError):
+            with m.installation_output():
+                pass
+
+    def test_saved_unused_tls_paths_do_not_block_migration(self):
+        missing = str(self.root/'old-missing.pem')
+        records = [{'node_enabled': True, 'data': {'enabled': enabled, 'security':security, 'tls_cert_file':missing}} for enabled,security in ((False,'tls'),(True,'none'),(True,'reality'))]
+        records += [{'node_enabled':False,'data':{'enabled':True,'security':'tls','tls_key_file':missing}}]
+        self.assertEqual(m.native_certificate_paths(records, []), [])
+        config = self.root/'core.json'
+        config.write_text(json.dumps({'streamSettings':{'security':'none','tlsSettings':{'certificates':[{'keyFile':missing}]}}}))
+        self.assertEqual(m.native_certificate_paths([], [config]), [])
+
+    def test_missing_required_tls_reports_exact_paths_and_checks_runtime_references(self):
+        certificate, key = str(self.root/'missing-cert.pem'), str(self.root/'missing-key.pem')
+        records = [{'node_enabled':True, 'data':{'enabled':True,'security':'tls','protocol':'trojan','tls_cert_file':certificate,'tls_key_file':key}}]
+        with self.assertRaises(ValueError) as error:
+            m.native_certificate_paths(records, [])
+        self.assertIn(certificate, str(error.exception))
+        self.assertIn(key, str(error.exception))
+        config = self.root/'core.json'
+        config.write_text(json.dumps({'streamSettings':{'security':'tls','tlsSettings':{'certificates':[{'keyFile':key}]}}}))
+        with self.assertRaises(ValueError):
+            m.native_certificate_paths([], [config])
+        Path(key).write_text('fixture-key')
+        self.assertEqual(m.native_certificate_paths([], [config]), [key])
+
+    def test_success_summary_has_panel_and_management_without_logging_password(self):
+        (self.config/'secrets').mkdir()
+        (self.config/'secrets/admin_password').write_text('private-bootstrap-password')
+        console = io.StringIO()
+        with redirect_stdout(console):
+            m.show_credentials(dict(self.values, VELORAY_ADMIN_USERNAME='test-admin'))
+        self.assertIn('Panel: https://vpn.example:24443', console.getvalue())
+        self.assertIn('Management: sudo veloray', console.getvalue())
+        self.assertNotIn('private-bootstrap-password', console.getvalue())
+
+    def test_native_backup_uses_bundled_cli_without_installed_management_files(self):
+        runtime = self.source/'runtime'
+        runtime.mkdir()
+        body = b'#!/bin/sh\nset -e\ntest "$1" = backup\ntest "$POSTGRES_PASSWORD" = preserved-database-secret\nprintf fixture-backup > "$2"\n'
+        with tarfile.open(runtime/'linux-amd64.tar.xz', 'w:xz') as archive:
+            entry = tarfile.TarInfo('bin/linux-amd64/veloray')
+            entry.size, entry.mode = len(body), 0o755
+            archive.addfile(entry, io.BytesIO(body))
+        target = self.root/'native-recovery.tar.gz'
+        with patch.object(m.platform, 'machine', return_value='x86_64'):
+            m.native_recovery_backup(self.source, target, {'POSTGRES_PASSWORD':'preserved-database-secret'})
+        self.assertEqual(target.read_bytes(), b'fixture-backup')
 
     def test_foreground_command_waits_for_short_maintenance_and_keeps_exclusion(self):
         path = self.root/'operation.lock'

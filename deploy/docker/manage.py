@@ -9,12 +9,14 @@ import hashlib
 import ipaddress
 import json
 import os
+import platform
 from pathlib import Path
 import re
 import secrets
 import shutil
 import socket
 import ssl
+import stat
 import subprocess
 import sys
 import tarfile
@@ -31,6 +33,8 @@ REPO = 'ParsaZali/VeloRay'
 SERVICES = ['proxy', 'subscriptions', 'panel', 'agent']
 DATA = {'agent': '/var/lib/veloray-agent', 'proxy': '/data'}
 RESERVED = {80, 5432, 8610, 8611, 8612, 9191, 10085, 10086, 10087}
+INSTALL_LOG = None
+INSTALL_STEP = None
 
 
 def say(en, fa=None, color=None):
@@ -41,7 +45,39 @@ def say(en, fa=None, color=None):
 
 
 def run(args, **kwargs):
+    if INSTALL_LOG is not None and os.environ.get('VELORAY_VERBOSE') != '1':
+        # Captured SQL/secret values stay in their pipe, never in the log.
+        kwargs.setdefault('stdout', INSTALL_LOG)
+        kwargs.setdefault('stderr', INSTALL_LOG)
     return subprocess.run([str(x) for x in args], check=True, **kwargs)
+
+
+@contextlib.contextmanager
+def installation_output():
+    global INSTALL_LOG
+    path = os.environ.get('VELORAY_INSTALL_LOG')
+    if not path:
+        yield
+        return
+    descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_NOFOLLOW)
+    info = os.fstat(descriptor)
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+        os.close(descriptor)
+        raise ValueError('The installation log must be a private regular file owned by the installer')
+    previous = INSTALL_LOG
+    with os.fdopen(descriptor, 'ab', buffering=0) as stream:
+        INSTALL_LOG = stream
+        try:
+            yield
+        finally:
+            INSTALL_LOG = previous
+
+
+def install_step(en, fa):
+    global INSTALL_STEP
+    if INSTALL_LOG is not None:
+        INSTALL_STEP = fa if os.environ.get('VELORAY_INSTALL_LANG') == 'fa' else en
+        say('  • ' + en, '  • ' + fa)
 
 
 def output(args, **kwargs):
@@ -349,6 +385,7 @@ def schedule(kind, action):
 
 
 def install(source):
+    install_step('Verify VeloRay files', 'بررسی فایل‌های VeloRay')
     sha = revision(source)
     source = stage(source, sha)
     if (CONFIG / 'migration-pending.json').exists():
@@ -356,7 +393,9 @@ def install(source):
     if (CONFIG / '.env').exists():
         say('Existing Docker data and keys will be preserved.', 'اطلاعات و کلیدهای نصب قبلی حفظ می‌شوند.')
         if (CONFIG / 'installing').exists():
+            install_step('Build application images', 'آماده‌سازی ایمیج‌ها')
             compose('build', 'panel', 'proxy')
+            install_step('Start services and verify HTTPS', 'راه‌اندازی سرویس‌ها و بررسی HTTPS')
             up()
             install_tools()
             (CONFIG / 'installing').unlink()
@@ -377,7 +416,9 @@ def install(source):
     write_env(deployment_values(values, source, sha))
     atomic(CONFIG / 'installing', sha)
     compose('config', '--quiet')
+    install_step('Build application images', 'آماده‌سازی ایمیج‌ها')
     compose('build', 'panel', 'proxy')
+    install_step('Start services and verify HTTPS', 'راه‌اندازی سرویس‌ها و بررسی HTTPS')
     up()
     install_tools()
     sync_certificate()
@@ -397,19 +438,21 @@ def native_environment_for_install(path):
 
 
 def show_credentials(values, migrated=False):
-    say('✓ VeloRay is running in Docker.', '✓ سرویس‌های VeloRay داخل Docker اجرا شدند.', '32')
-    print(origin(values))
+    say('\n  ✓ Installation complete', '\n  ✓ نصب کامل شد', '32')
+    say('  Panel: ' + origin(values), '  آدرس پنل: ' + origin(values))
     if not migrated:
-        print('Username: ' + values['VELORAY_ADMIN_USERNAME'])
+        say('  Username: ' + values['VELORAY_ADMIN_USERNAME'], '  نام کاربری: ' + values['VELORAY_ADMIN_USERNAME'])
         # Only the interactive operator sees the generated credential; never tee
         # it into the installation log or a CI artifact.
         if sys.stdout.isatty():
-            print('Password: ' + (CONFIG / 'secrets/admin_password').read_text().strip())
+            password = (CONFIG / 'secrets/admin_password').read_text().strip()
+            say('  Password: ' + password, '  رمز عبور: ' + password)
         else:
-            print('Password file (root only): /etc/veloray/docker/secrets/admin_password')
+            say('  Password file (root only): /etc/veloray/docker/secrets/admin_password', '  فایل رمز (مخصوص root): /etc/veloray/docker/secrets/admin_password')
     else:
         say('Existing accounts, credentials and subscription tokens were preserved.', 'حساب‌ها، رمزها و شناسه‌های اشتراک قبلی حفظ شدند.')
-    print('Management: sudo veloray')
+    say('  Management: sudo veloray', '  مدیریت: sudo veloray')
+    say('  Reset password: sudo veloray reset\n', '  تغییر رمز: sudo veloray reset\n')
     if values.get('VELORAY_TLS_MODE') == 'local':
         say('HTTPS uses a local certificate. Set a domain using sudo veloray domain HOST for public TLS.', 'گواهی HTTPS محلی است؛ برای گواهی معتبر دامنه را با sudo veloray domain HOST تنظیم کنید.', '33')
 
@@ -677,15 +720,18 @@ def upgrade(source, sha):
     # Build while the previous services remain live. Revisions have unique tags.
     write_env(deployment_values(values, source, sha))
     try:
+        install_step('Build application images', 'آماده‌سازی ایمیج‌ها')
         compose('build', 'panel', 'proxy', source=source)
     except BaseException:
         write_env(before)
         raise
     write_env(before)
+    install_step('Create recovery backup', 'ساخت پشتیبان بازیابی')
     recovery = backup()
     try:
         write_env(deployment_values(values, source, sha))
         link(source)
+        install_step('Start services and verify HTTPS', 'راه‌اندازی سرویس‌ها و بررسی HTTPS')
         up()
         install_tools()
     except BaseException:
@@ -695,6 +741,8 @@ def upgrade(source, sha):
         restore(recovery, confirmed=True)
         raise
     say('✓ Docker update completed.', '✓ آپدیت کانتینرها کامل شد.', '32')
+    if INSTALL_LOG is not None:
+        show_credentials(values, migrated=True)
 
 
 def set_address(key, value):
@@ -839,6 +887,64 @@ def migrate(source, sha, native):
         raise
 
 
+def native_query(native, statement):
+    environment = dict(os.environ, PGHOST=native.get('POSTGRES_HOST', '127.0.0.1'), PGPORT=native.get('POSTGRES_PORT', '5432'), PGUSER=native.get('POSTGRES_USER', 'veloray'), PGDATABASE=native.get('POSTGRES_DB', 'veloray'), PGPASSWORD=native['POSTGRES_PASSWORD'])
+    return output(['psql', '-X', '-v', 'ON_ERROR_STOP=1', '-tA', '-c', statement], env=environment).decode().strip()
+
+
+def native_certificate_paths(records, configs):
+    required = set()
+    for record in records:
+        data = record['data']
+        if data.get('enabled') is True and record.get('node_enabled') is True and data.get('security') == 'tls' and data.get('protocol') not in ('wireguard', 'tun', 'tunnel'):
+            required.update(value for key in ('tls_cert_file', 'tls_key_file') if (value := data.get(key)))
+    def collect(value):
+        if isinstance(value, list):
+            for item in value:
+                collect(item)
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                if key == 'tlsSettings' and value.get('security') != 'tls':
+                    continue
+                if key == 'tls' and isinstance(item, dict) and item.get('enabled') is False:
+                    continue
+                if key in ('certificateFile', 'keyFile', 'certificate_path', 'key_path') and isinstance(item, str) and item:
+                    required.add(item)
+                else:
+                    collect(item)
+    for config in configs:
+        if config.is_file():
+            collect(json.loads(config.read_text()))
+    missing = []
+    for value in sorted(required):
+        path = Path(value)
+        if not path.is_absolute() or '..' in path.parts or not path.is_file():
+            missing.append(json.dumps(value, ensure_ascii=False))
+    if missing:
+        raise ValueError('Required VPN TLS files are missing or invalid:\n  ' + '\n  '.join(missing) + '\nRestore these files or correct the active inbound TLS paths, then rerun the installer. No native service has been stopped.')
+    return sorted(required)
+
+
+def check_native_certificates(native):
+    if not native.get('POSTGRES_PASSWORD'):
+        raise ValueError('The preserved native database password is missing; restore /etc/veloray/veloray.env before migration')
+    rows = json.loads(native_query(native, "SELECT COALESCE(json_agg(json_build_object('id',i.id,'data',i.data,'node_enabled',n.data->'enabled')),'[]'::json) FROM vr_inbounds i JOIN vr_nodes n ON n.id=i.node_id WHERE n.data->>'is_local'='true';"))
+    return native_certificate_paths(rows, [Path('/usr/local/etc/xray/config.json'), Path('/usr/local/etc/sing-box/config.json')])
+
+
+def native_recovery_backup(source, path, native):
+    # Retained native uninstalls remove the management binary. Use the already
+    # verified bundled CLI, without reinstalling or invoking the missing CLI.
+    architecture = {'x86_64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}[platform.machine()]
+    with tempfile.TemporaryDirectory(prefix='veloray-native-backup-') as directory:
+        binary = Path(directory) / 'veloray'
+        with tarfile.open(source / f'runtime/linux-{architecture}.tar.xz') as archive:
+            with archive.extractfile(f'bin/linux-{architecture}/veloray') as stream, binary.open('xb') as target:
+                shutil.copyfileobj(stream, target)
+        binary.chmod(0o700)
+        run([binary, 'backup', path], env={**os.environ, **native, 'VELORAY_ENV_FILE': '/etc/veloray/veloray.env'})
+
+
 def migrate_native(source, sha, native):
     # Preflight all dependencies before stopping a working native installation.
     for key in ('VELORAY_SECRET_KEY', 'VELORAY_FIELD_KEY', 'VELORAY_LOCAL_NODE_TOKEN', 'POSTGRES_PASSWORD'):
@@ -856,16 +962,12 @@ def migrate_native(source, sha, native):
         return output(['psql', '-X', '-v', 'ON_ERROR_STOP=1', '-tA', '-c', statement], env=pg_env).decode().strip()
     if query("SELECT EXISTS(SELECT 1 FROM vr_users WHERE data->>'is_superuser'='true');") != 't':
         raise ValueError('No native administrator was found; repair that account before migration')
-    paths = json.loads(query("SELECT COALESCE(json_agg(path),'[]'::json) FROM (SELECT DISTINCT value AS path FROM vr_inbounds i JOIN vr_nodes n ON n.id=i.node_id CROSS JOIN LATERAL jsonb_each_text(i.data) p WHERE n.data->>'is_local'='true' AND p.key IN ('tls_cert_file','tls_key_file') AND value<>'') s;"))
+    paths = check_native_certificates(native)
     settings_raw = query('SELECT data FROM vr_settings WHERE id=1;')
     cfg = json.loads(settings_raw) if settings_raw else {}
     sub_port = port(cfg.get('_subscription_endpoint', {}).get('applied_port') or sub_port, [panel_port], check=False)
     # Preserve arbitrary administrator-selected certificate paths as read-only
     # file mounts, rather than mounting the host root or silently dropping TLS.
-    for value in paths:
-        path = Path(value)
-        if not path.is_absolute() or '..' in path.parts or not path.is_file():
-            raise ValueError('A configured VPN certificate is missing; fix it before migration')
     enabled_sites = Path('/etc/nginx/sites-enabled')
     if any(p.name != 'veloray' and not unchanged_nginx_welcome(p) for p in enabled_sites.glob('*')):
         raise ValueError('Other nginx sites are active. Move them off ports 80/443 before migrating this dedicated VPN stack')
@@ -892,21 +994,23 @@ def migrate_native(source, sha, native):
             shutil.copy2(Path('/usr/local/bin', name), saved_tools / name)
     atomic(CONFIG / 'migration-pending.json', json.dumps({'active': [], 'enabled': [], 'nginx': False}))
     compose('config', '--quiet')
+    install_step('Build application images', 'آماده‌سازی ایمیج‌ها')
     compose('build', 'panel', 'proxy')
     BACKUPS.mkdir(mode=0o700, parents=True, exist_ok=True)
     recovery = BACKUPS / ('native-before-docker-' + time.strftime('%Y%m%dT%H%M%SZ', time.gmtime()) + '.tar.gz')
     units = ['veloray-web.service', 'veloray-agent.service', 'veloray-subscriptions.service', 'xray.service', 'sing-box.service', 'veloray-host-control.timer', 'veloray-subscription-endpoint.timer', 'veloray-auto-update.timer']
-    active = [unit for unit in units if subprocess.run(['systemctl', 'is-active', '--quiet', unit]).returncode == 0]
-    enabled = [unit for unit in units if subprocess.run(['systemctl', 'is-enabled', '--quiet', unit], stdout=subprocess.DEVNULL).returncode == 0]
+    active = [unit for unit in units if subprocess.run(['systemctl', 'is-active', '--quiet', unit], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0]
+    enabled = [unit for unit in units if subprocess.run(['systemctl', 'is-enabled', '--quiet', unit], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0]
     say('Migrating native services to Docker. A coordinated recovery backup is created first.', 'انتقال سرویس‌های فعلی به Docker؛ ابتدا پشتیبان هماهنگ ساخته می‌شود.', '33')
-    nginx_active = subprocess.run(['systemctl', 'is-active', '--quiet', 'nginx']).returncode == 0
+    nginx_active = subprocess.run(['systemctl', 'is-active', '--quiet', 'nginx'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
     atomic(CONFIG / 'migration-pending.json', json.dumps({'active': active, 'enabled': enabled, 'nginx': nginx_active}))
     try:
+        install_step('Back up native data and transfer services', 'پشتیبان‌گیری و انتقال سرویس‌های قبلی')
         run(['systemctl', 'stop', *active]) if active else None
         # Stop nginx only after verifying there are no other enabled sites.
         if nginx_active:
             run(['systemctl', 'stop', 'nginx'])
-        run(['/usr/local/bin/veloray', 'backup', recovery])
+        native_recovery_backup(source, recovery, native)
         compatibility = CONFIG / 'native'
         compatibility.mkdir(mode=0o700)
         mounts = []
@@ -977,6 +1081,7 @@ def migrate_native(source, sha, native):
                     if not item.is_symlink():
                         os.chown(item, 10002, 10002)
                 copy_volume(copy, 'agent', '/var/lib/veloray-agent', 10002, 10002)
+        install_step('Start services and verify HTTPS', 'راه‌اندازی سرویس‌ها و بررسی HTTPS')
         up()
         for unit in enabled:
             run(['systemctl', 'disable', unit])
@@ -1105,6 +1210,14 @@ def main():
             return
         if command == 'recover-migration':
             return recover_migration()
+        if command == 'preflight':
+            native = native_environment_for_install(Path('/etc/veloray/veloray.env'))
+            if native and not (CONFIG / '.env').exists():
+                install_step('Check native VPN certificates', 'بررسی گواهی‌های اتصال قبلی')
+                if native.get('DATABASE_URL') or native.get('POSTGRES_HOST', '127.0.0.1') not in ('127.0.0.1', 'localhost'):
+                    raise ValueError('External database migration requires an operator-managed dump')
+                check_native_certificates(native)
+            return
         if command == 'install':
             return install(args.source.resolve())
         if not (CONFIG / '.env').is_file():
@@ -1206,12 +1319,35 @@ def main():
             raise ValueError('Use sudo veloray --help or sudo veloray for the management menu')
 
 
+def saved_panel_address():
+    for path in (CONFIG / '.env', Path('/etc/veloray/veloray.env')):
+        if path.is_file():
+            with contextlib.suppress(Exception):
+                values = read_env(path)
+                address = origin(values) if 'VELORAY_DOMAIN' in values else values['VELORAY_PUBLIC_URL']
+                parsed = urllib.parse.urlsplit(address)
+                host(parsed.hostname)
+                if parsed.scheme not in ('http', 'https') or parsed.username or parsed.password or any(c in address for c in '\r\n\033'):
+                    continue
+                say('  Saved panel address (availability unverified): ' + address, '  آدرس ثبت‌شده (وضعیت نامشخص): ' + address, '33')
+                return
+
+
 if __name__ == '__main__':
     try:
-        main()
+        with installation_output() if len(sys.argv) > 1 and sys.argv[1] in ('install', 'preflight') else contextlib.nullcontext():
+            main()
     except (ValueError, OSError, subprocess.SubprocessError) as exc:
         # Subprocess command arguments may contain sensitive environment values;
         # report only the return code, never repr(CalledProcessError.cmd).
         message = f'Operation failed (exit {exc.returncode}).' if isinstance(exc, subprocess.CalledProcessError) else str(exc)
-        say('VeloRay: ' + message, color='31')
+        prefix = INSTALL_STEP or 'VeloRay'
+        if os.environ.get('VELORAY_INSTALL_LOG'):
+            with contextlib.suppress(Exception), installation_output():
+                INSTALL_LOG.write((prefix + ': ' + message + '\n').encode())
+        say('\n  ✗ ' + prefix + ': ' + message, color='31')
+        if len(sys.argv) > 1 and sys.argv[1] in ('install', 'preflight'):
+            saved_panel_address()
+            if os.environ.get('VELORAY_INSTALL_LOG'):
+                say('  Details: sudo tail -n 60 ' + os.environ['VELORAY_INSTALL_LOG'], '  جزئیات: sudo tail -n 60 ' + os.environ['VELORAY_INSTALL_LOG'])
         sys.exit(1)
