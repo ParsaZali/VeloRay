@@ -559,6 +559,19 @@ def restore_ownership(directory, user, group):
         os.lchown(item, user, group)
 
 
+
+def copy_volume(source, service, directory, user, group):
+    # docker cp -a can rewrite ownership to the configured bootstrap user,
+    # rather than the source UID. Extract as the final data owner instead;
+    # no temporary CHOWN/DAC capability or privileged helper is required.
+    with tempfile.TemporaryFile() as stream:
+        with tarfile.open(fileobj=stream, mode='w') as archive:
+            archive.add(source, arcname='.', filter=lambda member: member if member.isfile() or member.isdir() or member.issym() else None)
+        stream.seek(0)
+        compose('run', '--rm', '--no-deps', '-T', '--user', f'{user}:{group}', '--entrypoint', '/bin/tar', service,
+                '--extract', '--file=-', '--directory=' + directory, '--preserve-permissions', '--no-same-owner', stdin=stream)
+
+
 def restore(path, confirmed=False):
     with tempfile.TemporaryDirectory(prefix='veloray-docker-restore-') as tmp:
         root = Path(tmp)
@@ -585,10 +598,10 @@ def restore(path, confirmed=False):
         for service, directory in DATA.items():
             restore_ownership(root / service, 10002 if service == 'agent' else 10003, 10002 if service == 'agent' else 10001)
             compose('run', '--rm', '--no-deps', '--user', '10002:10002' if service == 'agent' else '10003:10001', '--entrypoint', '/bin/sh', service, '-c', f'find {directory} -mindepth 1 -maxdepth 1 -exec rm -rf -- {{}} +')
-            run(['docker', 'cp', '-a', str(root / service) + '/.', cid(service) + ':' + directory])
+            copy_volume(root / service, service, directory, 10002 if service == 'agent' else 10003, 10002 if service == 'agent' else 10001)
         compose('run', '--rm', '--no-deps', '--user', '10003:10001', '--entrypoint', '/bin/sh', 'proxy', '-c', 'find /config -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +')
         restore_ownership(root / 'proxy-config', 10003, 10001)
-        run(['docker', 'cp', '-a', str(root / 'proxy-config') + '/.', cid('proxy') + ':/config'])
+        copy_volume(root / 'proxy-config', 'proxy', '/config', 10003, 10001)
         for item in CONFIG.iterdir():
             if item.is_dir():
                 shutil.rmtree(item)
@@ -963,7 +976,7 @@ def migrate_native(source, sha, native):
                 for item in [copy, *copy.rglob('*')]:
                     if not item.is_symlink():
                         os.chown(item, 10002, 10002)
-                run(['docker', 'cp', '-a', str(copy) + '/.', cid('agent') + ':/var/lib/veloray-agent'])
+                copy_volume(copy, 'agent', '/var/lib/veloray-agent', 10002, 10002)
         up()
         for unit in enabled:
             run(['systemctl', 'disable', unit])
