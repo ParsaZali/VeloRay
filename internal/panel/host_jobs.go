@@ -80,7 +80,7 @@ func (s *Server) panelEndpointAPI(w http.ResponseWriter, r *http.Request, a Acto
 		return nil, 0, fail(405, "method not allowed")
 	}
 	if !s.nativeControlAvailable() {
-		return nil, 0, fail(409, "Panel port changes require the native VeloRay host control service.")
+		return nil, 0, fail(409, "Panel port changes require the VeloRay host control service.")
 	}
 	in, err := readBody(w, r)
 	if err != nil {

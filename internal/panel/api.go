@@ -82,7 +82,7 @@ func (s *Server) view(ctx context.Context, q Query, kind string, d Data) (Data, 
 		if !flag(d, "enabled") {
 			out["online"] = false
 			out["connection_status"] = "disabled"
-		} else if observed, err := timestamp(n, "_telemetry_at"); err == nil && time.Since(observed) < 20*time.Second && flag(n, "_online_available") && oneOf(str(i, "protocol"), "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell", "shadowtls") {
+		} else if observed, err := timestamp(n, "_telemetry_at"); err == nil && time.Since(observed) < 20*time.Second && flag(n, "_online_available") && oneOf(str(i, "protocol"), "vless", "vmess", "trojan", "hysteria", "tuic", "anytls", "naive", "snell", "shadowtls") {
 			connected := flag(obj(n, "_online_clients"), strconv.FormatInt(num(d, "id"), 10))
 			out["online"] = connected
 			out["connection_status"] = "offline"
@@ -176,6 +176,9 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 	}
 	if path == "project" && r.Method == "GET" {
 		return s.projectInfo(ctx), 200, nil
+	}
+	if path == "deployment" {
+		return s.deploymentAPI(r, a)
 	}
 	if path == "panel-endpoint" {
 		return s.panelEndpointAPI(w, r, a)
@@ -972,7 +975,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request, kind string, id 
 			}
 			candidate["node"] = id
 			port := num(candidate, "port")
-			if port < 1 || port > 65535 || net.ParseIP(str(candidate, "listen")) == nil || !oneOf(str(candidate, "protocol"), "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "http", "socks", "tunnel", "tun", "tuic", "naive", "snell", "shadowtls", "mtproto", "amneziawg") || !oneOf(str(candidate, "transport"), "raw", "ws", "grpc", "xhttp", "httpupgrade", "mkcp", "hysteria") {
+			if port < 1 || port > 65535 || net.ParseIP(str(candidate, "listen")) == nil || !oneOf(str(candidate, "protocol"), "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "http", "socks", "tunnel", "tun", "tuic", "anytls", "naive", "snell", "shadowtls", "mtproto", "amneziawg") || !oneOf(str(candidate, "transport"), "raw", "ws", "grpc", "xhttp", "httpupgrade", "mkcp", "hysteria") {
 				return nil, 0, fail(400, "valid protocol, transport, IP listen address and port are required")
 			}
 			if port == 10085 || port == 9191 || flag(d, "is_local") && (port == 8610 || port == int64(s.Config.PanelPort)) {

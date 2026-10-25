@@ -7,6 +7,7 @@ test "${VELORAY_DOCKER_TEST:-}" = 1 || { echo 'Set VELORAY_DOCKER_TEST=1 to crea
 temporary="$(mktemp -d)"
 project="veloray-ci-$(date +%s)-$RANDOM"
 export VELORAY_SECRET_DIRECTORY="$temporary/secrets"
+export VELORAY_CERTIFICATE_DIRECTORY="$temporary/certificates"
 python3 deploy/docker/generate.py --domain localhost --directory "$temporary"
 compose=(docker compose --project-name "$project" --env-file "$temporary/.env" -f deploy/docker/compose.yaml)
 cleanup() {

@@ -6,7 +6,7 @@ COPY . .
 RUN test "$TARGETARCH" = amd64 -o "$TARGETARCH" = arm64 && bash scripts/verify-runtime.sh "$TARGETARCH" && mkdir /bundle && tar --no-same-owner -xJf "runtime/linux-$TARGETARCH.tar.xz" -C /bundle && mv "/bundle/bin/linux-$TARGETARCH" /bundle/bin/native
 
 FROM ubuntu:24.04 AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl iproute2 jq tzdata && rm -rf /var/lib/apt/lists/* && mkdir -p /var/lib/veloray-agent /run/veloray-proxy && chown 10003:10001 /run/veloray-proxy && chmod 2770 /run/veloray-proxy && chown 10002:10002 /var/lib/veloray-agent && chmod 0700 /var/lib/veloray-agent
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl iproute2 jq tzdata util-linux && rm -rf /var/lib/apt/lists/* && mkdir -p /var/lib/veloray-agent /run/veloray-proxy && chown 10003:10001 /run/veloray-proxy && chmod 2770 /run/veloray-proxy && chown 10002:10002 /var/lib/veloray-agent && chmod 0700 /var/lib/veloray-agent
 COPY --from=bundle /bundle/bin/native/veloray /bundle/bin/native/veloray-agent /usr/local/bin/
 COPY --from=bundle /bundle/xray/xray /bundle/singbox/sing-box /usr/local/bin/
 COPY --from=bundle /bundle/xray /opt/veloray/xray

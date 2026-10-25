@@ -21,6 +21,30 @@ def command(*args, data=None):
     return subprocess.check_output(compose + list(args), input=data, stderr=subprocess.STDOUT).decode()
 
 
+
+def check_agent_privileges():
+    # Inspect actual long-running processes, not Docker's configured bootstrap
+    # user. No agent/core may retain root or the credential-changing caps.
+    raw = command("exec", "-T", "--user", "10002:10002", "agent", "/bin/sh", "-c",
+                  "for p in /proc/[0-9]*; do cat $p/status 2>/dev/null; echo END; done")
+    found = []
+    for block in raw.split("END"):
+        fields = dict(line.split(":", 1) for line in block.splitlines() if ":" in line)
+        # PID 1 is the agent; both managed cores are its direct children.
+        # /proc/exe symlinks are protected by ptrace policy after dropping UID.
+        if fields.get("Pid", "").strip() != "1" and fields.get("PPid", "").strip() != "1":
+            continue
+        found.append(fields)
+        assert fields["Uid"].split() == ["10002"] * 4, fields
+        assert fields["Gid"].split() == ["10002"] * 4, fields
+        assert fields["NoNewPrivs"].strip() == "1", fields
+        for name in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"):
+            assert int(fields[name], 16) == 1 << 10, (name, fields)
+    assert len(found) == 3, found
+    assert any(f["Pid"].strip() == "1" and f["Name"].strip() == "veloray-agent" for f in found), found
+
+
+
 def request(method, path, body=None, authenticated=True, status=200, port=443):
     connection = http.client.HTTPSConnection("localhost", port, timeout=10, context=ssl._create_unverified_context())
     headers = {"Origin": "https://localhost", "Sec-Fetch-Site": "same-origin"}
@@ -76,6 +100,7 @@ while True:
         if time.monotonic() > deadline:
             raise
         time.sleep(1)
+check_agent_privileges()
 request("GET", "/api/auth/csrf")
 password = (Path(os.environ["VELORAY_SECRET_DIRECTORY"]) / "admin_password").read_text().strip()
 request("POST", "/api/auth/login", {"username": "admin", "password": password})
@@ -123,8 +148,8 @@ class Payload(BaseHTTPRequestHandler):
 target = ThreadingHTTPServer(("127.0.0.1", 18080), Payload)
 threading.Thread(target=target.serve_forever, daemon=True).start()
 config = {"inbounds": [{"listen": "127.0.0.1", "port": 18888, "protocol": "http", "settings": {}}], "outbounds": [{"protocol": "vless", "settings": {"vnext": [{"address": "127.0.0.1", "port": 18443, "users": [{"id": client["credential"], "encryption": "none"}]}]}}]}
-command("exec", "-T", "agent", "sh", "-c", "umask 077; cat >/tmp/smoke-client.json", data=json.dumps(config).encode())
-command("exec", "-T", "-d", "agent", "xray", "run", "-c", "/tmp/smoke-client.json")
+command("exec", "-T", "--user", "10002:10002", "agent", "sh", "-c", "umask 077; cat >/tmp/smoke-client.json", data=json.dumps(config).encode())
+command("exec", "-T", "-d", "--user", "10002:10002", "agent", "xray", "run", "-c", "/tmp/smoke-client.json")
 deadline = time.monotonic() + 15
 while True:
     try:
@@ -146,7 +171,7 @@ while True:
         break
     assert time.monotonic() < deadline, "native traffic was not accounted"
     time.sleep(1)
-ledger = command("exec", "-T", "agent", "jq", "-r", ".id", "/var/lib/veloray-agent/state.json").strip()
+ledger = command("exec", "-T", "--user", "10002:10002", "agent", "jq", "-r", ".id", "/var/lib/veloray-agent/state.json").strip()
 command("restart", "agent", "panel", "subscriptions", "proxy")
 deadline = time.monotonic() + 60
 while True:
@@ -159,7 +184,7 @@ while True:
         assert request("GET", "/api/subscription-endpoint")["applied_port"] == 19444
         assert b"vless://" in request("GET", path + "?format=raw", authenticated=False, port=19444)
         assert request("GET", "/api/auth/me")["username"] == "admin"
-        assert command("exec", "-T", "agent", "jq", "-r", ".id", "/var/lib/veloray-agent/state.json").strip() == ledger
+        assert command("exec", "-T", "--user", "10002:10002", "agent", "jq", "-r", ".id", "/var/lib/veloray-agent/state.json").strip() == ledger
         break
     except (OSError, AssertionError, subprocess.CalledProcessError):
         if time.monotonic() > deadline:

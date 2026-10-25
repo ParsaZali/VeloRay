@@ -107,6 +107,15 @@ async function panel(page: Page, path: string) {
         nodes_online: 1,
         protocols: [],
       };
+    else if (p === "deployment")
+      json = {
+        mode: "docker",
+        database: "PostgreSQL",
+        https_proxy: "Caddy",
+        architecture: "amd64",
+        panel_origin: "https://panel.example:8443",
+        managed_updates: true,
+      };
     else if (p === "system-info") json = {};
     else if (p === "telegram/status") {
       if (state.botError)
@@ -332,4 +341,32 @@ test("unknown update state never shows a green up-to-date badge", async ({
   await expect(
     page.locator("aside:visible").getByText("(Up to date)", { exact: true }),
   ).toHaveCount(0);
+});
+
+test("deployment settings remain readable on mobile and copy the real management command", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await panel(page, "/settings/system");
+  await expect(
+    page.getByRole("heading", { name: "Deployment", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Docker Compose", { exact: true })).toBeVisible();
+  const copy = page.getByRole("button", {
+    name: "Copy sudo veloray backup",
+    exact: true,
+  });
+  await copy.click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe("sudo veloray backup");
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+  await page.screenshot({
+    path: "test-results/docker-settings-mobile.png",
+    fullPage: true,
+  });
 });

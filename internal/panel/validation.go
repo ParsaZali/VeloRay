@@ -172,13 +172,13 @@ func validateInbound(ctx context.Context, q Query, c Config, d Data) error {
 	if oneOf(p, "mtproto", "amneziawg") && core != "native" {
 		return errors.New("this protocol requires the native core")
 	}
-	if core == "singbox" && (!oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "http", "socks", "tuic", "naive", "snell", "shadowtls") || !oneOf(t, "raw", "ws", "grpc", "httpupgrade", "hysteria")) {
+	if core == "singbox" && (!oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "http", "socks", "tuic", "anytls", "naive", "snell", "shadowtls") || !oneOf(t, "raw", "ws", "grpc", "httpupgrade", "hysteria")) {
 		return errors.New("unsupported sing-box protocol or transport")
 	}
-	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "http", "socks", "tunnel", "tun", "tuic", "naive", "snell", "shadowtls", "mtproto", "amneziawg") || !oneOf(t, "raw", "ws", "grpc", "xhttp", "httpupgrade", "mkcp", "hysteria") || !oneOf(s, "none", "tls", "reality") {
+	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "http", "socks", "tunnel", "tun", "tuic", "anytls", "naive", "snell", "shadowtls", "mtproto", "amneziawg") || !oneOf(t, "raw", "ws", "grpc", "xhttp", "httpupgrade", "mkcp", "hysteria") || !oneOf(s, "none", "tls", "reality") {
 		return errors.New("unsupported protocol, transport or security")
 	}
-	if core == "xray" && oneOf(p, "tuic", "naive", "snell", "shadowtls") {
+	if core == "xray" && oneOf(p, "tuic", "anytls", "naive", "snell", "shadowtls") {
 		return errors.New("protocol requires sing-box")
 	}
 	if e := validateNativeProtocol(d); e != nil {
@@ -459,7 +459,7 @@ func fallback(s, d string) string {
 }
 func supportsClients(p string) bool { return p != "tun" && p != "tunnel" }
 func metered(p string) bool {
-	return oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "tuic", "naive", "snell", "shadowtls", "mtproto", "amneziawg")
+	return oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "tuic", "anytls", "naive", "snell", "shadowtls", "mtproto", "amneziawg")
 }
 func validateSettings(d Data) error {
 	if err := validateSubscriptionPath(str(d, "subscription_path")); err != nil {

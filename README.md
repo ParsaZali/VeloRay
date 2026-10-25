@@ -17,7 +17,7 @@
 
 ## Quick start
 
-Run as **root** on **Ubuntu 24.04**, on `amd64` or `arm64`:
+Run as **root** on **Ubuntu 22.04 or 24.04**, on `amd64` or `arm64`:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/install.sh)
@@ -27,10 +27,12 @@ The installer takes you through the essentials:
 
 1. Enter a domain pointing to the server, or use its public IP.
 2. Choose the panel and subscription ports. **Press Enter for random available ports.**
-3. For a domain, let the installer request a trusted TLS certificate. The email is optional.
+3. A domain uses automatic HTTPS; an IP uses a local certificate.
 4. Open the printed address and sign in with the **generated username and password**.
 
-PostgreSQL, both proxy cores, the agent, independent subscriptions and systemd services are configured automatically. The initial credentials are also saved in the root-only `/etc/veloray/install-result.env`. IP-only installs use a local TLS certificate. For domain certificate issuance, DNS must point to the server and HTTP port 80 must be reachable; a failed certificate request leaves local HTTPS available for recovery.
+**Docker Engine and Compose are installed automatically.** PostgreSQL, the panel, subscription server, agent, Xray, sing-box, native protocols and Caddy run inside containers. Durable volumes preserve database records, traffic ledgers, managed cores and HTTPS state. Encryption keys and the generated initial password remain under the root-only `/etc/veloray/docker/` directory. Domain HTTPS needs correct DNS and available ports 80/443. IP-only installation uses local HTTPS.
+
+Rerun the quick installer to migrate an existing native installation. It builds first, creates a coordinated private backup, preserves accounts, subscription tokens, quota and ledger identity, then starts Docker. Native services are restored on a failed migration. Existing native `veloray update` stays native; it does not silently migrate. See the [Docker guide](docs/container-deployment.md) for recovery, custom certificates and deployment boundaries. Add `--mode native` for the legacy Ubuntu 24.04 installer.
 
 For Persian prompts:
 
@@ -46,9 +48,9 @@ No Go or Node.js installation is needed when using the verified runtime bundles.
 sudo veloray update
 ```
 
-Updates follow `main` after **that exact commit passes CI**. The updater verifies the pinned installer, creates a private backup, runs health checks and attempts application/service rollback if installation fails. Existing users, encryption keys and traffic records are preserved. Database restore remains an explicit operation.
+Updates follow `main` after **that exact commit passes CI**. Docker builds revision-tagged images before interruption, then takes a coordinated database/ledger/key backup and checks HTTPS health. Failed activation restores the matching recovery snapshot. Native updates retain their existing service/binary recovery behavior.
 
-Native installations also support **Settings → System → Panel updates**. The sidebar displays the running version and reports **Up to date** or **Update available** only after checking GitHub. Unknown or unverified status is never shown as current. The first upgrade from an older installation still uses `sudo veloray update` to install the host-control service. Docker deployments update their image.
+Managed Docker and native installations also support **Settings → System → Panel updates**. The sidebar displays the running version and reports **Up to date** or **Update available** only after checking GitHub. Unknown or unverified status is never shown as current. The first upgrade from an older installation still uses `sudo veloray update` to install the host-control service. Docker deployments rebuild and recreate their revision-tagged images; the browser never receives a Docker socket.
 
 **Settings → General → Panel port** changes the public HTTPS port, and **Settings → Subscription** controls the independent subscription listener. The random-port button proposes an unused candidate; **Apply port** activates it. Firewall rules remain under your control. VPN ports are edited under **Inbounds**, delivery address/port overrides under **Subscription hosts**, and remote agent addresses under **Nodes**. Config profiles and subscription policies are grouped inside Settings; services and plans appear last in the main navigation.
 
@@ -131,7 +133,7 @@ Screenshots use demonstration accounts, not production credentials.
 | Engine | Managed protocols |
 |---|---|
 | **Xray** | VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, HTTP, SOCKS, tunnel and TUN |
-| **sing-box** | VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC v5, Snell v6, Naive TLS, ShadowTLS v3, HTTP and SOCKS |
+| **sing-box** | VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC v5, AnyTLS, Snell v6, Naive TLS, ShadowTLS v3, HTTP and SOCKS |
 | **VeloRay Native** | MTProto/FakeTLS and AmneziaWG with per-user traffic, credentials, expiry and revocation |
 
 Shadowsocks 2022 AES multiuser is available on both Xray and sing-box, with separate user keys/counters and compatible app exports. See the [protocol guide](docs/shadowsocks-2022.md).
@@ -158,7 +160,7 @@ Choose **Custom HTML file** to use your own page from `/etc/veloray/templates`. 
 
 Open **Cores → Core versions**, enable official downloads, check releases and choose a version. Downloads come from **[XTLS/Xray-core](https://github.com/XTLS/Xray-core)** and **[SagerNet/sing-box](https://github.com/SagerNet/sing-box)**. Only stable assets with official GitHub SHA-256 metadata are offered. The current configuration is checked before replacement, counters are harvested, and an unsuccessful restart restores the previous executable.
 
-Downloads are manual; enabling them does not schedule automatic core changes. Panel updates preserve an explicitly selected official core. Per-user IP attribution in sing-box requires VeloRay's bundled build, so switching to an official binary is blocked while per-user IP caps are configured. Container deployments update their cores through their image. [Core management guide →](docs/core-versions.md)
+Downloads are manual; enabling them does not schedule automatic core changes. Panel updates preserve an explicitly selected official core. Per-user IP attribution in sing-box requires VeloRay's bundled build, so switching to an official binary is blocked while per-user IP caps are configured. Managed Docker deployments support the same opt-in core controls using durable slots in the agent volume. [Core management guide →](docs/core-versions.md)
 
 ## Deployment options
 

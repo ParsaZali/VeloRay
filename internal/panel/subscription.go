@@ -15,7 +15,7 @@ import (
 
 func clashConfig(c, i, n Data) (Data, error) {
 	p, t := str(i, "protocol"), str(i, "transport")
-	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "tuic", "shadowtls") {
+	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "tuic", "anytls", "shadowtls") {
 		return nil, fmt.Errorf("Clash output is unavailable for %s", p)
 	}
 	if !oneOf(t, "raw", "ws", "grpc", "xhttp", "hysteria") {
@@ -34,6 +34,8 @@ func clashConfig(c, i, n Data) (Data, error) {
 		if flow := clientFlow(c, i); p == "vless" && flow != "" {
 			v["flow"] = flow
 		}
+	case "anytls":
+		v["type"], v["password"], v["sni"] = p, str(c, "credential"), fallback(str(i, "tls_server_name"), str(n, "public_host"))
 	case "trojan":
 		v["type"] = p
 		v["password"] = str(c, "credential")
@@ -150,7 +152,7 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		}
 		if active(member, time.Now()) && flag(inbound, "enabled") && flag(node, "enabled") {
 			observed, telemetryErr := timestamp(node, "_telemetry_at")
-			if telemetryErr != nil || time.Since(observed) < 0 || time.Since(observed) >= 20*time.Second || !flag(node, "_online_available") || !oneOf(str(inbound, "protocol"), "vless", "vmess", "trojan", "hysteria", "tuic", "naive", "snell", "shadowtls", "mtproto", "amneziawg") {
+			if telemetryErr != nil || time.Since(observed) < 0 || time.Since(observed) >= 20*time.Second || !flag(node, "_online_available") || !oneOf(str(inbound, "protocol"), "vless", "vmess", "trojan", "hysteria", "tuic", "anytls", "naive", "snell", "shadowtls", "mtproto", "amneziawg") {
 				onlineKnown = false
 			} else if flag(obj(node, "_online_clients"), fmt.Sprint(num(member, "id"))) {
 				onlineConnected = true

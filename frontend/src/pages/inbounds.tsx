@@ -197,6 +197,7 @@ const protocolOptions = [
   ["shadowsocks", "Shadowsocks", "ghost"],
   ["hysteria", "Hysteria2", "gauge-high"],
   ["tuic", "TUIC v5", "bolt"],
+  ["anytls", "AnyTLS", "shield"],
   ["naive", "Naive", "globe"],
   ["snell", "Snell v6", "shield"],
   ["shadowtls", "ShadowTLS v3", "shield"],
@@ -268,6 +269,14 @@ export function InboundsPage() {
       next.port = "51820";
       next.protocol = "wireguard";
       next.security = "none";
+      next.flow = "";
+    } else if (value === "anytls") {
+      next.name = "AnyTLS";
+      next.port = "24443";
+      next.core = "singbox";
+      next.protocol = "anytls";
+      next.transport = "raw";
+      next.security = "tls";
       next.flow = "";
     } else if (value === "hysteria") {
       next.name = "Hysteria2";
@@ -344,7 +353,9 @@ export function InboundsPage() {
           n.transport = "raw";
           n.security = "none";
           n.flow = "";
-        } else if (["tuic", "naive", "snell", "shadowtls"].includes(v)) {
+        } else if (
+          ["tuic", "anytls", "naive", "snell", "shadowtls"].includes(v)
+        ) {
           n.core = "singbox";
           n.transport = "raw";
           n.security = ["snell", "shadowtls"].includes(v) ? "none" : "tls";
@@ -802,6 +813,7 @@ export function InboundsPage() {
                             {t("WireGuard · UDP")}
                           </option>
                         )}
+                        <option value="anytls">AnyTLS · TLS</option>
                         <option value="hysteria">
                           {t("Hysteria2 · UDP · TLS")}
                         </option>
@@ -913,6 +925,7 @@ export function InboundsPage() {
                             (form.core === "xray" &&
                               ![
                                 "tuic",
+                                "anytls",
                                 "naive",
                                 "snell",
                                 "shadowtls",
@@ -927,6 +940,7 @@ export function InboundsPage() {
                                 "shadowsocks",
                                 "hysteria",
                                 "tuic",
+                                "anytls",
                                 "naive",
                                 "snell",
                                 "shadowtls",
@@ -1012,6 +1026,7 @@ export function InboundsPage() {
                                     "shadowsocks",
                                     "socks",
                                     "tuic",
+                                    "anytls",
                                     "naive",
                                     "snell",
                                     "shadowtls",
@@ -1088,7 +1103,7 @@ export function InboundsPage() {
                             label={l}
                             active={form.security === v}
                             disabled={
-                              (["hysteria", "tuic", "naive"].includes(
+                              (["hysteria", "tuic", "anytls", "naive"].includes(
                                 form.protocol,
                               ) &&
                                 v !== "tls") ||

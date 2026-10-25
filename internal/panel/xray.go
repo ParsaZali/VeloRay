@@ -339,6 +339,8 @@ func shareLink(c, i, node Data) string {
 	case "tuic":
 		q := url.Values{"sni": {fallback(str(i, "tls_server_name"), host)}, "congestion_control": {fallback(str(obj(i, "protocol_settings"), "congestion_control"), "bbr")}, "udp_relay_mode": {"native"}}
 		return "tuic://" + url.UserPassword(credential, str(obj(c, "protocol_settings"), "password")).String() + "@" + addr + "?" + q.Encode() + "#" + fragment
+	case "anytls":
+		return "anytls://" + url.User(credential).String() + "@" + addr + "?sni=" + url.QueryEscape(fallback(str(i, "tls_server_name"), host)) + "#" + fragment
 	case "naive":
 		return "naive+https://" + url.UserPassword(naiveUsername(c), credential).String() + "@" + addr + "#" + fragment
 	case "hysteria":

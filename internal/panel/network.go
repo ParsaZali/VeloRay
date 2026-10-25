@@ -314,7 +314,7 @@ func buildSingBoxConfig(ctx context.Context, q Query, node Data, fieldKey ...str
 }
 func singClientOutbound(c, i, n Data) (Data, error) {
 	p, t := str(i, "protocol"), str(i, "transport")
-	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "tuic", "naive", "snell", "shadowtls") || !oneOf(t, "raw", "ws", "grpc", "httpupgrade", "hysteria") {
+	if !oneOf(p, "vless", "vmess", "trojan", "shadowsocks", "hysteria", "tuic", "anytls", "naive", "snell", "shadowtls") || !oneOf(t, "raw", "ws", "grpc", "httpupgrade", "hysteria") {
 		return nil, fmt.Errorf("sing-box output unavailable for %s/%s", p, t)
 	}
 	if p == "shadowtls" {

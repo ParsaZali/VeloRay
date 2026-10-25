@@ -117,3 +117,7 @@ control unrelated host services to approximate these features.
 Sources: [pinned Xray protocol registry](https://github.com/XTLS/Xray-core/blob/v26.3.27/infra/conf/xray.go),
 [pinned sing-box source](https://github.com/SagerNet/sing-box/tree/v1.14.3/protocol),
 and this repository's `scripts/build-singbox.sh`.
+
+## AnyTLS
+
+AnyTLS is managed through sing-box with RAW transport and required TLS. It supports separate user passwords, expiry/quota enforcement, durable traffic attribution, URI delivery, sing-box output, and Mihomo output. Older Clash builds and Xray do not support this protocol. Disabled or exhausted users do not leave an unauthenticated listener.

@@ -47,7 +47,7 @@ func validPort(port int) bool {
 	if port < 0 || port > 65535 {
 		return false
 	}
-	for _, reserved := range []int{80, 443, 5432, 8610, 8611, 8612, 9191, 10085, 10086, 10087} {
+	for _, reserved := range []int{80, 5432, 8610, 8611, 8612, 9191, 10085, 10086, 10087} {
 		if port == reserved {
 			return false
 		}
@@ -55,9 +55,20 @@ func validPort(port int) bool {
 	return true
 }
 func configuration(domain string, port int) string {
+	return configurationFor(domain, port, 443, "auto")
+}
+func configurationFor(domain string, port, panelPort int, tlsMode string) string {
 	host := domain
 	if net.ParseIP(domain) != nil && strings.Contains(domain, ":") {
 		host = "[" + domain + "]"
+	}
+	if panelPort != 443 {
+		host = net.JoinHostPort(domain, strconv.Itoa(panelPort))
+	}
+	tlsDirective, globalDirective := "", ""
+	if tlsMode == "local" {
+		tlsDirective = "tls internal"
+		globalDirective = "auto_https disable_redirects"
 	}
 	subscription := "reverse_proxy 127.0.0.1:8612"
 	if port > 0 {
@@ -65,6 +76,8 @@ func configuration(domain string, port int) string {
 	}
 	raw := fmt.Sprintf(`{
  admin unix/%s
+ default_sni %s
+ %s
  skip_install_trust
  log default {
   output stderr
@@ -72,6 +85,7 @@ func configuration(domain string, port int) string {
  }
 }
 https://%s {
+ %s
  encode zstd gzip
  header {
   X-Content-Type-Options nosniff
@@ -84,9 +98,10 @@ https://%s {
   reverse_proxy 127.0.0.1:8610
  }
 }
-`, adminPath, host, subscription)
+`, adminPath, domain, globalDirective, host, tlsDirective, subscription)
 	if port > 0 {
 		raw += fmt.Sprintf(`https://%s {
+ %s
  encode zstd gzip
  header {
   X-Content-Type-Options nosniff
@@ -94,19 +109,21 @@ https://%s {
  }
  reverse_proxy 127.0.0.1:8612
 }
-`, net.JoinHostPort(domain, strconv.Itoa(port)))
+`, net.JoinHostPort(domain, strconv.Itoa(port)), tlsDirective)
 	}
 	return raw
 }
 
 type controller struct {
-	mu      sync.Mutex
-	domain  string
-	port    int
-	reload  func(context.Context, string) error
-	persist func(int) error
-	health  func(context.Context) error
-	fatal   func()
+	mu        sync.Mutex
+	domain    string
+	panelPort int
+	tlsMode   string
+	port      int
+	reload    func(context.Context, string) error
+	persist   func(int) error
+	health    func(context.Context) error
+	fatal     func()
 }
 
 func (c *controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -135,7 +152,7 @@ func (c *controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
 	d.DisallowUnknownFields()
-	if d.Decode(&in) != nil || in.Port == nil || !validPort(*in.Port) {
+	if d.Decode(&in) != nil || in.Port == nil || (!validPort(*in.Port) || *in.Port == c.effectivePanelPort()) {
 		http.Error(w, "invalid port", 400)
 		return
 	}
@@ -154,7 +171,7 @@ func (c *controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Even an unchanged initial port must be confirmed by the running Caddy
 	// configuration API before it becomes durable or customer-visible.
-	if err := c.reload(r.Context(), configuration(c.domain, port)); err != nil {
+	if err := c.reload(r.Context(), c.configuration(port)); err != nil {
 		status := 409
 		if errors.Is(err, errProxyUnavailable) {
 			status = 503
@@ -164,7 +181,7 @@ func (c *controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := c.persist(port); err != nil {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
-		rollbackErr := c.reload(ctx, configuration(c.domain, c.port))
+		rollbackErr := c.reload(ctx, c.configuration(c.port))
 		cancel()
 		if rollbackErr != nil && c.fatal != nil {
 			c.fatal()
@@ -175,6 +192,15 @@ func (c *controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.port = port
 
 	_ = json.NewEncoder(w).Encode(map[string]int{"port": c.port})
+}
+func (c *controller) effectivePanelPort() int {
+	if c.panelPort == 0 {
+		return 443
+	}
+	return c.panelPort
+}
+func (c *controller) configuration(port int) string {
+	return configurationFor(c.domain, port, c.effectivePanelPort(), c.tlsMode)
 }
 func persistPort(port int) error {
 	raw, _ := json.Marshal(map[string]int{"port": port})
@@ -201,6 +227,26 @@ func Run(parent context.Context) error {
 	if !validDomain(domain) {
 		return errors.New("invalid proxy domain")
 	}
+	panelPort := 443
+	if text := os.Getenv("VELORAY_PANEL_PORT"); text != "" {
+		var err error
+		panelPort, err = strconv.Atoi(text)
+		if err != nil || panelPort < 1 || panelPort > 65535 {
+			return errors.New("invalid panel port")
+		}
+	}
+	for _, reserved := range []int{80, 5432, 8610, 8611, 8612, 9191, 10085, 10086, 10087} {
+		if panelPort == reserved {
+			return errors.New("reserved panel port")
+		}
+	}
+	tlsMode := os.Getenv("VELORAY_TLS_MODE")
+	if tlsMode == "" {
+		tlsMode = "auto"
+	}
+	if tlsMode != "auto" && tlsMode != "local" {
+		return errors.New("invalid TLS mode")
+	}
 	port := 8444
 	if text := os.Getenv("VELORAY_SUBSCRIPTION_PORT"); text != "" {
 		var err error
@@ -220,13 +266,13 @@ func Run(parent context.Context) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	if !validPort(port) {
+	if !validPort(port) || port == panelPort {
 		return errors.New("reserved subscription port")
 	}
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	const configPath = "/tmp/veloray-Caddyfile"
-	if err := os.WriteFile(configPath, []byte(configuration(domain, port)), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte(configurationFor(domain, port, panelPort, tlsMode)), 0600); err != nil {
 		return err
 	}
 	cmd := exec.CommandContext(ctx, "caddy", "run", "--config", configPath, "--adapter", "caddyfile")
@@ -291,7 +337,7 @@ func Run(parent context.Context) error {
 		}
 		return nil
 	}
-	server := &http.Server{Handler: &controller{domain: domain, port: port, reload: reload, persist: persistPort, health: health, fatal: cancel}, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 8 * time.Second, WriteTimeout: 10 * time.Second, MaxHeaderBytes: 4096}
+	server := &http.Server{Handler: &controller{domain: domain, port: port, panelPort: panelPort, tlsMode: tlsMode, reload: reload, persist: persistPort, health: health, fatal: cancel}, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 8 * time.Second, WriteTimeout: 10 * time.Second, MaxHeaderBytes: 4096}
 	go func() {
 		<-ctx.Done()
 		shutdown, stop := context.WithTimeout(context.Background(), 2*time.Second)

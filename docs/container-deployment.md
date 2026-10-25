@@ -1,4 +1,62 @@
-# Full container deployment
+# Docker deployment
+
+The quick installer now defaults to Docker and installs Docker Engine and Compose from Docker's signed official apt repository when needed:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/install.sh)
+```
+
+Supported hosts are Ubuntu 22.04/24.04 on amd64/arm64. Enter a domain or public IP, then panel and subscription ports; Enter generates independent random free ports. DNS uses automatic Caddy HTTPS; IP installs use a local certificate. No CDN port filter is applied. The generated administrator name is random. The initial password is displayed only on an interactive terminal and remains in `/etc/veloray/docker/secrets/admin_password`. Resetting a password never reuses that bootstrap file.
+
+The panel, subscription process, agent, Xray/sing-box/native protocol runtimes, PostgreSQL and HTTPS proxy run inside containers. Docker Engine and small root-only maintenance timers run on the host. The default preserves host networking for arbitrary operator-selected TCP/UDP listener ports. It does not mount the Docker socket or run privileged containers.
+
+## Management
+
+```bash
+sudo veloray
+sudo veloray doctor
+sudo veloray reset
+sudo veloray domain vpn.example.com
+sudo veloray port 23456
+sudo veloray backup
+sudo veloray restore /private/recovery.tar.gz
+sudo veloray update
+sudo veloray auto-update enable
+sudo veloray backup-schedule daily
+```
+
+`veloray update` checks the exact current main commit's successful push CI, verifies source checksums and both runtime manifests, builds revision-tagged images before interrupting traffic, then creates a coordinated recovery snapshot. Failed activation restores the matching database, encryption keys, agent ledger/configs and proxy state. Restoring a backup creates another recovery point first. Treat the root-only backup as sensitive: it contains the keys needed to recover encrypted records. Recovery requires its matching release directory under `/opt/veloray/releases/`.
+
+Normal uninstall removes only this Compose project's containers, preserving volumes, credentials, releases and backups. `--purge` additionally removes that project's volumes and private deployment configuration after a recovery backup and explicit PURGE confirmation; Docker and other applications are preserved. Reinstalling an unpurged deployment resumes its original identities and secrets. After native migration, the original stopped database remains a recovery source. An explicit Docker purge never silently imports those archived users again. Missing Docker keys after a completed migration require restoring the Docker recovery configuration.
+
+**Settings → System** shows deployment metadata and verified updates. **Settings → General** changes the panel port through an audited allowlisted host job; **Settings → Subscription** independently controls the subscription listener. The browser and application container cannot execute arbitrary host commands. The root timer polls only typed database jobs for panel updates/ports.
+
+## Migrate an existing native installation
+
+Rerun the quick installer. It preserves an existing native installation rather than treating it as a new empty database. Preflight requires its original environment keys, a local PostgreSQL database and an existing administrator. Other nginx applications and external/custom databases require an operator-managed migration. An unmodified Ubuntu nginx welcome site is allowed.
+
+The installer builds images before stopping services, takes a coordinated native backup, copies the database and durable agent ledger, preserves installed core slots and certificates, and starts Docker using the original origin, subscription port, users and tokens. It disables native application units only after HTTPS health succeeds. A failed migration restores native units and keeps the recovery set. A power interruption leaves an explicit migration marker; recover the original native services before retrying:
+
+```bash
+sudo python3 /opt/veloray/docker-current/deploy/docker/manage.py recover-migration
+```
+
+The old native database and files remain available for recovery; they are not a live second panel. Never start the native agent and container agent together. Existing native `veloray update` deliberately retains native deployment; use the quick installer for migration. Remote `install.sh node` installations retain the existing native-agent installer.
+
+## VPN TLS certificates and core updates
+
+The automatic installer exports the matching Caddy certificate into `/etc/veloray/docker/certificates/HOST/`, mounted read-only inside the agent at `/etc/veloray/certificates/HOST/`. Use `fullchain.pem` and `privkey.pem` there in TLS inbounds. A host timer checks renewed certificates every five minutes and restarts the agent only when the key pair changes. This also covers short-lived local certificates. Certificate export does not expose Caddy's complete private storage to the panel or cores. Import an operator-provided pair with:
+
+```bash
+sudo veloray certificate-import vpn.example.com /private/fullchain.pem /private/privkey.pem
+sudo veloray certificate-sync
+```
+
+Managed core downloads, previous-version rollback and GeoIP/Geosite updates work in process mode using the existing official-source/checksum/configuration validation. Core slots and assets are stored in the agent data volume, so recreating a container does not discard an explicitly installed core. Downloads remain opt-in. Kernel TUN/transparent routing still needs an explicit Compose override for NET_ADMIN and /dev/net/tun; it is not enabled by default.
+
+## Manual Compose setup
+
+The steps below remain available for operators managing their own images and lifecycle. Such deployments do not advertise the automatic root host worker unless it was installed.
 
 The production Compose definition is `deploy/docker/compose.yaml`. The root
 `compose.yaml` remains the existing database-only development fixture. The new
@@ -11,7 +69,7 @@ Use a dedicated Linux server with Docker Engine and Compose v2, free ports
 80/443, 5432, 8610/8612, 9191 and 10085–10087, and a DNS hostname pointing to it.
 Container smoke checks run on Ubuntu 22.04 and 24.04 when matching bundles are
 present. Runtime bundles and images support amd64/arm64; ARM execution requires
-operator staging validation. The native systemd installer still targets Ubuntu
+operator staging validation. The legacy native systemd installer targets Ubuntu
 24.04. This is not native Windows or rootless-Docker support.
 
 ```bash
@@ -39,14 +97,24 @@ shared with the VPN cores. No public domain or DNS record is created automatical
 
 ## Process and permission boundaries
 
-All application containers run as separate non-root identities with read-only
+All application processes run as separate non-root identities with read-only
 root filesystems, bounded tmpfs, dropped capabilities and `no-new-privileges`.
-Only the proxy and agent receive `NET_BIND_SERVICE`; PostgreSQL runs as its own
+Only the proxy and agent retain `NET_BIND_SERVICE`; PostgreSQL runs as its own
 non-root database user. No container gets `privileged`, the Docker socket, the
 host PID namespace or host systemd sockets. Host networking supports operator-
 selected TCP/UDP listener ports; database, panel, subscription administration and
 agent control bind only to loopback. Open public VPN ports explicitly in the
 server firewall. This stack does not automatically change firewall rules.
+
+The agent's fixed `setpriv` bootstrap starts with only `SETUID`, `SETGID`,
+`SETPCAP` and `NET_BIND_SERVICE`, switches to UID/GID 10002, clears supplementary
+groups and removes all three bootstrap capabilities from its bounding set before
+executing application code. No root init process remains. The agent and managed
+cores carry only `NET_BIND_SERVICE` as an ambient capability. This permits
+ports below 1024 without running the agent as root or changing the host's
+unprivileged-port sysctl. CI checks the running agent/core identities and capability sets, and explicitly
+tests protected subscription and VPN ports under the normal
+1024 threshold and restores the disposable VM's original setting afterwards.
 
 The agent's opt-in `VELORAY_CORE_MANAGER=process` replaces only the known core
 service-control operations. The default remains `systemd`. The process supervisor
@@ -84,8 +152,7 @@ environment and are not a hosting-provider invoice.
 
 ## Update and recovery
 
-Use Compose for container lifecycle management. The native `sudo veloray update`
-continues to update systemd installations; it does not upgrade a Docker stack.
+For manually deployed stacks, use Compose for lifecycle management. The automatic Docker installer described above supplies its own `sudo veloray update` controller.
 For Docker, keep a private backup, check out a main revision with green CI and
 matching verified runtime bundles, then rebuild and recreate with the install
 command above. Do not regenerate encryption keys. Use `docker compose ... ps`

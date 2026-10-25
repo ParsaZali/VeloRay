@@ -1,6 +1,6 @@
 # Core versions
 
-Native systemd installations can manage **Xray** and **sing-box** under **Cores → Core versions**. Remote agents must be upgraded to this installer before the controls become available. Containers keep their cores in the image and are upgraded by replacing that image.
+Native systemd and managed Docker installations can manage **Xray** and **sing-box** under **Cores → Core versions**. Remote agents must be upgraded to this installer before the controls become available. Docker uses durable executable slots in its agent volume. Recreating an image preserves explicitly installed cores and the existing opt-in update policy.
 
 ## Official downloads
 
@@ -14,7 +14,7 @@ The selected binary must validate the current configuration before the active ex
 
 A failed replacement/restart restores the previous binary and metadata. An interrupted operation is recovered from its journal when the agent starts. **Rollback** switches to the previous retained executable after checking it against the current configuration. Updating VeloRay preserves an explicitly selected official core; native MTProto/AmneziaWG update with the VeloRay agent itself.
 
-Executables live under `/var/lib/veloray-cores/{xray,singbox}`. System binaries point to the controlled `current` slot. The agent can write this directory without making `/usr/local/bin` writable in its systemd sandbox. Policy and journal files are root-only. Ordinary configuration deployment remains serialized with executable replacement.
+Native executables live under `/var/lib/veloray-cores/{xray,singbox}`; Docker slots live under `/var/lib/veloray-agent/cores/{xray,singbox}`. System binaries point to the controlled `current` slot. The agent can write this directory without making `/usr/local/bin` writable in its systemd sandbox. Policy and journal files are root-only. Ordinary configuration deployment remains serialized with executable replacement.
 
 ## Compatibility
 
