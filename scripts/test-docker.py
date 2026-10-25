@@ -26,24 +26,23 @@ def check_agent_privileges():
     # Inspect actual long-running processes, not Docker's configured bootstrap
     # user. No agent/core may retain root or the credential-changing caps.
     raw = command("exec", "-T", "--user", "10002:10002", "agent", "/bin/sh", "-c",
-                  "for p in /proc/[0-9]*; do "
-                  "case $(readlink $p/exe 2>/dev/null) in "
-                  "*/veloray-agent) echo Kind:agent;; "
-                  "*/cores/xray/*) echo Kind:xray;; "
-                  "*/cores/singbox/*) echo Kind:singbox;; *) continue;; esac; "
-                  "cat $p/status; echo END; done")
-    found = set()
+                  "for p in /proc/[0-9]*; do cat $p/status 2>/dev/null; echo END; done")
+    found = []
     for block in raw.split("END"):
         fields = dict(line.split(":", 1) for line in block.splitlines() if ":" in line)
-        if "Kind" not in fields:
+        # PID 1 is the agent; both managed cores are its direct children.
+        # /proc/exe symlinks are protected by ptrace policy after dropping UID.
+        if fields.get("Pid", "").strip() != "1" and fields.get("PPid", "").strip() != "1":
             continue
-        found.add(fields["Kind"].strip())
+        found.append(fields)
         assert fields["Uid"].split() == ["10002"] * 4, fields
         assert fields["Gid"].split() == ["10002"] * 4, fields
         assert fields["NoNewPrivs"].strip() == "1", fields
         for name in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"):
             assert int(fields[name], 16) == 1 << 10, (name, fields)
-    assert found == {"agent", "xray", "singbox"}, found
+    assert len(found) == 3, found
+    assert any(f["Pid"].strip() == "1" and f["Name"].strip() == "veloray-agent" for f in found), found
+
 
 
 def request(method, path, body=None, authenticated=True, status=200, port=443):
