@@ -568,8 +568,8 @@ def copy_volume(source, service, directory, user, group):
         with tarfile.open(fileobj=stream, mode='w') as archive:
             archive.add(source, arcname='.', filter=lambda member: member if member.isfile() or member.isdir() or member.issym() else None)
         stream.seek(0)
-        compose('run', '--rm', '--no-deps', '-T', '--user', f'{user}:{group}', '--entrypoint', '/bin/tar', service,
-                '--extract', '--file=-', '--directory=' + directory, '--preserve-permissions', '--no-same-owner', stdin=stream)
+        compose('run', '--rm', '--no-deps', '-T', '--user', f'{user}:{group}', '--entrypoint', '/bin/sh', service, '-c',
+                'umask 000; exec /bin/tar -xof - -C "$1"', '--', directory, stdin=stream)
 
 
 def restore(path, confirmed=False):

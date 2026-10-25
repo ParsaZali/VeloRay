@@ -3,6 +3,7 @@
 import importlib.util
 import io
 import json
+import os
 import shutil
 from pathlib import Path
 import subprocess
@@ -93,6 +94,28 @@ class ManagerTests(unittest.TestCase):
         with patch.object(m.socket, 'socket', side_effect=ipv4_only):
             number = m.random_port()
         self.assertGreaterEqual(number, 1024)
+
+    def test_volume_stream_preserves_executable_keys_and_local_links(self):
+        source, destination = self.root/'volume-source', self.root/'volume-target'
+        source.mkdir(mode=0o700)
+        destination.mkdir(mode=0o700)
+        (source/'binary-core').write_bytes(b'core-test')
+        (source/'binary-core').chmod(0o755)
+        (source/'private-state').write_bytes(b'private-test')
+        (source/'private-state').chmod(0o600)
+        (source/'current').symlink_to('binary-core')
+        def extract(*args, **kwargs):
+            # Replace only the Docker transport; exercise the exact extractor
+            # with its streamed tar, file modes and links on a real filesystem.
+            script = args[args.index('-c')+1]
+            subprocess.run(['/bin/sh', '-c', script, '--', str(destination)], stdin=kwargs['stdin'], check=True)
+        with patch.object(m, 'compose', side_effect=extract):
+            m.copy_volume(source, 'agent', str(destination), os.getuid(), os.getgid())
+        self.assertEqual((destination/'binary-core').read_bytes(), b'core-test')
+        self.assertEqual((destination/'binary-core').stat().st_mode & 0o777, 0o755)
+        self.assertEqual((destination/'private-state').stat().st_mode & 0o777, 0o600)
+        self.assertTrue((destination/'current').is_symlink())
+        self.assertEqual(os.readlink(destination/'current'), 'binary-core')
 
     def test_purge_never_reimports_archived_native_accounts(self):
         native = self.root/'native.env'
