@@ -148,8 +148,8 @@ class Payload(BaseHTTPRequestHandler):
 target = ThreadingHTTPServer(("127.0.0.1", 18080), Payload)
 threading.Thread(target=target.serve_forever, daemon=True).start()
 config = {"inbounds": [{"listen": "127.0.0.1", "port": 18888, "protocol": "http", "settings": {}}], "outbounds": [{"protocol": "vless", "settings": {"vnext": [{"address": "127.0.0.1", "port": 18443, "users": [{"id": client["credential"], "encryption": "none"}]}]}}]}
-command("exec", "-T", "agent", "sh", "-c", "umask 077; cat >/tmp/smoke-client.json", data=json.dumps(config).encode())
-command("exec", "-T", "-d", "agent", "xray", "run", "-c", "/tmp/smoke-client.json")
+command("exec", "-T", "--user", "10002:10002", "agent", "sh", "-c", "umask 077; cat >/tmp/smoke-client.json", data=json.dumps(config).encode())
+command("exec", "-T", "-d", "--user", "10002:10002", "agent", "xray", "run", "-c", "/tmp/smoke-client.json")
 deadline = time.monotonic() + 15
 while True:
     try:
@@ -171,7 +171,7 @@ while True:
         break
     assert time.monotonic() < deadline, "native traffic was not accounted"
     time.sleep(1)
-ledger = command("exec", "-T", "agent", "jq", "-r", ".id", "/var/lib/veloray-agent/state.json").strip()
+ledger = command("exec", "-T", "--user", "10002:10002", "agent", "jq", "-r", ".id", "/var/lib/veloray-agent/state.json").strip()
 command("restart", "agent", "panel", "subscriptions", "proxy")
 deadline = time.monotonic() + 60
 while True:
@@ -184,7 +184,7 @@ while True:
         assert request("GET", "/api/subscription-endpoint")["applied_port"] == 19444
         assert b"vless://" in request("GET", path + "?format=raw", authenticated=False, port=19444)
         assert request("GET", "/api/auth/me")["username"] == "admin"
-        assert command("exec", "-T", "agent", "jq", "-r", ".id", "/var/lib/veloray-agent/state.json").strip() == ledger
+        assert command("exec", "-T", "--user", "10002:10002", "agent", "jq", "-r", ".id", "/var/lib/veloray-agent/state.json").strip() == ledger
         break
     except (OSError, AssertionError, subprocess.CalledProcessError):
         if time.monotonic() > deadline:
