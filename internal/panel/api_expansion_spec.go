@@ -3,7 +3,7 @@ package panel
 func expansionAPISpec(paths, schemas Data) {
 	text := Data{"type": "string"}
 	integer := Data{"type": "integer"}
-	currency := Data{"type": "string", "enum": []any{"IRR", "IRT", "USD", "EUR", "XTR"}, "description": "Whole rials/tomans/Telegram Stars; USD/EUR amounts are cents. No currency conversion between wallets."}
+	currency := Data{"type": "string", "enum": []any{"IRR", "IRT", "USD", "EUR", "XTR", "USDT"}, "description": "Whole rials/tomans/Telegram Stars; USD/EUR amounts are cents; USDT amounts are integer millionths. No currency conversion between wallets."}
 	object := func(fields Data) Data {
 		return Data{"type": "object", "additionalProperties": false, "properties": fields}
 	}
@@ -31,7 +31,6 @@ func expansionAPISpec(paths, schemas Data) {
 	paths["/api/resellers/transfer"] = Data{"post": Data{"summary": "Transfer own wallet credit to a direct child with an idempotent reference; both ledger entries commit together", "requestBody": Data{"content": Data{"application/json": Data{"schema": object(Data{"user_id": integer, "amount": integer, "currency": currency, "reference": text, "note": text})}}}, "responses": response}}
 	paths["/api/commerce/store/verify-domain"] = Data{"parameters": owner, "post": Data{"summary": "Verify saved domain ownership, HTTPS and this panel instance before using it in customer subscription URLs", "requestBody": Data{"content": Data{"application/json": Data{"schema": object(Data{"origin": text})}}}, "responses": response}}
 	schemas["WalletPurchaseInput"] = object(Data{"offer_id": integer, "kind": Data{"enum": []any{"purchase", "renewal", "traffic"}}, "name": text, "customer_token": Data{"type": "string", "writeOnly": true, "description": "Canonical subscription token required for renewal/traffic"}, "reference": Data{"type": "string", "minLength": 12, "maxLength": 160, "description": "Retry with the same reference and identical body to prevent duplicate debits"}})
-	schemas["PaymentGatewayInput"] = object(Data{"payments_enabled": Data{"type": "boolean"}, "merchant_id": Data{"type": "string", "writeOnly": true}, "sandbox": Data{"type": "boolean", "description": "Test payments never credit wallets or provision customers"}})
 	paths["/api/commerce/offers"] = Data{"parameters": owner, "get": Data{"summary": "Seller-scoped offer list", "responses": response}, "post": Data{"summary": "Create draft or published sale offer", "requestBody": body("OfferInput"), "responses": Data{"201": Data{"description": "Created"}}}}
 	paths["/api/commerce/offers/{id}"] = Data{"parameters": append(append([]any{}, owner...), Data{"name": "id", "in": "path", "required": true, "schema": integer}), "patch": Data{"summary": "Edit offer; existing invoices retain their immutable price and grant", "requestBody": body("OfferInput"), "responses": response}}
 	paths["/api/commerce/store"] = Data{"parameters": owner, "get": Data{"summary": "Own storefront branding", "responses": response}, "patch": Data{"summary": "Publish/store branding", "requestBody": body("StorefrontInput"), "responses": response}}
@@ -40,7 +39,8 @@ func expansionAPISpec(paths, schemas Data) {
 	}
 	paths["/api/commerce/adjust"] = Data{"parameters": owner, "post": Data{"summary": "Superuser-only signed wallet adjustment/settlement", "requestBody": body("LedgerAdjustment"), "responses": response}}
 	paths["/api/commerce/purchase"] = Data{"post": Data{"summary": "Debit own wallet and safely provision/renew; paid orders retry after deployment failure", "requestBody": body("WalletPurchaseInput"), "responses": Data{"201": Data{"description": "Order created or replayed; inspect its state"}}}}
-	paths["/api/commerce/settings"] = Data{"get": Data{"summary": "Superuser gateway availability, without merchant secret", "responses": response}, "patch": Data{"summary": "Configure verified Zarinpal gateway", "requestBody": body("PaymentGatewayInput"), "responses": response}}
+	paths["/api/commerce/settings"] = Data{"get": Data{"summary": "Payment gateways are coming soon; no merchant secrets or provider integration", "responses": response}}
+
 	paths["/api/commerce/orders/{id}/fulfill"] = Data{"parameters": []any{Data{"name": "id", "in": "path", "required": true, "schema": text}}, "post": Data{"summary": "Idempotent retry of an owned paid order; never marks an unpaid order as paid", "responses": response}}
 	paths["/api/shop/catalog"] = Data{"get": Data{"summary": "Public published offers for the store query parameter; no unit costs or inbound IDs", "security": []any{}, "parameters": []any{Data{"name": "store", "in": "query", "required": true, "schema": integer}}, "responses": response}}
 	schemas["StorefrontInput"].(Data)["properties"].(Data)["telegram_sales"] = Data{"type": "boolean"}
@@ -60,4 +60,6 @@ func expansionAPISpec(paths, schemas Data) {
 	paths["/api/node-enrollment"] = Data{"get": Data{"summary": "Administrator enrollment metadata without tokens", "responses": response}, "post": Data{"summary": "Create a 15-minute single-use node installation command", "requestBody": Data{"content": Data{"application/json": Data{"schema": object(Data{"name": text, "public_host": text})}}}, "responses": Data{"201": Data{"description": "Token and installation command, shown once"}}}}
 	paths["/api/node-enrollment/{id}"] = Data{"parameters": []any{Data{"name": "id", "in": "path", "required": true, "schema": text}}, "delete": Data{"summary": "Revoke unused enrollment token", "responses": response}}
 	paths["/api/node-enrollment/complete"] = Data{"post": Data{"summary": "Single-use enrollment bearer; verifies host, pinned certificate, agent credentials, identity and running core before registration", "security": []any{}, "responses": Data{"201": Data{"description": "Registered node ID"}, "404": Data{"description": "Invalid, expired, revoked or spent token"}, "502": Data{"description": "Agent verification failed; token stays unused"}}}}
+
+	salesExperienceSpec(paths, schemas)
 }

@@ -15,6 +15,9 @@ import (
 
 func (s *Server) shopAPI(w http.ResponseWriter, r *http.Request, path string) (any, int, error) {
 	ctx := r.Context()
+	if strings.HasPrefix(path, "shop/me") {
+		return s.shopCustomerAPI(w, r, path)
+	}
 	if path == "shop/catalog" && r.Method == "GET" {
 		id, e := strconv.ParseInt(r.URL.Query().Get("store"), 10, 64)
 		if e != nil || id < 1 {
@@ -39,6 +42,8 @@ func (s *Server) shopAPI(w http.ResponseWriter, r *http.Request, path string) (a
 		for _, key := range strings.Fields("enabled name support_url logo_url description terms_url") {
 			publicBrand[key] = d[key]
 		}
+		publicBrand["bot"] = publicSalesConfig(d)
+		publicBrand["manual_payments"] = append(manualMethods(d, "IRT"), manualMethods(d, "USDT")...)
 		d = publicBrand
 		if _, e = seller(ctx, s.Store.Pool, id); e != nil {
 			return nil, 0, e
@@ -49,12 +54,14 @@ func (s *Server) shopAPI(w http.ResponseWriter, r *http.Request, path string) (a
 		}
 		out := []Data{}
 		for _, v := range all {
-			if buyer > 0 && str(v, "currency") != "XTR" || buyer == 0 && !oneOf(str(v, "currency"), "IRR", "IRT") {
+			if buyer == 0 && str(v, "currency") == "XTR" {
 				continue
 			}
 			if s.validateOffer(ctx, s.Store.Pool, v) == nil {
 				delete(v, "cost_amount")
-				delete(v, "service_id")
+				if buyer == 0 {
+					delete(v, "service_id")
+				}
 				out = append(out, v)
 			}
 		}
@@ -64,7 +71,7 @@ func (s *Server) shopAPI(w http.ResponseWriter, r *http.Request, path string) (a
 		}
 		d["owner_id"] = id
 		d["offers"] = out
-		d["payments_enabled"] = flag(cfg, "commerce_payments_enabled") && str(cfg, "_commerce_merchant") != ""
+		d["payments_enabled"] = len(array(d, "manual_payments")) > 0
 		if buyer > 0 {
 			d["payments_enabled"] = true
 			d["telegram_checkout"] = true
@@ -114,8 +121,21 @@ func (s *Server) shopAPI(w http.ResponseWriter, r *http.Request, path string) (a
 		if len(token) < 32 || subtle.ConstantTimeCompare([]byte(hash), []byte(str(d, "_token_hash"))) != 1 {
 			return nil, 0, fail(404, "order not found")
 		}
+		if len(parts) == 4 && parts[3] == "receipt" {
+			return s.submitPaymentProof(w, r, d)
+		}
 		if len(parts) == 3 && r.Method == "GET" {
+			store, err := getStore(ctx, s.Store.Pool, num(d, "owner_id"))
+			if err != nil {
+				return nil, 0, err
+			}
 			out := orderView(d)
+			out["manual_payments"] = manualMethods(store, str(d, "currency"))
+			proof, err := s.paymentProof(ctx, s.Store.Pool, str(d, "id"), false)
+			if err != nil {
+				return nil, 0, err
+			}
+			out["receipt"] = proof
 			if str(d, "state") == "fulfilled" && num(d, "customer_id") > 0 {
 				c, e := get(ctx, s.Store.Pool, "customers", num(d, "customer_id"))
 				if e != nil {
@@ -162,6 +182,28 @@ func (s *Server) createOrder(ctx context.Context, input Data, payer int64, publi
 	if _, e = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(842100,2)`); e != nil {
 		return nil, e
 	}
+	buyerReference, _ := ctx.Value(telegramCheckoutKey{}).(string)
+	if buyerReference != "" {
+		buyer, _ := ctx.Value(telegramBuyerKey{}).(int64)
+		var existing, sealed string
+		e := tx.QueryRow(ctx, `SELECT o.id,t.token_ciphertext FROM vr_orders o JOIN vr_telegram_orders t ON t.order_id=o.id WHERE o.client_reference=$1 AND t.user_id=$2`, buyerReference, buyer).Scan(&existing, &sealed)
+		if e == nil {
+			d, e := getOrder(ctx, tx, existing, false)
+			if e != nil {
+				return nil, e
+			}
+			token, e := unseal(s.Config.FieldKey, sealed)
+			if e != nil {
+				return nil, e
+			}
+			out := orderView(d)
+			out["token"] = token
+			return out, nil
+		}
+		if e != pgx.ErrNoRows {
+			return nil, e
+		}
+	}
 	requestRaw, _ := json.Marshal(input)
 	requestHash := digest(string(requestRaw))
 	if payer > 0 {
@@ -198,8 +240,17 @@ func (s *Server) createOrder(ctx context.Context, input Data, payer int64, publi
 	owner := num(v, "owner_id")
 	termsURL := ""
 	buyer, _ := ctx.Value(telegramBuyerKey{}).(int64)
-	if buyer > 0 && str(v, "currency") != "XTR" || payer == 0 && str(v, "currency") == "XTR" && buyer == 0 {
-		return nil, fail(409, "Telegram store purchases use Stars offers only")
+	if payer == 0 && str(v, "currency") == "XTR" && buyer == 0 {
+		return nil, fail(409, "open Stars offers in the Telegram store")
+	}
+	if publicShop && buyer > 0 {
+		var pending int
+		if e = tx.QueryRow(ctx, `SELECT count(*) FROM(SELECT 1 FROM vr_orders WHERE owner_id=$1 AND snapshot->>'_telegram_user'=$2 AND state='pending' AND expires_at>now() LIMIT 3) p`, owner, strconv.FormatInt(buyer, 10)).Scan(&pending); e != nil {
+			return nil, e
+		}
+		if pending >= 3 {
+			return nil, fail(429, "you already have three unpaid invoices; finish a payment or wait for an invoice to expire")
+		}
 	}
 	if publicShop {
 		store, e := getStore(ctx, tx, owner)
@@ -321,6 +372,9 @@ func (s *Server) createOrder(ctx context.Context, input Data, payer int64, publi
 		payerValue = payer
 	}
 	var reference any
+	if buyerReference != "" {
+		reference = buyerReference
+	}
 	if payer > 0 {
 		reference = str(input, "reference")
 	}
@@ -403,21 +457,38 @@ func (s *Server) walletTopup(w http.ResponseWriter, r *http.Request, a Actor) (a
 	if e != nil {
 		return nil, 0, e
 	}
+	if e = allowed(d, "amount currency"); e != nil {
+		return nil, 0, fail(400, e.Error())
+	}
 	amount, e := money(d, "amount", 1)
 	if e != nil {
 		return nil, 0, e
 	}
 	currency := str(d, "currency")
-	if !oneOf(currency, "IRR", "IRT") {
-		return nil, 0, fail(400, "payment gateway supports IRR and IRT")
+	if !oneOf(currency, "IRT", "IRR") {
+		return nil, 0, fail(400, "wallet funding by bank transfer uses IRR or IRT")
+	}
+	parent := num(a.User, "parent_id")
+	if parent <= 0 || parent == num(a.User, "id") {
+		return nil, 0, fail(409, "ask an administrator to record a verified wallet settlement")
+	}
+	if _, e = seller(r.Context(), s.Store.Pool, parent); e != nil {
+		return nil, 0, e
+	}
+	store, e := getStore(r.Context(), s.Store.Pool, parent)
+	if e != nil {
+		return nil, 0, e
+	}
+	if !flag(store, "enabled") || len(manualMethods(store, currency)) == 0 {
+		return nil, 0, fail(409, "your parent seller has not enabled wallet transfer payments")
 	}
 	id, token := randomToken(24), randomToken(32)
-	_, e = s.Store.Pool.Exec(r.Context(), `INSERT INTO vr_orders(id,owner_id,payer_id,kind,amount,currency,token_hash,snapshot) VALUES($1,$2,$2,'topup',$3,$4,$5,$6)`, id, num(a.User, "id"), amount, currency, digest(token), `{"name":"Wallet top-up"}`)
-	return Data{"id": id, "token": token, "state": "pending", "amount": amount, "currency": currency}, 201, e
+	_, e = s.Store.Pool.Exec(r.Context(), `INSERT INTO vr_orders(id,owner_id,payer_id,kind,amount,currency,token_hash,snapshot) VALUES($1,$2,$3,'topup',$4,$5,$6,'{"name":"Wallet funding"}')`, id, parent, num(a.User, "id"), amount, currency, digest(token))
+	if e != nil {
+		return nil, 0, e
+	}
+	return Data{"id": id, "owner_id": parent, "token": token, "state": "pending", "amount": amount, "currency": currency}, 201, nil
 }
-
-// A paid order and its customer mutation commit together, after agents validate
-// and apply their journaled configuration. Failed deployment leaves it paid.
 func (s *Server) fulfillOrder(ctx context.Context, id string) error {
 	ctx = context.WithValue(ctx, fulfillingOrderKey{}, id)
 	o, e := getOrder(ctx, s.Store.Pool, id, false)
@@ -598,59 +669,8 @@ func (s *Server) commerceSettings(w http.ResponseWriter, r *http.Request, a Acto
 	if !commerceAdmin(a) {
 		return nil, 0, fail(403, "administrator access required")
 	}
-	ctx := r.Context()
-	view := func(d Data) Data {
-		return Data{"payments_enabled": flag(d, "commerce_payments_enabled"), "merchant_configured": str(d, "_commerce_merchant") != "", "sandbox": flag(d, "commerce_sandbox"), "gateway": "zarinpal"}
+	if r.Method != "GET" {
+		return nil, 0, fail(410, "Payment gateways are coming soon")
 	}
-	if r.Method == "GET" {
-		d, e := settings(ctx, s.Store.Pool)
-		return view(d), 200, e
-	}
-	if r.Method != "PATCH" {
-		return nil, 0, fail(405, "method not allowed")
-	}
-	input, e := readBody(w, r)
-	if e != nil {
-		return nil, 0, e
-	}
-	if e = allowed(input, "payments_enabled merchant_id sandbox"); e != nil {
-		return nil, 0, fail(400, e.Error())
-	}
-	if e = typed(input, Data{"payments_enabled": false, "merchant_id": "", "sandbox": false}); e != nil {
-		return nil, 0, fail(400, e.Error())
-	}
-	out, e := s.managementChange(ctx, nil, a, "commerce.gateway", "settings", func(tx pgx.Tx) (any, error) {
-		d, e := settings(ctx, tx)
-		if e != nil {
-			return nil, e
-		}
-		if v, ok := input["merchant_id"]; ok {
-			value := v.(string)
-			if value != "" && !merchantPattern.MatchString(value) {
-				return nil, fail(400, "merchant_id must be a UUID")
-			}
-			sealed := ""
-			if value != "" {
-				sealed, e = seal(s.Config.FieldKey, value)
-				if e != nil {
-					return nil, e
-				}
-			}
-			d["_commerce_merchant"] = sealed
-		}
-		if v, ok := input["payments_enabled"]; ok {
-			d["commerce_payments_enabled"] = v
-		}
-		if v, ok := input["sandbox"]; ok {
-			d["commerce_sandbox"] = v
-		}
-		if flag(d, "commerce_payments_enabled") && str(d, "_commerce_merchant") == "" {
-			return nil, fail(400, "configure a merchant before enabling payments")
-		}
-		if flag(d, "commerce_payments_enabled") && !strings.HasPrefix(s.Config.PublicURL, "https://") {
-			return nil, fail(400, "payments require a public HTTPS panel URL")
-		}
-		return view(d), saveSettings(ctx, tx, d)
-	})
-	return out, 200, e
+	return Data{"payments_enabled": false, "gateway": "soon", "message": "Soon...", "contact": "If you would like a payment gateway added, let us know through Telegram."}, 200, nil
 }

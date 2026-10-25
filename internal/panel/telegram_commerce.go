@@ -92,13 +92,16 @@ func telegramStoreURL(cfg Data, owner int64) string {
 	return "https://t.me/" + url.PathEscape(name) + "?start=shop_" + strconv.FormatInt(owner, 10)
 }
 func (s *Server) telegramSalesRoute(ctx context.Context, text string, message, from Data) bool {
+	if strings.HasPrefix(text, "vr:") {
+		return false
+	}
 	if str(obj(message, "chat"), "type") != "private" || num(obj(message, "chat"), "id") != num(from, "id") || num(from, "id") <= 0 {
 		return false
 	}
-	if strings.HasPrefix(text, "/start shop_") || strings.HasPrefix(text, "vs:shop_") {
+	if strings.HasPrefix(text, "/start shop_") || strings.HasPrefix(text, "vs:shop_") || text == "/start" {
 		return true
 	}
-	if !oneOf(text, "/shop", "/orders", "/paysupport", "/terms") {
+	if !strings.HasPrefix(text, "vs:") && !oneOf(strings.SplitN(text, " ", 2)[0], "/start", "/shop", "/orders", "/paysupport", "/terms", "/buy", "/services", "/free", "/account", "/tutorial", "/support", "/ticket", "/cancel") && strings.HasPrefix(text, "/") {
 		return false
 	}
 	var bound bool
@@ -106,61 +109,7 @@ func (s *Server) telegramSalesRoute(ctx context.Context, text string, message, f
 	return e == nil && bound
 }
 func (s *Server) telegramSalesReply(ctx context.Context, cfg Data, text string, user int64) Data {
-	unavailable := Data{"text": botText(cfg, "This store is unavailable.", "این فروشگاه در دسترس نیست.")}
-	var owner int64
-	if strings.HasPrefix(text, "/start shop_") || strings.HasPrefix(text, "vs:shop_") {
-		id := strings.TrimPrefix(strings.TrimPrefix(text, "/start shop_"), "vs:shop_")
-		owner, _ = strconv.ParseInt(id, 10, 64)
-	} else {
-		_ = s.Store.Pool.QueryRow(ctx, `SELECT owner_id FROM vr_telegram_customers WHERE user_id=$1 ORDER BY last_seen_at DESC LIMIT 1`, user).Scan(&owner)
-	}
-	d, e := getStore(ctx, s.Store.Pool, owner)
-	if e != nil || !flag(d, "enabled") || !flag(d, "telegram_sales") {
-		return unavailable
-	}
-	if _, e = seller(ctx, s.Store.Pool, owner); e != nil {
-		return unavailable
-	}
-	if !strings.HasPrefix(s.Config.PublicURL, "https://") {
-		return unavailable
-	}
-	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO vr_telegram_customers(user_id,owner_id) VALUES($1,$2) ON CONFLICT(user_id,owner_id) DO UPDATE SET last_seen_at=now()`, user, owner); e != nil {
-		return unavailable
-	}
-	shop := strings.TrimRight(s.Config.PublicURL, "/") + "/shop?store=" + fmt.Sprint(owner)
-	reply := Data{"text": str(d, "name") + "\n" + botText(cfg, "Buy, renew or add traffic in the store.\n/shop · /orders · /paysupport · /terms", "خرید، تمدید و افزایش حجم از فروشگاه\n/shop · /orders · /paysupport · /terms"), "reply_markup": botKeyboard([]any{Data{"text": botText(cfg, "Open store", "باز کردن فروشگاه"), "web_app": Data{"url": shop}}})}
-	if text == "/paysupport" || text == "/terms" {
-		key := "support_url"
-		if text == "/terms" {
-			key = "terms_url"
-		}
-		reply["text"] = str(d, "name") + "\n" + str(d, key)
-	}
-	if text == "/orders" {
-		rows, e := s.Store.Pool.Query(ctx, `SELECT t.order_id,t.token_ciphertext,o.state FROM vr_telegram_orders t JOIN vr_orders o ON o.id=t.order_id WHERE t.user_id=$1 AND o.owner_id=$2 ORDER BY t.created_at DESC LIMIT 8`, user, owner)
-		if e != nil {
-			return unavailable
-		}
-		defer rows.Close()
-		buttons := [][]any{}
-		for rows.Next() {
-			var id, sealed, state string
-			if rows.Scan(&id, &sealed, &state) != nil {
-				return unavailable
-			}
-			token, e := unseal(s.Config.FieldKey, sealed)
-			if e != nil {
-				return unavailable
-			}
-			buttons = append(buttons, []any{Data{"text": state + " · " + id[:8], "url": privateOrderURL(s.Config.PublicURL, owner, id, token)}})
-		}
-		if rows.Err() != nil {
-			return unavailable
-		}
-		reply["text"] = botText(cfg, "Your recent orders", "آخرین سفارش‌های شما")
-		reply["reply_markup"] = Data{"inline_keyboard": buttons}
-	}
-	return reply
+	return s.salesBotReply(ctx, cfg, text, user, Data{})
 }
 func privateOrderURL(origin string, owner int64, id, token string) string {
 	return strings.TrimRight(origin, "/") + "/shop?store=" + fmt.Sprint(owner) + "&order=" + id + "#token=" + url.QueryEscape(token)
@@ -354,8 +303,13 @@ func (s *Server) telegramOrderNotifications(ctx context.Context, cfg Data, token
 		if e != nil {
 			return e
 		}
+		store, err := getStore(ctx, s.Store.Pool, n.owner)
+		if err != nil {
+			return err
+		}
+		localCfg := salesLocale(cfg, store)
 		link := privateOrderURL(s.Config.PublicURL, n.owner, n.id, bearer)
-		if _, e = s.telegramRequest(ctx, token, "sendMessage", Data{"chat_id": n.user, "text": botText(cfg, "Your subscription is ready.", "اشتراک شما آماده است."), "reply_markup": botKeyboard([]any{Data{"text": botText(cfg, "View order and subscription", "مشاهدهٔ سفارش و اشتراک"), "url": link}}), "disable_web_page_preview": true}); e != nil {
+		if _, e = s.telegramRequest(ctx, token, "sendMessage", Data{"chat_id": n.user, "text": salesText(store, localCfg, "delivery_text", "Your subscription is ready.", "اشتراک شما آماده است.", n.user), "reply_markup": botKeyboard([]any{Data{"text": botText(localCfg, "View order and subscription", "مشاهدهٔ سفارش و اشتراک"), "url": link}}), "disable_web_page_preview": true}); e != nil {
 			return e
 		}
 		if _, e = s.Store.Pool.Exec(ctx, `UPDATE vr_telegram_orders SET notified_at=now() WHERE order_id=$1`, n.id); e != nil {

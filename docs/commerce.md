@@ -7,11 +7,11 @@ Open **Services and plans → Sales & billing**. The existing sidebar and green/
 1. Create a service containing the inbounds you will sell. Its defaults supply client policies; the sale offer supplies purchased time and volume.
 2. Create an offer with an explicit currency, price, duration, traffic grant and optional unit cost. Publish it when ready.
 3. Enable the seller's storefront and set its name, description, support link and optional HTTPS logo.
-4. A superuser configures Zarinpal in **Payment gateway**. The public panel URL needs HTTPS. Merchant IDs are encrypted and never returned by a read API.
+4. Enable optional Stars, bank-transfer receipt or USDT methods under **Storefront**. **Payment gateway** currently displays `Soon...`; provider integrations are unavailable.
 
-IRR means whole rials, IRT whole tomans, and USD/EUR are integer cents. Wallet currencies never mix. Zarinpal supports IRR/IRT; both request and verification use whole rials, with an explicit ×10 conversion for a toman invoice. USD/EUR offers can be purchased with matching wallet credit.
+IRR means whole rials, IRT whole tomans, USD/EUR integer cents, XTR whole Stars, and USDT integer millionths. Wallet currencies never mix. Offers keep their explicit currency; VeloRay does not infer exchange rates. The panel price editor displays human-readable USDT while the API uses integer millionths.
 
-Sandbox payments are visibly marked as tests and **never** create real wallet credit or customer accounts. Only a successful provider verification of the persisted authority, merchant and amount marks a payment paid. A browser callback with `Status=OK` is insufficient. The invoice snapshots its amount and product grant; changing an offer does not change an outstanding invoice.
+Stars payments are validated against authenticated Telegram receipts. Bank and USDT transfers require explicit operator review under **Receipts**. Receipt submission alone does not mark an order paid. Full setup and review guidance: [Sales bot and payments](telegram-sales.md).
 
 ## Delivery and renewal
 
@@ -21,11 +21,11 @@ An unpaid invoice reserves its seller's client and traffic capacity for 30 minut
 
 Renewal requires the customer's canonical subscription token and an offer for their existing seller/service. It extends from the later of now or the existing expiry and adds finite traffic to the existing allowance, preserving consumed traffic, credentials and the canonical subscription URL. A finite traffic top-up does not extend expiry. A zero-volume renewal offer explicitly grants unlimited volume. Resume a frozen subscription before buying a renewal.
 
-The public order bearer is shown once and stored in the browser tab's session storage. Returning from the gateway in that browser can retrieve the private order and delivered subscription. Neither callback redirects nor audit logs carry this bearer. A private order cannot be recovered by guessing its public ID.
+The public order bearer is shown once and stored in the browser tab's session storage. That browser can retrieve the private order and delivered subscription. Verified Telegram buyers can recover their own order tokens in the Mini App. Audit logs do not carry these bearers. A private order cannot be recovered by guessing its public ID.
 
 ## Wallets and settlement
 
-Resellers read their own balances, credit limit, orders and ledger. A parent may manage commerce for descendants; children cannot inspect parent or sibling records. Only a superuser can record a deposit, correcting entry, debit, credit limit or settlement. A parent may transfer its existing wallet credit to a direct child. Negative balances require an explicit credit limit. Every balance mutation locks the wallet and appends a ledger entry in the same PostgreSQL transaction. Database triggers reject ledger updates and deletes; correct an error with a new signed entry.
+Resellers read their own balances, credit limit, orders and ledger. A parent may manage commerce for descendants; children cannot inspect parent or sibling records. Only a superuser can record a deposit, correcting entry, debit, credit limit or settlement. A parent may transfer its existing wallet credit to a direct child. Alternatively, a child can create a bank-transfer funding invoice owned by its parent, submit evidence, and receive credit only after parent review. Sellers cannot approve self-owned funding invoices to mint their own balance. Negative balances require an explicit credit limit. Every balance mutation locks the wallet and appends a ledger entry in the same PostgreSQL transaction. Database triggers reject ledger updates and deletes; correct an error with a new signed entry.
 
 Adjustments require a unique reference. Reusing a reference with different details is rejected. Wallet purchases require a unique `reference`; repeat the identical request/reference after a lost response to avoid another debit. Currency, amount and product details are checked on replay.
 
