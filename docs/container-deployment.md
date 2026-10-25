@@ -106,6 +106,13 @@ selected TCP/UDP listener ports; database, panel, subscription administration an
 agent control bind only to loopback. Open public VPN ports explicitly in the
 server firewall. This stack does not automatically change firewall rules.
 
+The agent's bounded `setpriv` entrypoint carries only `NET_BIND_SERVICE` through
+the shell and managed core executions as an ambient capability. This permits
+ports below 1024 without running the agent as root or changing the host's
+unprivileged-port sysctl. Docker Engine 24+ is required for non-root capabilities
+with `no-new-privileges`. CI explicitly tests a protected port under the normal
+1024 threshold and restores the disposable VM's original setting afterwards.
+
 The agent's opt-in `VELORAY_CORE_MANAGER=process` replaces only the known core
 service-control operations. The default remains `systemd`. The process supervisor
 starts only the registered Xray/sing-box binaries and config paths, tracks child

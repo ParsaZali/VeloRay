@@ -5,6 +5,8 @@ set -Eeuo pipefail
 if command -v docker >/dev/null && docker compose version >/dev/null 2>&1;then
  docker info >/dev/null 2>&1 || systemctl start docker
  docker info >/dev/null
+ version="$(docker version --format '{{.Server.Version}}')"
+ [[ "${version%%.*}" =~ ^[0-9]+$ && "${version%%.*}" -ge 24 ]]||{ echo 'Docker Engine 24 or newer is required. Upgrade this existing Docker installation before continuing.' >&2;exit 1; }
  exit 0
 fi
 source /etc/os-release

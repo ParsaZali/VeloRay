@@ -20,7 +20,7 @@ if Path('/etc/veloray').exists() or Path('/opt/veloray/current').exists():
 spec = importlib.util.spec_from_file_location('docker_manager', ROOT / 'deploy/docker/manage.py')
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
-env = dict(os.environ, VELORAY_PUBLIC_HOST='127.0.0.1', VELORAY_PANEL_PORT='25443', VELORAY_SUBSCRIPTION_PORT='25444', VELORAY_TLS_MODE='local', VELORAY_ADMIN_USERNAME='admin', VELORAY_ADMIN_PASSWORD='managed-docker-test-2026', VELORAY_INSTALL_COMMIT=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT).decode().strip())
+env = dict(os.environ, VELORAY_PUBLIC_HOST='127.0.0.1', VELORAY_PANEL_PORT='25443', VELORAY_SUBSCRIPTION_PORT='100', VELORAY_TLS_MODE='local', VELORAY_ADMIN_USERNAME='admin', VELORAY_ADMIN_PASSWORD='managed-docker-test-2026', VELORAY_INSTALL_COMMIT=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT).decode().strip())
 cookies = SimpleCookie()
 panel_port = 25443
 
@@ -69,12 +69,16 @@ def change_panel_port(target):
 
 def fixture():
     node = next(n for n in request('GET', '/api/nodes') if n['is_local'])
-    inbound = request('POST', '/api/inbounds', {'name': 'managed-release', 'node': node['id'], 'core': 'xray', 'protocol': 'vless', 'transport': 'raw', 'security': 'none', 'flow': '', 'listen': '127.0.0.1', 'port': 25445, 'enabled': True}, 201)
+    inbound = request('POST', '/api/inbounds', {'name': 'managed-release', 'node': node['id'], 'core': 'xray', 'protocol': 'vless', 'transport': 'raw', 'security': 'none', 'flow': '', 'listen': '127.0.0.1', 'port': 101, 'enabled': True}, 201)
     return request('POST', '/api/clients', {'name': 'preserved-release-client', 'inbound': inbound['id'], 'traffic_limit_bytes': 10485760, 'enabled': True}, 201), node
 
 
 mode = sys.argv[1] if len(sys.argv) > 1 else 'fresh'
+original_unprivileged_port = subprocess.check_output(['sysctl', '-n', 'net.ipv4.ip_unprivileged_port_start']).decode().strip()
 try:
+    # Host networking must work with the ordinary protected-port policy; do
+    # not accidentally pass because a CI host permits every unprivileged bind.
+    subprocess.run(['sysctl', '-w', 'net.ipv4.ip_unprivileged_port_start=1024'], stdout=subprocess.DEVNULL, check=True)
     previous = None
     if mode == 'migration':
         subprocess.run(['bash', 'install.sh', '--mode', 'native'], cwd=ROOT, env=env, check=True)
@@ -153,3 +157,4 @@ finally:
         with __import__('contextlib').suppress(Exception):
             m.compose('down', '--volumes', '--remove-orphans')
     subprocess.run(['systemctl', 'disable', '--now', 'veloray-docker-control.timer'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    subprocess.run(['sysctl', '-w', 'net.ipv4.ip_unprivileged_port_start=' + original_unprivileged_port], stdout=subprocess.DEVNULL, check=False)
