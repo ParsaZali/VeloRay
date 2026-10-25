@@ -154,7 +154,7 @@ def configure():
         domain = input('[Y/n]: ').strip().lower() not in ('n', 'no')
         name = input('Domain: ' if domain else 'Public IP: ').strip()
     name = host(name)
-    values = {'VELORAY_DOMAIN': name}
+    values = {'VELORAY_DOMAIN': name, 'VELORAY_LANGUAGE': os.environ.get('VELORAY_INSTALL_LANG', 'en')}
     for key, label in (('VELORAY_PANEL_PORT', 'Panel port'), ('VELORAY_SUBSCRIPTION_PORT', 'Subscription port')):
         value = os.environ.get(key, '')
         if not value and sys.stdin.isatty():
@@ -172,6 +172,7 @@ def configure():
     if not re.fullmatch('[a-zA-Z0-9_][a-zA-Z0-9_.-]{2,63}', values['VELORAY_ADMIN_USERNAME']):
         raise ValueError('Invalid administrator username')
     values['VELORAY_DATABASE_PORT'] = str(random_port([int(values['VELORAY_PANEL_PORT']), int(values['VELORAY_SUBSCRIPTION_PORT'])]))
+    values['VELORAY_TEMPLATE_ROOT'] = '/etc/veloray/templates'
     values['VELORAY_PUBLIC_URL'] = origin(values)
     return values
 
@@ -813,6 +814,10 @@ def migrate_native(source, sha, native):
     except ValueError:
         tls = native.get('VELORAY_TLS_MODE', 'auto')
     values = {'VELORAY_DOMAIN': name, 'VELORAY_PANEL_PORT': str(panel_port), 'VELORAY_SUBSCRIPTION_PORT': str(sub_port), 'VELORAY_TLS_MODE': tls, 'VELORAY_ADMIN_USERNAME': native.get('VELORAY_ADMIN_USERNAME', 'admin'), 'VELORAY_DATABASE_PORT': str(random_port([panel_port, sub_port]))}
+    template_root = native.get('VELORAY_TEMPLATE_ROOT', '/etc/veloray/templates')
+    if not re.fullmatch(r'/[A-Za-z0-9_./-]+', template_root) or '..' in Path(template_root).parts:
+        raise ValueError('Unsupported native template directory; configure a simple absolute path before migration')
+    values['VELORAY_TEMPLATE_ROOT'] = template_root
     values['VELORAY_PUBLIC_URL'] = origin(values)
     CONFIG.mkdir(parents=True, mode=0o700, exist_ok=True)
     CONFIG.chmod(0o700)
@@ -863,12 +868,6 @@ def migrate_native(source, sha, native):
                 os.chown(item, 10002, 10002)
                 item.chmod(0o700 if item.is_dir() else 0o600)
             mounts.append({'type': 'bind', 'source': str(target), 'target': value})
-        for label in ('xray', 'sing-box'):
-            path = compatibility / label / 'config.json'
-            if path.exists():
-                raw = json.loads(path.read_text())
-                raw['log'] = {'loglevel': 'warning'} if label == 'xray' else {'level': 'warn'}
-                path.write_text(json.dumps(raw))
         templates = Path(native.get('VELORAY_TEMPLATE_ROOT', '/etc/veloray/templates'))
         if templates.is_dir():
             shutil.copytree(templates, CONFIG / 'templates', dirs_exist_ok=True)
@@ -1011,6 +1010,13 @@ def main():
         raise ValueError('Run with sudo')
     os.umask(0o077)
     command, values = args.command, args.values
+    if (CONFIG / '.env').is_file():
+        os.environ['VELORAY_LANGUAGE'] = read_env(CONFIG / '.env').get('VELORAY_LANGUAGE', 'en')
+    if command == 'version':
+        return print((CURRENT / 'VERSION').read_text().strip())
+    if command == 'help':
+        print('VeloRay Docker management\n  status | doctor | url | ports | inbounds\n  start | stop | restart | logs [SERVICE]\n  reset [USERNAME] | admin-list | passkeys-reset [USERNAME]\n  domain HOST | port PORT | ssl\n  backup [FILE] | restore FILE\n  update | auto-update enable|disable|status|check|run\n  backup-schedule daily|off|status\n  certificate-sync | certificate-import HOST CERTIFICATE KEY\n  uninstall [--purge]\n')
+        return
     if command == 'menu':
         return menu()
     if command in ('status', 'url', 'logs', 'admin-list', 'inbounds', 'audit', 'doctor'):
@@ -1033,6 +1039,12 @@ def main():
             return install(args.source.resolve())
         if not (CONFIG / '.env').is_file():
             raise ValueError('Docker installation was not found')
+        if command == 'ports':
+            return run(['ss', '-ltnup'])
+        if command == 'language' and values in (['fa'], ['en']):
+            settings = read_env(CONFIG / '.env')
+            settings['VELORAY_LANGUAGE'] = values[0]
+            return write_env(settings)
         if command == 'status':
             return compose('ps')
         if command == 'url':
@@ -1047,6 +1059,7 @@ def main():
             if command == 'restart':
                 compose('restart')
             up()
+            install_tools()
         elif command == 'stop':
             return compose('stop', '-t', '30')
         elif command == 'logs':

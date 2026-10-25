@@ -22,11 +22,12 @@ m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 env = dict(os.environ, VELORAY_PUBLIC_HOST='127.0.0.1', VELORAY_PANEL_PORT='25443', VELORAY_SUBSCRIPTION_PORT='25444', VELORAY_TLS_MODE='local', VELORAY_ADMIN_USERNAME='admin', VELORAY_ADMIN_PASSWORD='managed-docker-test-2026', VELORAY_INSTALL_COMMIT=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT).decode().strip())
 cookies = SimpleCookie()
+panel_port = 25443
 
 
 def request(method, path, body=None, expected=200):
-    connection = http.client.HTTPSConnection('127.0.0.1', 25443, timeout=30, context=ssl._create_unverified_context())
-    headers = {'Origin': 'https://127.0.0.1:25443', 'Sec-Fetch-Site': 'same-origin', 'Cookie': '; '.join(f'{k}={v.value}' for k, v in cookies.items())}
+    connection = http.client.HTTPSConnection('127.0.0.1', panel_port, timeout=30, context=ssl._create_unverified_context())
+    headers = {'Origin': f'https://127.0.0.1:{panel_port}', 'Sec-Fetch-Site': 'same-origin', 'Cookie': '; '.join(f'{k}={v.value}' for k, v in cookies.items())}
     if 'csrftoken' in cookies:
         headers['X-CSRFToken'] = cookies['csrftoken'].value
     if body is not None:
@@ -64,6 +65,14 @@ try:
         subprocess.run(['bash', 'install.sh', '--mode', 'native'], cwd=ROOT, env=env, check=True)
         login(env['VELORAY_ADMIN_PASSWORD'])
         previous, node = fixture()
+        # Preserve administrator-selected TLS file paths as well as plain listeners.
+        certificate, key = Path('/usr/local/etc/xray/ci.crt'), Path('/usr/local/etc/xray/ci.key')
+        subprocess.run(['openssl', 'req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-days', '2', '-keyout', str(key), '-out', str(certificate), '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        import grp
+        os.chown(key, 0, grp.getgrnam('nogroup').gr_gid)
+        key.chmod(0o640)
+        tls = request('POST', '/api/inbounds', {'name': 'preserved-tls', 'node': node['id'], 'core': 'xray', 'protocol': 'trojan', 'transport': 'raw', 'security': 'tls', 'flow': '', 'listen': '127.0.0.1', 'port': 25447, 'tls_server_name': '127.0.0.1', 'tls_cert_file': str(certificate), 'tls_key_file': str(key), 'enabled': True}, 201)
+        request('POST', '/api/clients', {'name': 'preserved-tls-client', 'inbound': tls['id'], 'enabled': True}, 201)
         agent_env = m.read_env('/etc/veloray-node/agent.env')
         connection = http.client.HTTPConnection('127.0.0.1', 9191, timeout=10)
         connection.request('GET', '/xray/stats', headers={'Authorization': 'Bearer ' + agent_env['VELORAY_AGENT_TOKEN']})
@@ -91,11 +100,13 @@ try:
     # The UI job is processed by the root host worker, without a socket mount.
     subprocess.run(['systemctl', 'stop', 'veloray-docker-control.timer'], check=True)
     request('PUT', '/api/panel-endpoint', {'port': 25446}, 202)
-    # Exercise its worker without changing the fixture's public origin: inspect
-    # and remove this synthetic queued job, then use the CLI port round trip.
-    m.sql("UPDATE vr_host_jobs SET state='failed',error='Synthetic CI job; testing CLI port round trip',updated_at=now() WHERE state='queued';")
-    subprocess.run(['/usr/local/bin/veloray', 'port', '25446'], check=True)
-    subprocess.run(['/usr/local/bin/veloray', 'port', '25443'], check=True)
+    subprocess.run(['/usr/local/bin/veloray', 'host-jobs'], check=True)
+    panel_port = 25446
+    login(env['VELORAY_ADMIN_PASSWORD'])
+    assert request('GET', '/api/panel-endpoint')['job']['state'] == 'succeeded'
+    request('PUT', '/api/panel-endpoint', {'port': 25443}, 202)
+    subprocess.run(['/usr/local/bin/veloray', 'host-jobs'], check=True)
+    panel_port = 25443
     login(env['VELORAY_ADMIN_PASSWORD'])
     with tempfile.TemporaryDirectory(prefix='veloray-managed-test-') as tmp:
         archive = Path(tmp) / 'recovery.tar.gz'

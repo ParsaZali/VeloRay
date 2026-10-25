@@ -160,7 +160,7 @@ Choose **Custom HTML file** to use your own page from `/etc/veloray/templates`. 
 
 Open **Cores → Core versions**, enable official downloads, check releases and choose a version. Downloads come from **[XTLS/Xray-core](https://github.com/XTLS/Xray-core)** and **[SagerNet/sing-box](https://github.com/SagerNet/sing-box)**. Only stable assets with official GitHub SHA-256 metadata are offered. The current configuration is checked before replacement, counters are harvested, and an unsuccessful restart restores the previous executable.
 
-Downloads are manual; enabling them does not schedule automatic core changes. Panel updates preserve an explicitly selected official core. Per-user IP attribution in sing-box requires VeloRay's bundled build, so switching to an official binary is blocked while per-user IP caps are configured. Container deployments update their cores through their image. [Core management guide →](docs/core-versions.md)
+Downloads are manual; enabling them does not schedule automatic core changes. Panel updates preserve an explicitly selected official core. Per-user IP attribution in sing-box requires VeloRay's bundled build, so switching to an official binary is blocked while per-user IP caps are configured. Managed Docker deployments support the same opt-in core controls using durable slots in the agent volume. [Core management guide →](docs/core-versions.md)
 
 ## Deployment options
 
