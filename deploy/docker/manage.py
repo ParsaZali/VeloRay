@@ -29,6 +29,7 @@ CONFIG = Path('/etc/veloray/docker')
 CURRENT = Path('/opt/veloray/docker-current')
 STATE = Path('/var/lib/veloray/docker')
 BACKUPS = Path('/var/lib/veloray/backups')
+NGINX = Path('/etc/nginx')
 REPO = 'ParsaZali/VeloRay'
 SERVICES = ['proxy', 'subscriptions', 'panel', 'agent']
 DATA = {'agent': '/var/lib/veloray-agent', 'proxy': '/data'}
@@ -409,6 +410,7 @@ def install(source):
     if captured_project_exists():
         raise ValueError('A Docker project named veloray already exists without its recovery configuration; restore /etc/veloray/docker first')
     values = configure()
+    nginx_plan(values['VELORAY_TLS_MODE'])
     CONFIG.mkdir(parents=True, mode=0o700, exist_ok=True)
     CONFIG.chmod(0o700)
     link(source)
@@ -758,6 +760,8 @@ def set_address(key, value):
     else:
         values[key] = str(port(value, [int(values['VELORAY_SUBSCRIPTION_PORT'])]))
     values['VELORAY_PUBLIC_URL'] = origin(values)
+    if key == 'VELORAY_DOMAIN':
+        nginx_plan(values['VELORAY_TLS_MODE'])
     try:
         write_env(values)
         up()
@@ -864,7 +868,7 @@ def host_jobs():
 
 
 def unchanged_nginx_welcome(path):
-    if path.name != 'default' or path.resolve() != Path('/etc/nginx/sites-available/default'):
+    if path.name != 'default' or path.resolve() != NGINX / 'sites-available/default':
         return False
     try:
         records = output(['dpkg-query', '-W', '-f=${Conffiles}', 'nginx-common']).decode().splitlines()
@@ -874,11 +878,115 @@ def unchanged_nginx_welcome(path):
         return False
 
 
+def native_tls_mode(native):
+    name = host(native.get('VELORAY_PUBLIC_HOST') or urllib.parse.urlsplit(native['VELORAY_PUBLIC_URL']).hostname)
+    try:
+        ipaddress.ip_address(name)
+        return 'local'
+    except ValueError:
+        mode = os.environ.get('VELORAY_TLS_MODE') or native.get('VELORAY_TLS_MODE', 'auto')
+        if mode not in ('auto', 'local'):
+            raise ValueError('TLS mode must be auto or local')
+        return mode
+
+
+def nginx_plan(tls_mode):
+    """Only the canonical native VeloRay link may be detached. Never edit another site."""
+    site = NGINX / 'sites-enabled/veloray'
+    target = None
+    if os.path.lexists(site):
+        if not site.is_symlink() or site.resolve() != NGINX / 'sites-available/veloray':
+            raise ValueError('Unrecognized nginx configuration at ' + str(site) + '; preserve it and move the native VeloRay listener manually before migration')
+        target = os.readlink(site)
+    active = subprocess.run(['systemctl', 'is-active', '--quiet', 'nginx'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    if target is not None or (active and tls_mode != 'local'):
+        run(['nginx', '-t'])
+    # Internal TLS with redirects disabled binds only the chosen panel/sub ports.
+    # This also leaves sites in conf.d/custom includes and nginx service state alone.
+    if tls_mode == 'local':
+        return {'nginx': False, 'nginx_reload': active, 'nginx_site': target}
+    foreign = [str(p) for p in (NGINX / 'sites-enabled').glob('*') if p != site and not unchanged_nginx_welcome(p)]
+    foreign += [str(p) for p in (NGINX / 'conf.d').glob('*.conf')]
+    if active:
+        # Detect nonstandard includes and inline server blocks too, rather than
+        # assuming sites-enabled is the only source of an operator's applications.
+        dump = output(['nginx', '-T'], stderr=subprocess.DEVNULL).decode()
+        known = {str(NGINX / name) for name in ('nginx.conf', 'mime.types', 'sites-enabled/veloray', 'sites-available/veloray', 'sites-enabled/default', 'sites-available/default')}
+        for path in re.findall(r'^# configuration file (.+):$', dump, re.MULTILINE):
+            if path not in known and not path.startswith(str(NGINX / 'modules-enabled') + '/'):
+                foreign.append(path)
+        main = NGINX / 'nginx.conf'
+        if main.is_file() and re.search(r'^\s*server\s*\{', main.read_text(), re.MULTILINE):
+            foreign.append(str(main))
+    if foreign:
+        paths = ', '.join(json.dumps(p) for p in sorted(set(foreign)))
+        raise ValueError('Automatic HTTPS cannot take ports 80/443 from existing nginx applications: ' + paths + '. Keep nginx running. Use an IP with local TLS, or explicitly set VELORAY_TLS_MODE=local for a domain with a local certificate. No nginx site or service was changed.')
+    return {'nginx': active, 'nginx_reload': False, 'nginx_site': None}
+
+
+def detach_native_nginx(state):
+    target = state.get('nginx_site')
+    if target is not None:
+        site = NGINX / 'sites-enabled/veloray'
+        if not site.is_symlink() or os.readlink(site) != target:
+            raise ValueError('The native nginx link changed during migration; refusing to remove it')
+        site.unlink()
+        run(['nginx', '-t'])
+        if state.get('nginx_reload'):
+            run(['systemctl', 'reload', 'nginx'])
+    if state.get('nginx'):
+        run(['systemctl', 'stop', 'nginx'])
+
+
+def restore_native_nginx(state):
+    target = state.get('nginx_site')
+    if target is not None:
+        site = NGINX / 'sites-enabled/veloray'
+        # Validate journal data before restoring an interrupted migration.
+        destination = Path(target) if Path(target).is_absolute() else site.parent / target
+        if destination.resolve() != NGINX / 'sites-available/veloray':
+            raise ValueError('Invalid nginx recovery link')
+        if os.path.lexists(site):
+            if not site.is_symlink() or os.readlink(site) != target:
+                raise ValueError('An nginx site now exists at the recovery path; preserve it and restore the native VeloRay link manually')
+        else:
+            site.symlink_to(target)
+        run(['nginx', '-t'])
+        if state.get('nginx_reload'):
+            run(['systemctl', 'reload', 'nginx'])
+    if state.get('nginx'):
+        if state.get('nginx_enabled'):
+            run(['systemctl', 'enable', 'nginx'])
+        run(['systemctl', 'start', 'nginx'])
+
+
+def check_migration_ports(panel_port, sub_port):
+    # A graceful nginx reload and systemd stops may take a moment to release
+    # old listen sockets. Never terminate an unrelated owner to claim its port.
+    for value in (panel_port, sub_port, 8610, 8612, 9191):
+        for attempt in range(20):
+            try:
+                if value in RESERVED:
+                    with socket.socket() as listener:
+                        listener.bind(('127.0.0.1', value))
+                else:
+                    port(value)
+                break
+            except OSError as exc:
+                if attempt == 19:
+                    raise ValueError(f'Port {value} is still used by another service. Choose an unused VeloRay port; other applications were preserved') from exc
+                time.sleep(0.25)
+
+
 def migrate(source, sha, native):
     existed = CONFIG.exists()
     try:
         return migrate_native(source, sha, native)
     except BaseException:
+        if (CONFIG / 'recovery-incomplete').exists():
+            # Keep the live recovery journal at its documented path so an
+            # operator can retry restoration after fixing nginx/systemd.
+            raise
         if not existed and CONFIG.exists():
             with contextlib.suppress(Exception):
                 compose('down', '--volumes', '--remove-orphans')
@@ -941,6 +1049,8 @@ def preflight_native():
         if native.get('DATABASE_URL') or native.get('POSTGRES_HOST', '127.0.0.1') not in ('127.0.0.1', 'localhost'):
             raise ValueError('External database migration requires an operator-managed dump')
         check_native_certificates(native)
+        install_step('Check nginx coexistence', 'بررسی هم‌زیستی با Nginx')
+        nginx_plan(native_tls_mode(native))
 
 
 def native_recovery_backup(source, path, native):
@@ -979,14 +1089,8 @@ def migrate_native(source, sha, native):
     sub_port = port(cfg.get('_subscription_endpoint', {}).get('applied_port') or sub_port, [panel_port], check=False)
     # Preserve arbitrary administrator-selected certificate paths as read-only
     # file mounts, rather than mounting the host root or silently dropping TLS.
-    enabled_sites = Path('/etc/nginx/sites-enabled')
-    if any(p.name != 'veloray' and not unchanged_nginx_welcome(p) for p in enabled_sites.glob('*')):
-        raise ValueError('Other nginx sites are active. Move them off ports 80/443 before migrating this dedicated VPN stack')
-    try:
-        ipaddress.ip_address(name)
-        tls = 'local'
-    except ValueError:
-        tls = native.get('VELORAY_TLS_MODE', 'auto')
+    tls = native_tls_mode(native)
+    nginx_state = nginx_plan(tls)
     values = {'VELORAY_DOMAIN': name, 'VELORAY_PANEL_PORT': str(panel_port), 'VELORAY_SUBSCRIPTION_PORT': str(sub_port), 'VELORAY_TLS_MODE': tls, 'VELORAY_ADMIN_USERNAME': native.get('VELORAY_ADMIN_USERNAME', 'admin'), 'VELORAY_DATABASE_PORT': str(random_port([panel_port, sub_port]))}
     template_root = native.get('VELORAY_TEMPLATE_ROOT', '/etc/veloray/templates')
     if not re.fullmatch(r'/[A-Za-z0-9_./-]+', template_root) or '..' in Path(template_root).parts:
@@ -1013,14 +1117,16 @@ def migrate_native(source, sha, native):
     active = [unit for unit in units if subprocess.run(['systemctl', 'is-active', '--quiet', unit], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0]
     enabled = [unit for unit in units if subprocess.run(['systemctl', 'is-enabled', '--quiet', unit], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0]
     say('Migrating native services to Docker. A coordinated recovery backup is created first.', 'انتقال سرویس‌های فعلی به Docker؛ ابتدا پشتیبان هماهنگ ساخته می‌شود.', '33')
-    nginx_active = subprocess.run(['systemctl', 'is-active', '--quiet', 'nginx'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
-    atomic(CONFIG / 'migration-pending.json', json.dumps({'active': active, 'enabled': enabled, 'nginx': nginx_active}))
+    # Journal the exact owned link before detaching it, including crash recovery.
+    nginx_state['nginx_enabled'] = nginx_state['nginx'] and subprocess.run(['systemctl', 'is-enabled', '--quiet', 'nginx'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    atomic(CONFIG / 'migration-pending.json', json.dumps({'active': active, 'enabled': enabled, **nginx_state}))
     try:
         install_step('Back up native data and transfer services', 'پشتیبان‌گیری و انتقال سرویس‌های قبلی')
         run(['systemctl', 'stop', *active]) if active else None
-        # Stop nginx only after verifying there are no other enabled sites.
-        if nginx_active:
-            run(['systemctl', 'stop', 'nginx'])
+        detach_native_nginx(nginx_state)
+        # Native services and only their nginx listener have now released ports.
+        # Reject unrelated owners before copying data or starting a second stack.
+        check_migration_ports(panel_port, sub_port)
         native_recovery_backup(source, recovery, native)
         compatibility = CONFIG / 'native'
         compatibility.mkdir(mode=0o700)
@@ -1096,7 +1202,7 @@ def migrate_native(source, sha, native):
         up()
         for unit in enabled:
             run(['systemctl', 'disable', unit])
-        if nginx_active:
+        if nginx_state['nginx']:
             run(['systemctl', 'disable', 'nginx'])
         install_tools()
         sync_certificate()
@@ -1112,17 +1218,27 @@ def migrate_native(source, sha, native):
         for name in ('veloray', 'velorayctl'):
             if (CONFIG / 'native-tools' / name).is_file():
                 atomic(Path('/usr/local/bin') / name, (CONFIG / 'native-tools' / name).read_bytes(), 0o755)
-        if nginx_active:
-            subprocess.run(['systemctl', 'start', 'nginx'], check=False)
+        errors = []
+        try:
+            restore_native_nginx(nginx_state)
+        except (ValueError, OSError, subprocess.SubprocessError):
+            errors.append('nginx')
         if active:
-            subprocess.run(['systemctl', 'start', *active], check=False)
+            if subprocess.run(['systemctl', 'start', *active], check=False).returncode:
+                errors.append('native services')
         for unit in enabled:
-            subprocess.run(['systemctl', 'enable', unit], check=False)
+            if subprocess.run(['systemctl', 'enable', unit], check=False).returncode:
+                errors.append(unit)
+        if errors:
+            atomic(CONFIG / 'recovery-incomplete', '\n'.join(errors))
+            raise ValueError('Automatic native recovery needs attention: ' + ', '.join(errors) + '. The recovery journal was preserved. Fix the service/configuration error, then run sudo python3 /opt/veloray/docker-current/deploy/docker/manage.py recover-migration')
         # Failed staging state must not be mistaken for a completed migration on
         # retry. Preserve the staged evidence and keys next to the recovery set.
         failed = BACKUPS / ('failed-docker-migration-' + secrets.token_hex(6))
         shutil.move(CONFIG, failed)
-        say(f'Migration failed. Native services restored; recovery: {recovery}', f'انتقال ناموفق بود؛ سرویس‌های قبلی بازیابی شدند. پشتیبان: {recovery}', '31')
+        say(f'Migration failed. Native services restored; preserved configuration: {failed}', f'انتقال ناموفق بود؛ سرویس‌های قبلی بازیابی شدند. تنظیمات محفوظ: {failed}', '31')
+        if recovery.is_file():
+            say(f'Recovery backup: {recovery}', f'پشتیبان بازیابی: {recovery}')
         raise
     show_credentials(values, migrated=True)
 
@@ -1141,8 +1257,7 @@ def recover_migration():
         if not re.fullmatch(r'(veloray-[a-z-]+|xray|sing-box)\.(service|timer)', unit):
             raise ValueError('Invalid recovery unit')
         run(['systemctl', 'enable', unit])
-    if state.get('nginx'):
-        run(['systemctl', 'start', 'nginx'])
+    restore_native_nginx(state)
     active = state.get('active', [])
     if any(not re.fullmatch(r'(veloray-[a-z-]+|xray|sing-box)\.(service|timer)', unit) for unit in active):
         raise ValueError('Invalid recovery unit')

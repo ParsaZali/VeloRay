@@ -11,6 +11,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from urllib.parse import urlsplit
 
@@ -25,6 +26,63 @@ spec.loader.exec_module(m)
 env = dict(os.environ, VELORAY_PUBLIC_HOST='127.0.0.1', VELORAY_PANEL_PORT='25443', VELORAY_SUBSCRIPTION_PORT='100', VELORAY_TLS_MODE='local', VELORAY_ADMIN_USERNAME='admin', VELORAY_ADMIN_PASSWORD='managed-docker-test-2026', VELORAY_INSTALL_COMMIT=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT).decode().strip())
 cookies = SimpleCookie()
 panel_port = 25443
+shared_nginx = None
+
+
+def nginx_fixture():
+    """Two unrelated applications on 80/443 must survive every VeloRay operation."""
+    subprocess.run(['apt-get','install','-y','nginx','openssl'], env=dict(os.environ, DEBIAN_FRONTEND='noninteractive'), check=True, stdout=subprocess.DEVNULL)
+    root = Path('/etc/nginx/veloray-ci-foreign')
+    root.mkdir()
+    certificate, key = root/'certificate.crt', root/'private.key'
+    subprocess.run(['openssl','req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes','-days','2','-keyout',str(key),'-out',str(certificate),'-subj','/CN=vanta-auth.example'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    files = {}
+    links = {}
+    for name in ('vantaa-main', 'vanta-auth'):
+        path = Path('/etc/nginx/sites-available')/name
+        path.write_text(f'''server {{
+ listen 80;
+ listen 443 ssl;
+ server_name {name}.example;
+ ssl_certificate {certificate};
+ ssl_certificate_key {key};
+ access_log off;
+ location / {{ return 200 "{name}-unmodified"; }}
+}}
+''')
+        site = Path('/etc/nginx/sites-enabled')/name
+        site.symlink_to(path)
+        files[str(path)] = path.read_bytes()
+        links[str(site)] = os.readlink(site)
+    subprocess.run(['nginx','-t'], check=True)
+    subprocess.run(['systemctl','enable','--now','nginx'], check=True)
+    subprocess.run(['systemctl','reload','nginx'], check=True)
+    pid = subprocess.check_output(['systemctl','show','nginx','--property=MainPID','--value']).strip()
+    return {'files':files, 'links':links, 'pid':pid, 'enabled':subprocess.check_output(['systemctl','is-enabled','nginx']).strip()}
+
+
+def foreign_requests():
+    for name in ('vantaa-main','vanta-auth'):
+        for number in (80,443):
+            connection = http.client.HTTPConnection('127.0.0.1',number,timeout=3) if number==80 else http.client.HTTPSConnection('127.0.0.1',number,timeout=3,context=ssl._create_unverified_context())
+            try:
+                connection.request('GET','/',headers={'Host':name+'.example'})
+                response = connection.getresponse()
+                assert response.status==200 and response.read()==(name+'-unmodified').encode()
+            finally:
+                connection.close()
+
+
+def verify_foreign_nginx():
+    if shared_nginx is None:
+        return
+    foreign_requests()
+    for path, raw in shared_nginx['files'].items():
+        assert Path(path).read_bytes()==raw, path
+    for path, target in shared_nginx['links'].items():
+        assert os.readlink(path)==target, path
+    assert subprocess.check_output(['systemctl','show','nginx','--property=MainPID','--value']).strip()==shared_nginx['pid'], 'Shared nginx was restarted'
+    assert subprocess.check_output(['systemctl','is-enabled','nginx']).strip()==shared_nginx['enabled'], 'Shared nginx service state changed'
 
 
 def request(method, path, body=None, expected=200):
@@ -75,10 +133,32 @@ def fixture():
     return request('POST', '/api/clients', {'name': 'preserved-release-client', 'inbound': inbound['id'], 'traffic_limit_bytes': 10485760, 'enabled': True}, 201), node
 
 
-def install_panel(mode):
-    result = subprocess.run(['bash', 'install.sh', '--mode', mode], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+def install_panel(mode, expected_success=True):
+    finished = threading.Event()
+    outages = []
+    def monitor():
+        while not finished.is_set():
+            try:
+                foreign_requests()
+            except Exception as exc:
+                outages.append(str(exc))
+            finished.wait(0.2)
+    watcher = threading.Thread(target=monitor) if shared_nginx is not None else None
+    if watcher:
+        watcher.start()
+    try:
+        result = subprocess.run(['bash', 'install.sh', '--mode', mode], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    finally:
+        finished.set()
+        if watcher:
+            watcher.join()
+    assert not outages, ('Unrelated nginx application outage during installation', outages[:5])
+    verify_foreign_nginx()
     console = result.stdout.decode()
     print(console, flush=True)
+    if not expected_success:
+        assert result.returncode != 0, console
+        return console
     if result.returncode:
         # Synthetic disposable CI data only; production details stay private.
         logs = sorted(Path('/var/log/veloray').glob('install-*.log'))
@@ -98,7 +178,7 @@ try:
     # not accidentally pass because a CI host permits every unprivileged bind.
     subprocess.run(['sysctl', '-w', 'net.ipv4.ip_unprivileged_port_start=1024'], stdout=subprocess.DEVNULL, check=True)
     previous = None
-    if mode in ('migration', 'retained'):
+    if mode in ('migration', 'retained', 'shared'):
         install_panel('native')
         login(env['VELORAY_ADMIN_PASSWORD'])
         previous, node = fixture()
@@ -125,9 +205,25 @@ try:
             login(env['VELORAY_ADMIN_PASSWORD'])
         finally:
             saved.rename(certificate)
+        if mode in ('retained','shared'):
+            shared_nginx = nginx_fixture()
+            verify_foreign_nginx()
         if mode == 'retained':
             subprocess.run(['/usr/local/bin/veloray', 'uninstall'], input=b'REMOVE\n', check=True)
             assert not Path('/usr/local/bin/veloray').exists()
+    elif mode == 'fresh':
+        shared_nginx = nginx_fixture()
+        verify_foreign_nginx()
+    if mode == 'shared':
+        # An unrelated UDP listener on the chosen HTTPS port must cause a
+        # coordinated rollback, not be killed or leave the native panel down.
+        with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as blocker:
+            blocker.bind(('0.0.0.0',25443))
+            console = install_panel('docker', expected_success=False)
+            assert 'Port 25443 is still used' in console, console
+            assert Path('/etc/nginx/sites-enabled/veloray').is_symlink()
+            login(env['VELORAY_ADMIN_PASSWORD'])
+            verify_foreign_nginx()
     install_panel('docker')
     subprocess.run(['/usr/local/bin/veloray', 'doctor'], check=True)
     login(env['VELORAY_ADMIN_PASSWORD'])
@@ -193,6 +289,9 @@ try:
     install_panel('docker')
     login(env['VELORAY_ADMIN_PASSWORD'])
     assert request('GET', '/api/clients') == [], 'Archived native users returned after explicit purge'
+    verify_foreign_nginx()
+    if shared_nginx is not None:
+        print('Shared nginx HTTP/HTTPS applications stayed available; files, links, master PID and enabled state preserved.')
     print('Managed Docker installer, migration/identity, custom ports, backup/restore, reset, restart, retained reinstall and fresh purge/reinstall passed.')
 finally:
     for timer in ('veloray-docker-control.timer', 'veloray-docker-certificates.timer'):

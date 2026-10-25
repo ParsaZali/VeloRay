@@ -37,7 +37,20 @@ Normal uninstall removes only this Compose project's containers, preserving volu
 
 ## Migrate an existing native installation
 
-Rerun the quick installer. It preserves an existing native installation rather than treating it as a new empty database. Preflight requires its original environment keys, a local PostgreSQL database and an existing administrator. Other nginx applications and external/custom databases require an operator-managed migration. An unmodified Ubuntu nginx welcome site is allowed.
+Rerun the quick installer. It preserves an existing native installation rather than treating it as a new empty database. Preflight requires its original environment keys, a local PostgreSQL database and an existing administrator. External/custom databases require an operator-managed migration. An unmodified Ubuntu nginx welcome site is allowed.
+
+### Share a host with nginx applications
+
+IP installations use local HTTPS on their independent panel/subscription ports and can coexist with existing nginx sites on 80/443. Migration detaches only the canonical `/etc/nginx/sites-enabled/veloray` link, validates nginx and performs a graceful reload when needed. It preserves other sites, configuration files and the nginx service's enabled/running state. If VeloRay was already uninstalled, no nginx reload is needed. A failed or interrupted migration can restore that exact link from its recovery journal. Unrelated port owners are reported without terminating them; restore/migration cannot claim a port used by another application.
+
+Automatic public certificates for domains still require free ports 80/443. When other nginx applications are configured, preflight rejects automatic HTTPS before changing services and names the conflicting configuration files, including custom includes. Keep those applications running. Use the server IP, or explicitly choose a local certificate for a domain:
+
+```bash
+export VELORAY_TLS_MODE=local
+bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/install.sh)
+```
+
+Local certificates produce a browser trust warning. This mode does not provide automatic public certificates through the existing nginx proxy. Changing an IP installation to an automatic-HTTPS domain also checks nginx coexistence before applying the address.
 
 The installer builds images before stopping services, takes a coordinated native backup, copies the database and durable agent ledger, preserves installed core slots and certificates, and starts Docker using the original origin, subscription port, users and tokens. It disables native application units only after HTTPS health succeeds. A failed migration restores native units and keeps the recovery set. A power interruption leaves an explicit migration marker; recover the original native services before retrying:
 
