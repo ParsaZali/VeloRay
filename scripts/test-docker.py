@@ -21,6 +21,31 @@ def command(*args, data=None):
     return subprocess.check_output(compose + list(args), input=data, stderr=subprocess.STDOUT).decode()
 
 
+
+def check_agent_privileges():
+    # Inspect actual long-running processes, not Docker's configured bootstrap
+    # user. No agent/core may retain root or the credential-changing caps.
+    raw = command("exec", "-T", "--user", "10002:10002", "agent", "/bin/sh", "-c",
+                  "for p in /proc/[0-9]*; do "
+                  "case $(readlink $p/exe 2>/dev/null) in "
+                  "*/veloray-agent) echo Kind:agent;; "
+                  "*/cores/xray/*) echo Kind:xray;; "
+                  "*/cores/singbox/*) echo Kind:singbox;; *) continue;; esac; "
+                  "cat $p/status; echo END; done")
+    found = set()
+    for block in raw.split("END"):
+        fields = dict(line.split(":", 1) for line in block.splitlines() if ":" in line)
+        if "Kind" not in fields:
+            continue
+        found.add(fields["Kind"].strip())
+        assert fields["Uid"].split() == ["10002"] * 4, fields
+        assert fields["Gid"].split() == ["10002"] * 4, fields
+        assert fields["NoNewPrivs"].strip() == "1", fields
+        for name in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"):
+            assert int(fields[name], 16) == 1 << 10, (name, fields)
+    assert found == {"agent", "xray", "singbox"}, found
+
+
 def request(method, path, body=None, authenticated=True, status=200, port=443):
     connection = http.client.HTTPSConnection("localhost", port, timeout=10, context=ssl._create_unverified_context())
     headers = {"Origin": "https://localhost", "Sec-Fetch-Site": "same-origin"}
@@ -76,6 +101,7 @@ while True:
         if time.monotonic() > deadline:
             raise
         time.sleep(1)
+check_agent_privileges()
 request("GET", "/api/auth/csrf")
 password = (Path(os.environ["VELORAY_SECRET_DIRECTORY"]) / "admin_password").read_text().strip()
 request("POST", "/api/auth/login", {"username": "admin", "password": password})

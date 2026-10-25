@@ -57,10 +57,12 @@ services:
       retries: 20
   agent:
     <<: *app
-    user: "10002:10002"
+    # Drop bootstrap credentials before executing any application code.
+    user: "0:0"
+    init: false
     command: [agent]
-    entrypoint: [/usr/bin/setpriv, --inh-caps, +net_bind_service, --ambient-caps, +net_bind_service, /bin/bash, /usr/local/bin/veloray-container]
-    cap_add: [NET_BIND_SERVICE]
+    entrypoint: [/usr/bin/setpriv, "--reuid=10002", "--regid=10002", --clear-groups, "--bounding-set=-setuid,-setgid,-setpcap", "--inh-caps=+net_bind_service", "--ambient-caps=+net_bind_service", /bin/bash, /usr/local/bin/veloray-container]
+    cap_add: [NET_BIND_SERVICE, SETUID, SETGID, SETPCAP]
     tmpfs: ["/tmp:rw,noexec,nosuid,size=64m,mode=1777", "/var/log/xray:rw,noexec,nosuid,size=32m,uid=10002,gid=10002,mode=0700", "/var/log/sing-box:rw,noexec,nosuid,size=16m,uid=10002,gid=10002,mode=0700"]
     environment:
       VELORAY_CORE_MANAGER: process
@@ -75,7 +77,7 @@ services:
     secrets: [agent_token]
     volumes: [agent-data:/var/lib/veloray-agent, "${VELORAY_CERTIFICATE_DIRECTORY:-./certificates}:/etc/veloray/certificates:ro"]
     healthcheck:
-      test: [CMD, /bin/bash, /usr/local/bin/veloray-container, health-agent]
+      test: [CMD, /usr/bin/setpriv, "--reuid=10002", "--regid=10002", --clear-groups, "--bounding-set=-setuid,-setgid,-setpcap", "--inh-caps=+net_bind_service", "--ambient-caps=+net_bind_service", /bin/bash, /usr/local/bin/veloray-container, health-agent]
       interval: 10s
       timeout: 5s
       retries: 12

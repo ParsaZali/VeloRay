@@ -97,20 +97,23 @@ shared with the VPN cores. No public domain or DNS record is created automatical
 
 ## Process and permission boundaries
 
-All application containers run as separate non-root identities with read-only
+All application processes run as separate non-root identities with read-only
 root filesystems, bounded tmpfs, dropped capabilities and `no-new-privileges`.
-Only the proxy and agent receive `NET_BIND_SERVICE`; PostgreSQL runs as its own
+Only the proxy and agent retain `NET_BIND_SERVICE`; PostgreSQL runs as its own
 non-root database user. No container gets `privileged`, the Docker socket, the
 host PID namespace or host systemd sockets. Host networking supports operator-
 selected TCP/UDP listener ports; database, panel, subscription administration and
 agent control bind only to loopback. Open public VPN ports explicitly in the
 server firewall. This stack does not automatically change firewall rules.
 
-The agent's bounded `setpriv` entrypoint carries only `NET_BIND_SERVICE` through
-the shell and managed core executions as an ambient capability. This permits
+The agent's fixed `setpriv` bootstrap starts with only `SETUID`, `SETGID`,
+`SETPCAP` and `NET_BIND_SERVICE`, switches to UID/GID 10002, clears supplementary
+groups and removes all three bootstrap capabilities from its bounding set before
+executing application code. No root init process remains. The agent and managed
+cores carry only `NET_BIND_SERVICE` as an ambient capability. This permits
 ports below 1024 without running the agent as root or changing the host's
-unprivileged-port sysctl. Docker Engine 24+ is required for non-root capabilities
-with `no-new-privileges`. CI explicitly tests a protected port under the normal
+unprivileged-port sysctl. CI checks the running agent/core identities and capability sets, and explicitly
+tests protected subscription and VPN ports under the normal
 1024 threshold and restores the disposable VM's original setting afterwards.
 
 The agent's opt-in `VELORAY_CORE_MANAGER=process` replaces only the known core
