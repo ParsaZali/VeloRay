@@ -142,6 +142,26 @@ class ManagerTests(unittest.TestCase):
                 m.update_source()
             run.assert_not_called()
 
+    def test_recovery_configuration_cannot_mount_host_socket_or_replace_entrypoint(self):
+        values = dict(self.values, VELORAY_SECRET_DIRECTORY=str(self.config/'secrets'), VELORAY_TEMPLATE_DIRECTORY=str(self.config/'templates'), VELORAY_CERTIFICATE_DIRECTORY=str(self.config/'certificates'))
+        m.write_env(values)
+        for agent in ({'privileged': True}, {'entrypoint': ['/bin/sh']}, {'environment': {'VELORAY_XRAY_BINARY': '/bin/sh'}}, {'volumes': [{'type': 'bind', 'source': '/var/run/docker.sock', 'target': '/run/docker.sock'}]}, {'cap_add': ['SYS_ADMIN']}):
+            (self.config/'override.json').write_text(json.dumps({'services': {'agent': agent}}))
+            with self.subTest(agent=agent), self.assertRaises(ValueError):
+                m.validate_recovery_configuration(self.config)
+
+    def test_certificate_import_checks_name_key_pair_and_private_files(self):
+        certificate, key, other = self.root/'cert.pem', self.root/'key.pem', self.root/'other.pem'
+        subprocess.run(['openssl','req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes','-days','2','-keyout',str(key),'-out',str(certificate),'-subj','/CN=vpn.example','-addext','subjectAltName=DNS:vpn.example'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(['openssl','genpkey','-algorithm','EC','-pkeyopt','ec_paramgen_curve:P-256','-out',str(other)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        with self.assertRaises(ValueError):
+            m.import_certificate('other.example', certificate, key)
+        with self.assertRaises(ValueError):
+            m.import_certificate('vpn.example', certificate, other)
+        self.assertTrue(m.import_certificate('vpn.example', certificate, key))
+        self.assertFalse(m.import_certificate('vpn.example', certificate, key))
+        self.assertEqual((self.config/'certificates/vpn.example/privkey.pem').stat().st_mode & 0o777, 0o444)
+
 
 if __name__ == '__main__':
     unittest.main()

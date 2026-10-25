@@ -47,7 +47,7 @@ func validPort(port int) bool {
 	if port < 0 || port > 65535 {
 		return false
 	}
-	for _, reserved := range []int{80, 443, 5432, 8610, 8611, 8612, 9191, 10085, 10086, 10087} {
+	for _, reserved := range []int{80, 5432, 8610, 8611, 8612, 9191, 10085, 10086, 10087} {
 		if port == reserved {
 			return false
 		}
@@ -76,6 +76,7 @@ func configurationFor(domain string, port, panelPort int, tlsMode string) string
 	}
 	raw := fmt.Sprintf(`{
  admin unix/%s
+ default_sni %s
  %s
  skip_install_trust
  log default {
@@ -97,7 +98,7 @@ https://%s {
   reverse_proxy 127.0.0.1:8610
  }
 }
-`, adminPath, globalDirective, host, tlsDirective, subscription)
+`, adminPath, domain, globalDirective, host, tlsDirective, subscription)
 	if port > 0 {
 		raw += fmt.Sprintf(`https://%s {
  %s
@@ -151,7 +152,7 @@ func (c *controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
 	d.DisallowUnknownFields()
-	if d.Decode(&in) != nil || in.Port == nil || (!validPort(*in.Port) || *in.Port == c.panelPort) {
+	if d.Decode(&in) != nil || in.Port == nil || (!validPort(*in.Port) || *in.Port == c.effectivePanelPort()) {
 		http.Error(w, "invalid port", 400)
 		return
 	}
@@ -192,12 +193,14 @@ func (c *controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	_ = json.NewEncoder(w).Encode(map[string]int{"port": c.port})
 }
-func (c *controller) configuration(port int) string {
-	panelPort := c.panelPort
-	if panelPort == 0 {
-		panelPort = 443
+func (c *controller) effectivePanelPort() int {
+	if c.panelPort == 0 {
+		return 443
 	}
-	return configurationFor(c.domain, port, panelPort, c.tlsMode)
+	return c.panelPort
+}
+func (c *controller) configuration(port int) string {
+	return configurationFor(c.domain, port, c.effectivePanelPort(), c.tlsMode)
 }
 func persistPort(port int) error {
 	raw, _ := json.Marshal(map[string]int{"port": port})

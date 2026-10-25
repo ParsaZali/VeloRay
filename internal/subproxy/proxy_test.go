@@ -126,3 +126,12 @@ func TestInitialPortWaitsForCaddyBeforePersistence(t *testing.T) {
 		t.Fatal("unconfirmed initial port became durable", w.Code, persisted)
 	}
 }
+
+func TestSubscriptionMayUse443WhenPanelUsesAnotherPort(t *testing.T) {
+	c := &controller{domain: "example.com", panelPort: 24443, reload: func(context.Context, string) error { return nil }, persist: func(int) error { return nil }}
+	w := httptest.NewRecorder()
+	c.ServeHTTP(w, httptest.NewRequest("PUT", "/port", strings.NewReader(`{"port":443}`)))
+	if w.Code != 200 || c.port != 443 {
+		t.Fatal("custom panel port unnecessarily reserved 443", w.Code, c.port)
+	}
+}

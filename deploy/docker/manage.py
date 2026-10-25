@@ -432,6 +432,8 @@ def verify_backup(path, directory):
                 raise ValueError('Unsafe backup member')
             seen.add(str(name))
             if member.issym():
+                if not (str(name).startswith('agent/cores/') or str(name).startswith('agent/assets/xray/')):
+                    raise ValueError('Links are allowed only in managed agent slots')
                 # Agent core slots use absolute links inside their managed tree.
                 target = Path(member.linkname)
                 allowed = str(target).startswith('/var/lib/veloray-agent/cores/') and '..' not in target.parts
@@ -466,7 +468,58 @@ def verify_backup(path, directory):
     for name in ('secret_key', 'field_key', 'agent_token', 'database_password', 'admin_password'):
         if not (directory / 'configuration/secrets' / name).is_file():
             raise ValueError('Recovery keys are missing')
+    validate_recovery_configuration(directory / 'configuration')
     return manifest
+
+
+def validate_recovery_configuration(directory):
+    values = read_env(directory / '.env')
+    host(values['VELORAY_DOMAIN'])
+    panel = port(values['VELORAY_PANEL_PORT'], check=False)
+    port(values['VELORAY_SUBSCRIPTION_PORT'], [panel], check=False)
+    database = int(values['VELORAY_DATABASE_PORT'])
+    if not 1024 <= database <= 65535 or database in RESERVED or database in (panel, int(values['VELORAY_SUBSCRIPTION_PORT'])):
+        raise ValueError('Invalid recovery database port')
+    for key, relative in (('VELORAY_SECRET_DIRECTORY', 'secrets'), ('VELORAY_TEMPLATE_DIRECTORY', 'templates'), ('VELORAY_CERTIFICATE_DIRECTORY', 'certificates')):
+        if values.get(key) != str(CONFIG / relative):
+            raise ValueError('Recovery configuration points outside the managed data directory')
+    for key, value in values.items():
+        if not re.fullmatch('VELORAY_[A-Z0-9_]+', key) or any(c in value for c in '\n\r\0$`'):
+            raise ValueError('Invalid recovery environment')
+    for name in ('migration-pending.json', 'installing'):
+        if (directory / name).exists():
+            raise ValueError('Backup contains an unfinished installation')
+    override_path = directory / 'override.json'
+    if not override_path.exists():
+        return
+    override = json.loads(override_path.read_text())
+    if set(override) != {'services'} or set(override['services']) != {'agent'}:
+        raise ValueError('Recovery override may configure only the agent')
+    agent = override['services']['agent']
+    if set(agent) - {'environment', 'volumes', 'cap_add', 'devices'}:
+        raise ValueError('Recovery contains an unsupported container override')
+    permitted_env = {'VELORAY_XRAY_CONFIG': '/usr/local/etc/xray/config.json', 'VELORAY_SINGBOX_CONFIG': '/usr/local/etc/sing-box/config.json'}
+    if any(permitted_env.get(key) != value for key, value in agent.get('environment', {}).items()):
+        raise ValueError('Recovery changes a runtime executable or command')
+    if agent.get('cap_add', []) not in ([], ['NET_ADMIN']) or agent.get('devices', []) not in ([], ['/dev/net/tun:/dev/net/tun']):
+        raise ValueError('Recovery grants unsupported host capabilities')
+    for mount in agent.get('volumes', []):
+        if not isinstance(mount, dict) or set(mount) - {'type', 'source', 'target', 'read_only'} or mount.get('type') != 'bind':
+            raise ValueError('Unsupported recovery mount')
+        source = Path(mount.get('source', ''))
+        target = Path(mount.get('target', ''))
+        if not source.is_relative_to(CONFIG / 'native') or '..' in source.parts or not target.is_absolute() or '..' in target.parts:
+            raise ValueError('Recovery mount escapes managed data')
+        relative = source.relative_to(CONFIG)
+        local_source = directory / relative
+        if local_source.is_symlink() or not local_source.exists():
+            raise ValueError('Recovery mount source is missing or linked')
+        if relative.as_posix() in ('native/xray', 'native/sing-box'):
+            expected = '/usr/local/etc/' + ('xray' if relative.name == 'xray' else 'sing-box')
+            if str(target) != expected or not local_source.is_dir():
+                raise ValueError('Invalid core configuration mount')
+        elif not relative.is_relative_to(Path('native/certificates')) or not mount.get('read_only') or not local_source.is_file() or (target.parts[1] in ('bin', 'sbin', 'usr', 'proc', 'sys', 'dev', 'run', 'var', 'tmp') and not (target.is_relative_to(Path('/usr/local/etc/xray')) or target.is_relative_to(Path('/usr/local/etc/sing-box')))):
+            raise ValueError('Recovery contains an unsafe certificate mount')
 
 
 def restore_ownership(directory, user, group):
@@ -627,7 +680,9 @@ def import_certificate(name, certificate, key):
     with contextlib.suppress(ValueError):
         ipaddress.ip_address(name)
         check = '-checkip'
-    run(['openssl', 'x509', '-in', certificate, '-noout', check, name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    match = output(['openssl', 'x509', '-in', certificate, '-noout', check, name], stderr=subprocess.DEVNULL, env=dict(os.environ, LC_ALL='C')).decode().strip()
+    if not match.endswith(' does match certificate'):
+        raise ValueError('Certificate does not cover this hostname or IP')
     run(['openssl', 'x509', '-in', certificate, '-noout', '-checkend', '3600'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     public = output(['openssl', 'x509', '-in', certificate, '-pubkey', '-noout'])
     private_public = output(['openssl', 'pkey', '-in', key, '-pubout'], stderr=subprocess.DEVNULL)
@@ -683,9 +738,13 @@ def host_jobs():
                 source, sha = update_source(job['target'])
                 if source:
                     upgrade(source, sha)
+            else:
+                up()
         elif job['kind'] == 'panel_port' and job['target'].isdigit() and (origin(values) == job['previous'] or int(values['VELORAY_PANEL_PORT']) == int(job['target'])):
             if int(values['VELORAY_PANEL_PORT']) != int(job['target']):
                 set_address('VELORAY_PANEL_PORT', job['target'])
+            else:
+                up()
         else:
             raise ValueError('Unsupported or stale server operation')
         sql(f"UPDATE vr_host_jobs SET state='succeeded',error='',updated_at=now() WHERE id={int(job['id'])};")
@@ -869,6 +928,8 @@ def migrate_native(source, sha, native):
         show_credentials(values, migrated=True)
         sync_certificate()
     except BaseException:
+        for timer in ('veloray-docker-control.timer', 'veloray-docker-certificates.timer'):
+            subprocess.run(['systemctl', 'disable', '--now', timer], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
         with contextlib.suppress(Exception):
             compose('down', '--volumes', '--remove-orphans')
         # Native database/configuration were only read, never overwritten. Do
