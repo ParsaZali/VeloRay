@@ -84,6 +84,10 @@ class ManagerTests(unittest.TestCase):
         config.write_text(json.dumps({'streamSettings':{'security':'none','tlsSettings':{'certificates':[{'keyFile':missing}]}}}))
         self.assertEqual(m.native_certificate_paths([], [config]), [])
 
+    def test_existing_docker_preflight_never_reopens_archived_native_state(self):
+        with patch.object(m, 'native_environment_for_install', side_effect=AssertionError('native archive must not be inspected')):
+            m.preflight_native()
+
     def test_missing_required_tls_reports_exact_paths_and_checks_runtime_references(self):
         certificate, key = str(self.root/'missing-cert.pem'), str(self.root/'missing-key.pem')
         records = [{'node_enabled':True, 'data':{'enabled':True,'security':'tls','protocol':'trojan','tls_cert_file':certificate,'tls_key_file':key}}]

@@ -932,6 +932,17 @@ def check_native_certificates(native):
     return native_certificate_paths(rows, [Path('/usr/local/etc/xray/config.json'), Path('/usr/local/etc/sing-box/config.json')])
 
 
+def preflight_native():
+    if (CONFIG / '.env').is_file():
+        return
+    native = native_environment_for_install(Path('/etc/veloray/veloray.env'))
+    if native:
+        install_step('Check native VPN certificates', 'بررسی گواهی‌های اتصال قبلی')
+        if native.get('DATABASE_URL') or native.get('POSTGRES_HOST', '127.0.0.1') not in ('127.0.0.1', 'localhost'):
+            raise ValueError('External database migration requires an operator-managed dump')
+        check_native_certificates(native)
+
+
 def native_recovery_backup(source, path, native):
     # Retained native uninstalls remove the management binary. Use the already
     # verified bundled CLI, without reinstalling or invoking the missing CLI.
@@ -1211,13 +1222,7 @@ def main():
         if command == 'recover-migration':
             return recover_migration()
         if command == 'preflight':
-            native = native_environment_for_install(Path('/etc/veloray/veloray.env'))
-            if native and not (CONFIG / '.env').exists():
-                install_step('Check native VPN certificates', 'بررسی گواهی‌های اتصال قبلی')
-                if native.get('DATABASE_URL') or native.get('POSTGRES_HOST', '127.0.0.1') not in ('127.0.0.1', 'localhost'):
-                    raise ValueError('External database migration requires an operator-managed dump')
-                check_native_certificates(native)
-            return
+            return preflight_native()
         if command == 'install':
             return install(args.source.resolve())
         if not (CONFIG / '.env').is_file():
