@@ -271,6 +271,23 @@ class ManagerTests(unittest.TestCase):
         self.assertNotIn(one, m.RESERVED)
         self.assertGreaterEqual(one, 1024)
 
+    def test_recent_tcp_connections_do_not_look_like_active_listeners(self):
+        with m.socket.socket() as server:
+            server.setsockopt(m.socket.SOL_SOCKET, m.socket.SO_REUSEADDR, 1)
+            server.bind(('0.0.0.0', 0))
+            number = server.getsockname()[1]
+            server.listen()
+            with self.assertRaises(OSError):
+                m.port(number)
+            with m.socket.create_connection(('127.0.0.1', number)) as client:
+                connection, _ = server.accept()
+                connection.close()
+                self.assertEqual(client.recv(1), b'')
+        self.assertEqual(m.port(number), number)
+        # Reserved loopback application ports use the same TCP reuse semantics.
+        with patch.object(m.time, 'sleep'), patch.object(m, 'RESERVED', m.RESERVED | {number}):
+            m.check_migration_ports(number, m.random_port([number]))
+
     def test_random_ports_work_on_ipv4_only_hosts(self):
         original = m.socket.socket
         def ipv4_only(family, kind):

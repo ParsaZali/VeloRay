@@ -57,6 +57,17 @@ def nginx_fixture():
     subprocess.run(['nginx','-t'], check=True)
     subprocess.run(['systemctl','enable','--now','nginx'], check=True)
     subprocess.run(['systemctl','reload','nginx'], check=True)
+    # systemctl reload returns after signaling the master, before new workers
+    # necessarily serve the fixture. Start outage monitoring only after ready.
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            foreign_requests()
+            break
+        except (OSError, AssertionError):
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.1)
     pid = subprocess.check_output(['systemctl','show','nginx','--property=MainPID','--value']).strip()
     return {'files':files, 'links':links, 'pid':pid, 'enabled':subprocess.check_output(['systemctl','is-enabled','nginx']).strip()}
 
@@ -68,7 +79,8 @@ def foreign_requests():
             try:
                 connection.request('GET','/',headers={'Host':name+'.example'})
                 response = connection.getresponse()
-                assert response.status==200 and response.read()==(name+'-unmodified').encode()
+                raw = response.read()
+                assert response.status==200 and raw==(name+'-unmodified').encode(), (name, number, response.status, raw[:200])
             finally:
                 connection.close()
 

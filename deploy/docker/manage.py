@@ -161,6 +161,8 @@ def port(value, excluded=(), check=True):
             for kind in (socket.SOCK_STREAM, socket.SOCK_DGRAM):
                 try:
                     with socket.socket(family, kind) as listener:
+                        if kind == socket.SOCK_STREAM:
+                            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                         if family == socket.AF_INET6:
                             listener.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
                         listener.bind((address, number))
@@ -968,6 +970,7 @@ def check_migration_ports(panel_port, sub_port):
             try:
                 if value in RESERVED:
                     with socket.socket() as listener:
+                        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                         listener.bind(('127.0.0.1', value))
                 else:
                     port(value)
