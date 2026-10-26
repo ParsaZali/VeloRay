@@ -68,6 +68,7 @@ jobs:
           - {host: ubuntu-22.04, scenario: fresh}
           - {host: ubuntu-24.04, scenario: migration}
           - {host: ubuntu-24.04, scenario: retained}
+          - {host: ubuntu-24.04, scenario: shared}
     runs-on: ${{ matrix.host }}
     steps:
       - uses: actions/checkout@v4
@@ -96,3 +97,6 @@ jobs:
       - name: Verify migration after retained native uninstall
         if: steps.bundle.outputs.ready == 'true' && matrix.scenario == 'retained'
         run: sudo env VELORAY_MANAGED_DOCKER_TEST=1 python3 scripts/test-managed-docker.py retained
+      - name: Verify shared nginx migration, port conflict rollback and recovery
+        if: steps.bundle.outputs.ready == 'true' && matrix.scenario == 'shared'
+        run: sudo env VELORAY_MANAGED_DOCKER_TEST=1 python3 scripts/test-managed-docker.py shared

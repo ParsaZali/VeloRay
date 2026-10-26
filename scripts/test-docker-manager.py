@@ -30,7 +30,11 @@ class ManagerTests(unittest.TestCase):
         self.source = self.root / 'release'
         self.source.mkdir()
         self.current.symlink_to(self.source)
-        self.patches = [patch.object(m, 'CONFIG', self.config), patch.object(m, 'CURRENT', self.current), patch.object(m, 'BACKUPS', self.root / 'backups'), patch.object(m, 'STATE', self.root/'state')]
+        self.nginx = self.root/'nginx'
+        (self.nginx/'sites-enabled').mkdir(parents=True)
+        (self.nginx/'sites-available').mkdir()
+        (self.nginx/'conf.d').mkdir()
+        self.patches = [patch.object(m, 'CONFIG', self.config), patch.object(m, 'CURRENT', self.current), patch.object(m, 'BACKUPS', self.root / 'backups'), patch.object(m, 'STATE', self.root/'state'), patch.object(m, 'NGINX', self.nginx)]
         for item in self.patches:
             item.start()
         self.values = {'VELORAY_DOMAIN': 'vpn.example', 'VELORAY_PANEL_PORT': '24443', 'VELORAY_SUBSCRIPTION_PORT': '24444', 'VELORAY_DATABASE_PORT': '24543', 'VELORAY_INSTALLED_COMMIT': 'a' * 40}
@@ -87,6 +91,118 @@ class ManagerTests(unittest.TestCase):
     def test_existing_docker_preflight_never_reopens_archived_native_state(self):
         with patch.object(m, 'native_environment_for_install', side_effect=AssertionError('native archive must not be inspected')):
             m.preflight_native()
+
+    def nginx_fixture(self, owned=True):
+        for name in ('vantaa-main', 'vanta-auth', *(['veloray'] if owned else [])):
+            path = self.nginx/'sites-available'/name
+            path.write_text('server { listen 443 ssl; }\n')
+            (self.nginx/'sites-enabled'/name).symlink_to(path)
+
+    def test_local_tls_preserves_shared_nginx_and_detaches_only_its_owned_link(self):
+        self.nginx_fixture()
+        before = {p.name:p.read_bytes() for p in (self.nginx/'sites-available').iterdir()}
+        with patch.object(m, 'run') as run, patch.object(m.subprocess, 'run', return_value=subprocess.CompletedProcess([],0)):
+            state = m.nginx_plan('local')
+            self.assertFalse(state['nginx'])
+            m.detach_native_nginx(state)
+            self.assertFalse((self.nginx/'sites-enabled/veloray').exists())
+            for name in ('vantaa-main','vanta-auth'):
+                self.assertTrue((self.nginx/'sites-enabled'/name).is_symlink())
+            m.restore_native_nginx(state)
+            self.assertTrue((self.nginx/'sites-enabled/veloray').is_symlink())
+        self.assertEqual(before, {p.name:p.read_bytes() for p in (self.nginx/'sites-available').iterdir()})
+        self.assertNotIn(['systemctl','stop','nginx'], [c.args[0] for c in run.call_args_list])
+        self.assertNotIn(['systemctl','disable','nginx'], [c.args[0] for c in run.call_args_list])
+        self.assertIn(['systemctl','reload','nginx'], [c.args[0] for c in run.call_args_list])
+
+    def test_retained_uninstall_or_fresh_install_never_touches_unrelated_nginx(self):
+        self.nginx_fixture(owned=False)
+        with patch.object(m, 'run') as run, patch.object(m.subprocess, 'run', return_value=subprocess.CompletedProcess([],0)):
+            state = m.nginx_plan('local')
+            m.detach_native_nginx(state)
+            m.restore_native_nginx(state)
+        run.assert_not_called()
+
+    def test_automatic_tls_rejects_shared_sites_before_changes_and_lists_names(self):
+        self.nginx_fixture()
+        with patch.object(m, 'run'), patch.object(m, 'output', return_value=b''), patch.object(m.subprocess, 'run', return_value=subprocess.CompletedProcess([],0)), self.assertRaises(ValueError) as error:
+            m.nginx_plan('auto')
+        self.assertIn('vanta-auth', str(error.exception))
+        self.assertIn('VELORAY_TLS_MODE=local', str(error.exception))
+        self.assertTrue((self.nginx/'sites-enabled/veloray').is_symlink())
+
+    def test_automatic_tls_detects_custom_nginx_includes_and_inline_servers(self):
+        for custom in ('include', 'inline', 'conf.d'):
+            with self.subTest(custom=custom):
+                (self.nginx/'nginx.conf').write_text('http {\n server { listen 443; }\n}\n' if custom=='inline' else 'http {}\n')
+                extra = self.nginx/'conf.d/other.conf'
+                if custom == 'conf.d':
+                    extra.write_text('server { listen 443; }')
+                else:
+                    extra.unlink(missing_ok=True)
+                dump = b'# configuration file /custom/sites/application.conf:\n' if custom=='include' else b''
+                with patch.object(m, 'run'), patch.object(m, 'output', return_value=dump), patch.object(m.subprocess, 'run', return_value=subprocess.CompletedProcess([],0)), self.assertRaises(ValueError):
+                    m.nginx_plan('auto')
+
+    def test_changed_owned_nginx_link_is_never_deleted(self):
+        self.nginx_fixture()
+        site = self.nginx/'sites-enabled/veloray'
+        with patch.object(m, 'run'), patch.object(m.subprocess, 'run', return_value=subprocess.CompletedProcess([],0)):
+            state = m.nginx_plan('local')
+            site.unlink()
+            site.symlink_to(self.nginx/'sites-available/vanta-auth')
+            with self.assertRaises(ValueError):
+                m.detach_native_nginx(state)
+            with self.assertRaises(ValueError):
+                m.restore_native_nginx(state)
+            with self.assertRaises(ValueError):
+                m.nginx_plan('local')
+        self.assertEqual(site.resolve(), self.nginx/'sites-available/vanta-auth')
+
+    def test_interrupted_migration_restores_owned_nginx_link_without_restarting_shared_service(self):
+        self.nginx_fixture()
+        site = self.nginx/'sites-enabled/veloray'
+        state = {'active':['veloray-web.service'], 'enabled':['veloray-web.service'], 'nginx':False, 'nginx_reload':True, 'nginx_site':os.readlink(site)}
+        site.unlink()
+        (self.config/'migration-pending.json').write_text(json.dumps(state))
+        with patch.object(m, 'compose'), patch.object(m, 'run') as run:
+            m.recover_migration()
+        self.assertTrue(site.is_symlink())
+        calls = [c.args[0] for c in run.call_args_list]
+        self.assertIn(['systemctl','reload','nginx'], calls)
+        self.assertNotIn(['systemctl','start','nginx'], calls)
+
+    def test_busy_migration_port_is_reported_without_killing_its_owner(self):
+        with m.socket.socket(m.socket.AF_INET, m.socket.SOCK_DGRAM) as owner:
+            owner.bind(('0.0.0.0',0))
+            number = owner.getsockname()[1]
+            with patch.object(m.time,'sleep'), self.assertRaisesRegex(ValueError, f'Port {number}'):
+                m.check_migration_ports(number, m.random_port([number]))
+            self.assertEqual(owner.getsockname()[1], number)
+
+    def test_reload_failure_can_restore_owned_link_without_touching_other_sites(self):
+        self.nginx_fixture()
+        site = self.nginx/'sites-enabled/veloray'
+        with patch.object(m, 'run'), patch.object(m.subprocess, 'run', return_value=subprocess.CompletedProcess([],0)):
+            state = m.nginx_plan('local')
+        with patch.object(m, 'run', side_effect=[None,subprocess.CalledProcessError(1,['systemctl','reload','nginx'])]), self.assertRaises(subprocess.CalledProcessError):
+            m.detach_native_nginx(state)
+        with patch.object(m, 'run'):
+            m.restore_native_nginx(state)
+        self.assertTrue(site.is_symlink())
+        self.assertTrue((self.nginx/'sites-enabled/vanta-auth').is_symlink())
+
+    def test_incomplete_recovery_keeps_journal_available_for_operator_retry(self):
+        shutil.rmtree(self.config)
+        def failed_migration(*args):
+            self.config.mkdir()
+            (self.config/'migration-pending.json').write_text('{}')
+            (self.config/'recovery-incomplete').write_text('nginx')
+            raise ValueError('recovery failed')
+        with patch.object(m, 'migrate_native', side_effect=failed_migration), patch.object(m, 'compose') as compose, self.assertRaises(ValueError):
+            m.migrate(self.source, 'b'*40, {})
+        compose.assert_not_called()
+        self.assertTrue((self.config/'migration-pending.json').is_file())
 
     def test_missing_required_tls_reports_exact_paths_and_checks_runtime_references(self):
         certificate, key = str(self.root/'missing-cert.pem'), str(self.root/'missing-key.pem')
@@ -155,6 +271,23 @@ class ManagerTests(unittest.TestCase):
         self.assertNotIn(one, m.RESERVED)
         self.assertGreaterEqual(one, 1024)
 
+    def test_recent_tcp_connections_do_not_look_like_active_listeners(self):
+        with m.socket.socket() as server:
+            server.setsockopt(m.socket.SOL_SOCKET, m.socket.SO_REUSEADDR, 1)
+            server.bind(('0.0.0.0', 0))
+            number = server.getsockname()[1]
+            server.listen()
+            with self.assertRaises(OSError):
+                m.port(number)
+            with m.socket.create_connection(('127.0.0.1', number)) as client:
+                connection, _ = server.accept()
+                connection.close()
+                self.assertEqual(client.recv(1), b'')
+        self.assertEqual(m.port(number), number)
+        # Reserved loopback application ports use the same TCP reuse semantics.
+        with patch.object(m.time, 'sleep'), patch.object(m, 'RESERVED', m.RESERVED | {number}):
+            m.check_migration_ports(number, m.random_port([number]))
+
     def test_random_ports_work_on_ipv4_only_hosts(self):
         original = m.socket.socket
         def ipv4_only(family, kind):
@@ -218,7 +351,7 @@ class ManagerTests(unittest.TestCase):
         self.assertEqual(self.current.resolve(), self.source)
 
     def test_address_failure_restores_old_origin(self):
-        with patch.object(m, 'up', side_effect=[ValueError('TLS failed'), None]) as up:
+        with patch.object(m, 'nginx_plan'), patch.object(m, 'up', side_effect=[ValueError('TLS failed'), None]) as up:
             with self.assertRaises(ValueError):
                 m.set_address('VELORAY_DOMAIN', 'new.example')
         self.assertEqual(up.call_count, 2)
