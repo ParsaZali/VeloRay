@@ -261,6 +261,8 @@
   --warning: #f59e0b;
   --chart-grid: #242424;
   --chart-line: #67e8a5;
+  --chart-upload: #75dba2;
+  --chart-download: #65a9f3;
   --chart-fill: rgba(103, 232, 165, 0.12);
 }
 .light {
@@ -287,6 +289,8 @@
   --warning: #d97706;
   --chart-grid: #ececef;
   --chart-line: #00a95a;
+  --chart-upload: #16834d;
+  --chart-download: #2563d8;
   --chart-fill: rgba(0, 169, 90, 0.1);
 }
 
@@ -1160,10 +1164,10 @@ input[type="checkbox"]:disabled {
   align-items: center;
   gap: 7px;
   font-size: 12px;
-  color: var(--chart-line);
+  color: var(--chart-upload);
 }
 .traffic-direction-label.download {
-  color: var(--info);
+  color: var(--chart-download);
 }
 .network-filters {
   display: grid;
@@ -1669,4 +1673,29 @@ nav [aria-current="page"] .lucide {
 
 .label > .backup-file-field {
   margin-top: 0.45rem;
+}
+
+/* Dashboard traffic uses the website preview's slim lines and quieter controls. */
+.traffic-chart-shell {
+  min-width: 0;
+}
+.traffic-chart-shell .chart-mode {
+  gap: 2px;
+  margin: 2px 0 14px;
+}
+.traffic-chart-shell .chart-mode button {
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 5px 10px;
+  transition:
+    color 0.18s,
+    background 0.18s,
+    border-color 0.18s;
+}
+.traffic-chart-shell .chart-mode button.selected {
+  background: var(--surface-2);
+  border-color: var(--border-subtle);
+}
+.traffic-chart-canvas {
+  direction: ltr;
 }
