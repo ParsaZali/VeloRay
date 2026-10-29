@@ -1,7 +1,7 @@
 import { Notifications } from "@/components/notifications";
 import { useLocale, t } from "@/lib/i18n";
 import type { ReactNode, CSSProperties } from "react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Header } from "./header";
 import { Sidebar, type RouteKey } from "./sidebar";
 import type { Session } from "@/lib/api";
@@ -27,6 +27,13 @@ export function Shell({
     () => localStorage.getItem("veloray-sidebar") === "collapsed",
   );
   const [mobileOpen, setMobileOpen] = useState(false);
+  const previousRoute = useRef(route);
+  useEffect(() => {
+    if (previousRoute.current === route) return;
+    previousRoute.current = route;
+    window.scrollTo({ top: 0, behavior: "instant" });
+    document.getElementById("main-content")?.focus({ preventScroll: true });
+  }, [route]);
   const change = (v: boolean) => {
     setCollapsed(v);
     localStorage.setItem("veloray-sidebar", v ? "collapsed" : "expanded");

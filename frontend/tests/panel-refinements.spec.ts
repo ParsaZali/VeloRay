@@ -3431,3 +3431,64 @@ test("dashboard shortcuts respect each route permission", async ({ page }) => {
   ).toBeVisible();
   await expect(actions.getByRole("link")).toHaveCount(0);
 });
+
+test("modal select Escape closes only the list and retains the editor", async ({
+  page,
+}) => {
+  await panel(page, "/inbounds");
+  await page.getByRole("button", { name: "New inbound", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "New inbound", exact: true });
+  const core = dialog.getByRole("combobox", { name: "Core", exact: true });
+  await core.click();
+  await expect(page.getByRole("listbox")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  await expect(core).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "New inbound", exact: true }),
+  ).toBeFocused();
+});
+
+test("mobile navigation traps focus, closes with Escape and restores scrolling", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await panel(page, "/nodes");
+  const trigger = page.getByRole("button", {
+    name: "Open navigation",
+    exact: true,
+  });
+  await trigger.click();
+  const drawer = page.getByRole("dialog", { name: "Navigation", exact: true });
+  await expect(drawer).toBeVisible();
+  await page.keyboard.press("Shift+Tab");
+  expect(
+    await drawer.evaluate((el) => el.contains(document.activeElement)),
+  ).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  expect(await page.evaluate(() => document.body.style.overflow)).not.toBe(
+    "hidden",
+  );
+});
+
+test("client API failure has a retry state instead of an empty directory", async ({
+  page,
+}) => {
+  await panel(page, "/clients", {
+    clients: { status: 503, json: { detail: "Client API unavailable" } },
+  });
+  await expect(page.getByRole("alert")).toContainText("Client API unavailable");
+  await expect(page.getByText("No clients found", { exact: true })).toHaveCount(
+    0,
+  );
+  await page.route("**/api/clients/", (route) => route.fulfill({ json: [] }));
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(
+    page.getByText("No clients found", { exact: true }),
+  ).toBeVisible();
+});

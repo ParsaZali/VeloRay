@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, AlertCircle, Info, X } from "lucide-react";
 import { t } from "@/lib/i18n";
@@ -24,7 +25,7 @@ export function Notifications() {
       : notice.tone === "error"
         ? AlertCircle
         : Info;
-  return (
+  return createPortal(
     <div
       className={`panel-notice notice-${notice.tone}`}
       role={notice.tone === "error" ? "alert" : "status"}
@@ -41,6 +42,7 @@ export function Notifications() {
       >
         <X size={16} />
       </button>
-    </div>
+    </div>,
+    document.body,
   );
 }

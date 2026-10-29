@@ -34,8 +34,9 @@ export function Button({
     <button
       aria-label={props["aria-label"] || props.title}
       type={type}
+      data-size={size}
       className={cn(
-        "inline-flex min-w-0 max-w-full items-center justify-center gap-2 overflow-hidden whitespace-nowrap font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:pointer-events-none disabled:opacity-45",
+        "panel-button inline-flex min-w-0 max-w-full items-center justify-center gap-2 overflow-hidden whitespace-nowrap font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:pointer-events-none disabled:opacity-45",
         variants[variant],
         sizes[size],
         className,

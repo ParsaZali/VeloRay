@@ -574,6 +574,7 @@ export function InboundsPage() {
     }
   }
   function beginEdit(i: InboundItem) {
+    setMsg("");
     const ps = i.protocol_settings || {};
     setEditorOpen(true);
     setEditing(i);
@@ -641,6 +642,8 @@ export function InboundsPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function cancelEdit() {
+    if (busy) return;
+    setMsg("");
     const node = form.node;
     setEditorOpen(false);
     setEditing(null);
@@ -752,6 +755,7 @@ export function InboundsPage() {
             onClose={cancelEdit}
             padded={false}
             size="lg"
+            className="inbound-editor"
           >
             <Card>
               <CardHeader>
@@ -761,13 +765,24 @@ export function InboundsPage() {
                   </CardTitle>
                 </div>
                 {true && (
-                  <Button variant="ghost" size="icon" onClick={cancelEdit}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t("Close")}
+                    disabled={busy}
+                    onClick={cancelEdit}
+                  >
                     <X className="h-4 w-4" />
                   </Button>
                 )}
               </CardHeader>
               <CardContent>
                 <form onSubmit={save} className="space-y-5">
+                  {msg && (
+                    <div role="status" className="editor-notice">
+                      {msg}
+                    </div>
+                  )}
                   <Field label="Core">
                     <Select
                       className="input"
@@ -1656,18 +1671,23 @@ export function InboundsPage() {
                       />
                     </label>
                   </details>
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={busy || !form.node}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    {busy
-                      ? "Saving…"
-                      : editing
-                        ? t("Save & deploy")
-                        : t("Create & deploy")}
-                  </Button>
+                  <div className="dialog-actions inbound-actions">
+                    <Button
+                      variant="outline"
+                      onClick={cancelEdit}
+                      disabled={busy}
+                    >
+                      {t("Cancel")}
+                    </Button>
+                    <Button type="submit" disabled={busy || !form.node}>
+                      <Plus className="h-3.5 w-3.5" />
+                      {busy
+                        ? "Saving…"
+                        : editing
+                          ? t("Save & deploy")
+                          : t("Create & deploy")}
+                    </Button>
+                  </div>
                 </form>
               </CardContent>
             </Card>

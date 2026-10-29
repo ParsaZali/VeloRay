@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { useModalFocus } from "@/components/common/use-modal-focus";
+import { useEffect, useState, useRef } from "react";
 import { api } from "@/lib/api";
 import { usePanelUpdates } from "@/lib/panel-updates";
 import { isReseller, useSession } from "@/lib/session";
@@ -67,6 +69,16 @@ export function Sidebar({
   setMobileOpen: (v: boolean) => void;
 }) {
   useLocale();
+  const drawer = useRef<HTMLElement>(null);
+  useModalFocus(drawer, mobileOpen, () => setMobileOpen(false));
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const closeOnDesktop = () => {
+      if (desktop.matches) setMobileOpen(false);
+    };
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => desktop.removeEventListener("change", closeOnDesktop);
+  }, [setMobileOpen]);
   const session = useSession();
   const { status } = usePanelUpdates(Boolean(session?.is_superuser));
   const [version, setVersion] = useState("");
@@ -234,18 +246,27 @@ export function Sidebar({
       >
         {body(collapsed)}
       </aside>
-      {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button
-            aria-label={t("Close menu")}
-            onClick={() => setMobileOpen(false)}
-            className="absolute inset-0 bg-black/55 backdrop-blur-[3px]"
-          />
-          <aside className="absolute inset-y-0 left-0 flex w-[286px] flex-col border-r border-[var(--border)] bg-[var(--sidebar)] shadow-2xl">
-            {body(false)}
-          </aside>
-        </div>
-      )}
+      {mobileOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-50 lg:hidden">
+            <button
+              aria-label={t("Close menu")}
+              onClick={() => setMobileOpen(false)}
+              className="absolute inset-0 bg-black/55 backdrop-blur-[3px]"
+            />
+            <aside
+              ref={drawer}
+              role="dialog"
+              aria-modal="true"
+              aria-label={t("Navigation", "ناوبری")}
+              tabIndex={-1}
+              className="mobile-navigation absolute inset-y-0 left-0 flex w-[286px] max-w-[calc(100vw-32px)] flex-col border-r border-[var(--border)] bg-[var(--sidebar)] shadow-2xl"
+            >
+              {body(false)}
+            </aside>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
