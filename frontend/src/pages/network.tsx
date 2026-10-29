@@ -690,8 +690,12 @@ function NetworkPage({ kind }: { kind: "outbounds" | "routing_rules" }) {
         </Dialog>
       )}
       {editor && (
-        <Dialog label={title} onClose={() => !busy && setEditor(null)}>
-          <div className="flex items-center justify-between mb-6">
+        <Dialog
+          label={title}
+          className="network-editor"
+          onClose={() => !busy && setEditor(null)}
+        >
+          <div className="dialog-heading flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold">
               {editor.id ? t("Edit") : t("Create")} {title}
             </h3>
@@ -1522,7 +1526,7 @@ function NetworkPage({ kind }: { kind: "outbounds" | "routing_rules" }) {
                   {error}
                 </div>
               )}
-              <div className="sm:col-span-2 flex justify-end gap-2">
+              <div className="dialog-actions sm:col-span-2 flex justify-end gap-2">
                 <Button
                   variant="outline"
                   type="button"

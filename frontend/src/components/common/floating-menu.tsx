@@ -1,4 +1,10 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  useId,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +22,7 @@ export function FloatingMenu({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const id = useId();
   const anchor = useRef<HTMLDivElement>(null),
     menu = useRef<HTMLDivElement>(null),
     close = useRef(onClose);
@@ -59,6 +66,7 @@ export function FloatingMenu({
         close.current();
     };
     const key = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.key === "Escape") {
         event.preventDefault();
         close.current();
@@ -114,6 +122,7 @@ export function FloatingMenu({
         aria-label={label}
         aria-expanded={open}
         aria-haspopup="menu"
+        aria-controls={open ? id : undefined}
         onClick={onToggle}
         onKeyDown={(event) => {
           if (!open && event.key === "ArrowDown") {
@@ -127,6 +136,7 @@ export function FloatingMenu({
       {open &&
         createPortal(
           <div
+            id={id}
             ref={menu}
             role="menu"
             aria-label={label}

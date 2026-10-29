@@ -6,7 +6,7 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        "min-w-0 rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-[var(--card-shadow)]",
+        "panel-card min-w-0 rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-[var(--card-shadow)]",
         className,
       )}
       {...props}
@@ -21,7 +21,7 @@ export function CardHeader({
   return (
     <div
       className={cn(
-        "flex min-w-0 flex-wrap items-start justify-between gap-4 border-b border-[var(--border-subtle)] px-5 py-4",
+        "panel-card-header flex min-w-0 flex-wrap items-start justify-between gap-4 border-b border-[var(--border-subtle)] px-5 py-4",
         className,
       )}
       {...props}
@@ -33,7 +33,12 @@ export function CardContent({
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
   useLocale();
-  return <div className={cn("min-w-0 p-5", className)} {...props} />;
+  return (
+    <div
+      className={cn("panel-card-content min-w-0 p-5", className)}
+      {...props}
+    />
+  );
 }
 export function CardTitle({
   className,

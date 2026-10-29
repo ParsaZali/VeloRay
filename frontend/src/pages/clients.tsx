@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/common/loading-state";
 import { formatDate } from "@/lib/dates";
 import { FloatingMenu } from "@/components/common/floating-menu";
 import { ClientConnections } from "@/components/client-connections";
@@ -166,6 +167,7 @@ export function ClientsPage() {
     [menu, setMenu] = useState<number | null>(null);
   const [checkingClient, setCheckingClient] = useState<ClientItem | null>(null);
   const [loadingEditor, setLoadingEditor] = useState(false);
+  const [loading, setLoading] = useState(true);
   const editorRequest = useRef<AbortController | null>(null);
   useEffect(() => () => editorRequest.current?.abort(), []);
   const [connections, setConnections] = useState<{
@@ -202,9 +204,13 @@ export function ClientsPage() {
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    load().catch((e) => {
-      if (active) setMsg(e.message);
-    });
+    load()
+      .catch((e) => {
+        if (active) setMsg(e.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
     const poll = async () => {
       if (polling.current || document.hidden) return;
       polling.current = true;
@@ -305,6 +311,7 @@ export function ClientsPage() {
     setTimeout(() => setCopied(null), 1200);
   }
   function openCreate() {
+    setMsg("");
     editorRequest.current?.abort();
     setLoadingEditor(false);
     setEditor({
@@ -319,6 +326,7 @@ export function ClientsPage() {
     });
   }
   function openBatch() {
+    setMsg("");
     editorRequest.current?.abort();
     setLoadingEditor(false);
     const first = inbounds.find((i) => i.supports_batch !== false);
@@ -380,6 +388,7 @@ export function ClientsPage() {
     editorRequest.current?.abort();
     const controller = new AbortController();
     editorRequest.current = controller;
+    setMsg("");
     setLoadingEditor(true);
     try {
       const shared = c.account_id
@@ -609,6 +618,34 @@ export function ClientsPage() {
       setBusy(false);
     }
   }
+  if (loading)
+    return (
+      <div className="space-y-6">
+        <PageHeader title={t("Clients")} />
+        <LoadingState />
+      </div>
+    );
+  if (!updatedAt && msg)
+    return (
+      <div className="space-y-6">
+        <PageHeader title={t("Clients")} />
+        <div className="workspace-error" role="alert">
+          <p>{msg}</p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setLoading(true);
+              setMsg("");
+              void load()
+                .catch((e) => setMsg(e.message))
+                .finally(() => setLoading(false));
+            }}
+          >
+            {t("Retry", "تلاش دوباره")}
+          </Button>
+        </div>
+      </div>
+    );
   return (
     <div className="space-y-6">
       <PageHeader
@@ -692,12 +729,14 @@ export function ClientsPage() {
               <Input
                 className="input h-9 pl-8"
                 placeholder={t("Search clients...")}
+                aria-label={t("Search clients...")}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
             </div>
             <Select
               className="input h-9 w-auto min-w-[120px]"
+              aria-label={t("Client status", "وضعیت کلاینت")}
               value={status}
               onChange={(e) => setStatus(e.target.value)}
             >
@@ -711,6 +750,7 @@ export function ClientsPage() {
             </Select>
             <Select
               className="input h-9 w-auto min-w-[150px]"
+              aria-label={t("Connection filter", "فیلتر اتصال")}
               value={inboundFilter}
               onChange={(e) => setInboundFilter(e.target.value)}
             >
@@ -1203,6 +1243,7 @@ export function ClientsPage() {
           owners={owners}
           onSubmit={save}
           busy={busy}
+          error={msg}
         />
       )}
       {loadingEditor && <p role="status">{t("Loading…")}</p>}
@@ -1273,6 +1314,7 @@ function ClientModal({
   owners,
   onSubmit,
   busy,
+  error,
 }: {
   editor: Editor;
   setEditor: (e: Editor | null) => void;
@@ -1281,6 +1323,7 @@ function ClientModal({
   owners: import("@/lib/api").AdminUser[];
   onSubmit: (e: FormEvent) => void;
   busy: boolean;
+  error: string;
 }) {
   useLocale();
   const session = useSession();
@@ -1313,7 +1356,7 @@ function ClientModal({
       }}
       padded={false}
     >
-      <div className="flex items-start justify-between border-b border-[var(--border)] px-5 py-4">
+      <div className="dialog-heading flex items-start justify-between border-b border-[var(--border)] px-5 py-4">
         <div>
           <div className="text-[14px] font-semibold">
             {editor.count !== undefined
@@ -1329,11 +1372,22 @@ function ClientModal({
             )}
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={() => setEditor(null)}>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t("Close")}
+          disabled={busy}
+          onClick={() => setEditor(null)}
+        >
           <X className="h-4 w-4" />
         </Button>
       </div>
       <form onSubmit={onSubmit}>
+        {error && (
+          <div className="workspace-error m-5" role="alert">
+            {error}
+          </div>
+        )}
         <div className="grid gap-4 p-5 sm:grid-cols-2">
           <label className="label sm:col-span-2">
             {editor.count !== undefined ? t("Name prefix") : t("Client name")}
@@ -1613,8 +1667,12 @@ function ClientModal({
             />
           </label>
         </div>
-        <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
-          <Button variant="outline" onClick={() => setEditor(null)}>
+        <div className="dialog-actions flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => setEditor(null)}
+          >
             {t("Cancel")}
           </Button>
           <Button

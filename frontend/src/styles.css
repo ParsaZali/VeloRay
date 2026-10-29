@@ -1,5 +1,244 @@
 @import "tailwindcss";
 
+/* Shared workspace rhythm; the established palette and navigation stay intact. */
+html {
+  scrollbar-gutter: stable;
+}
+.workspace-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+}
+.workspace-heading > :first-child {
+  flex: 1 1 280px;
+}
+.workspace-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+}
+.panel-button {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+.panel-button[data-size="sm"] {
+  font-size: 12px;
+}
+.panel-button[data-size="icon"] {
+  flex-shrink: 0;
+}
+.panel-button > svg {
+  width: 16px;
+  height: 16px;
+}
+.input[aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.data-table tbody tr:focus-within {
+  background: var(--surface-2);
+}
+.data-table tbody tr:has(input[type="checkbox"]:checked) {
+  background: color-mix(in srgb, var(--brand) 6%, var(--card));
+}
+.select-menu {
+  overscroll-behavior: contain;
+  animation: vr-overlay-in 0.14s ease-out;
+}
+.select-option {
+  min-height: 38px;
+  line-height: 1.5;
+}
+.select-option > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.select-option[aria-selected="true"] {
+  color: var(--brand);
+}
+.select-option:disabled:hover {
+  background: none;
+}
+.calendar-panel {
+  max-width: 100%;
+}
+.modal-panel {
+  scroll-padding-block: 76px;
+  animation: vr-overlay-in 0.18s ease-out;
+  outline: none;
+}
+.dialog-heading,
+.inbound-editor > .panel-card > .panel-card-header,
+.node-editor > .panel-card > .panel-card-header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--card);
+  align-items: center;
+}
+.dialog-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  background: var(--card);
+  box-shadow: 0 -8px 20px color-mix(in srgb, var(--card) 80%, transparent);
+}
+.inbound-actions {
+  bottom: -20px;
+  margin-inline: -20px;
+  margin-bottom: -20px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+}
+.mobile-navigation {
+  outline: none;
+  animation: vr-overlay-in 0.18s ease-out;
+}
+.workspace-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--danger) 5%, var(--card));
+  color: var(--danger);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.workspace-error > p {
+  flex: 1;
+  min-width: 0;
+}
+.workspace-loading {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+.workspace-loading i {
+  display: block;
+  height: 12px;
+  border-radius: 5px;
+  background: var(--surface-3);
+  animation: vr-loading-pulse 1.6s ease-in-out infinite;
+}
+.loading-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.loading-toolbar > i:first-child {
+  width: 32%;
+  height: 28px;
+}
+.loading-toolbar > i:last-child {
+  width: 18%;
+  height: 28px;
+}
+.loading-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.loading-row:last-child {
+  border: 0;
+}
+.loading-row > i:first-child {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
+.loading-row > span {
+  display: grid;
+  flex: 1;
+  gap: 9px;
+}
+.loading-row > span > i:first-child {
+  width: 42%;
+}
+.loading-row > span > i:last-child {
+  width: 26%;
+  height: 9px;
+}
+.loading-row > i:last-child {
+  width: 18%;
+}
+@keyframes vr-loading-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+@keyframes vr-overlay-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (min-width: 1280px) {
+  .settings-nav {
+    max-height: calc(100dvh - 6.5rem);
+    overflow-y: auto;
+  }
+}
+@media (max-width: 640px) {
+  .workspace-heading > :first-child {
+    flex-basis: 100%;
+  }
+  .workspace-heading-actions,
+  .workspace-heading-actions > div {
+    width: 100%;
+  }
+  .workspace-heading-actions .panel-button {
+    flex: 1 1 auto;
+  }
+  .modal-panel.modal-padded {
+    padding: 20px;
+  }
+  .modal-panel .panel-card-header,
+  .modal-panel .panel-card-content {
+    padding-inline: 16px;
+  }
+  .modal-panel .inbound-actions {
+    margin-inline: -16px;
+    padding-inline: 16px;
+  }
+  .dialog-actions .panel-button {
+    flex: 1;
+    min-height: 40px;
+  }
+  .veloray-shell .input,
+  .modal-panel .input {
+    font-size: 16px;
+  }
+  .veloray-shell .empty-state {
+    padding: 28px 16px;
+  }
+  .veloray-shell .panel-notice {
+    top: auto;
+    bottom: max(16px, env(safe-area-inset-bottom));
+    inset-inline-end: 16px;
+  }
+}
+
 /* Readable, flat management surfaces in both themes. */
 .panel-header {
   background: var(--card);
@@ -2252,4 +2491,75 @@ nav [aria-current="page"] .lucide {
   .dashboard-sparkline * {
     animation: none !important;
   }
+}
+
+/* Accessible status contrast on both surfaces. */
+.status-badge.badge-green {
+  color: var(--brand);
+}
+.status-badge.badge-blue {
+  color: var(--info);
+}
+.light .status-badge.badge-amber {
+  color: #92400e;
+}
+.light .status-badge.badge-red {
+  color: #b91c1c;
+}
+.network-editor > .dialog-heading {
+  top: -24px;
+  margin: -24px -24px 24px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.network-editor .dialog-actions {
+  bottom: -24px;
+  margin: 8px -24px -24px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+}
+.data-table th {
+  font-size: 11px;
+  letter-spacing: 0;
+  background: var(--surface-2);
+}
+.data-table td {
+  font-variant-numeric: tabular-nums;
+}
+.field-hint {
+  font-size: 11px;
+  line-height: 1.7;
+}
+.custom-select,
+.date-trigger {
+  font-size: 13px;
+}
+@media (max-width: 640px) {
+  .network-editor > .dialog-heading {
+    top: -20px;
+    margin-inline: -20px;
+    margin-top: -20px;
+    padding-inline: 16px;
+  }
+  .network-editor .dialog-actions {
+    bottom: -20px;
+    margin-inline: -20px;
+    margin-bottom: -20px;
+    padding-inline: 16px;
+  }
+  .panel-notice {
+    top: auto;
+    bottom: max(16px, env(safe-area-inset-bottom));
+    inset-inline-end: 16px;
+  }
+}
+
+.editor-notice {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }

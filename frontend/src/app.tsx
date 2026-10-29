@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/common/loading-state";
 import { SessionContext, isReseller } from "@/lib/session";
 import { canVisit } from "@/lib/navigation";
 import { useLocale, t } from "@/lib/i18n";
@@ -307,18 +308,7 @@ function PanelApp() {
           }
         }}
       >
-        <Suspense
-          fallback={
-            <div
-              role="status"
-              className="py-12 text-center text-[var(--muted)]"
-            >
-              {t("Loading…")}
-            </div>
-          }
-        >
-          {page}
-        </Suspense>
+        <Suspense fallback={<LoadingState />}>{page}</Suspense>
       </Shell>
     </SessionContext.Provider>
   );
