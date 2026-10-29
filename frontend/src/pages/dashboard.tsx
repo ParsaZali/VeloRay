@@ -1,3 +1,9 @@
+import { canVisit } from "@/lib/navigation";
+import {
+  DashboardSparkline,
+  ResourceCard,
+  type ResourceSample,
+} from "@/components/dashboard-resources";
 import { ChartRange } from "@/components/chart-range";
 import { t } from "@/lib/i18n";
 import { useLocale, tx } from "@/lib/i18n";
@@ -27,6 +33,8 @@ import {
   RefreshCw,
   Server,
   WifiOff,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   api,
@@ -38,7 +46,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageHeader } from "@/components/common/page-header";
 import { FaIcon } from "@/components/ui/fa-icon";
 
 type Overview = {
@@ -80,8 +87,17 @@ const fmt = (b: number) => {
   );
   return `${(b / 1024 ** i).toFixed(i < 2 ? 0 : 2)} ${u[i]}`;
 };
-const pct = (a: number, b: number) =>
-  b > 0 ? Math.min(100, Math.max(0, (a / b) * 100)) : 0;
+const uptime = (seconds: number | undefined) => {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds)) return "—";
+  const minutes = Math.floor(Math.max(0, seconds) / 60),
+    hours = Math.floor(minutes / 60),
+    days = Math.floor(hours / 24);
+  return days
+    ? `${days}${t("d", "ر")} ${hours % 24}${t("h", "س")}`
+    : hours
+      ? `${hours}${t("h", "س")} ${minutes % 60}${t("m", "د")}`
+      : `${minutes}${t("m", "د")}`;
+};
 const names: Record<string, string> = {
   vless: t("VLESS"),
   vmess: t("VMess"),
@@ -438,6 +454,8 @@ export function Dashboard() {
     [msg, setMsg] = useState(""),
     [historyError, setHistoryError] = useState(""),
     [busy, setBusy] = useState(false);
+  const [resourceHistory, setResourceHistory] = useState<ResourceSample[]>([]);
+  const [showAddress, setShowAddress] = useState(false);
   useEffect(() => {
     if (!session || typeof EventSource === "undefined") return;
     const stream = new EventSource(`${API_BASE}/events`, {
@@ -495,7 +513,24 @@ export function Dashboard() {
             : t("Traffic history could not load."),
         );
       if (s.status === "fulfilled") setCfg(s.value);
-      if (system.status === "fulfilled") setSys(system.value);
+      if (system.status === "fulfilled") {
+        setSys(system.value);
+        if (system.value) {
+          const info = system.value;
+          const measured = (value: number) =>
+            Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : null;
+          setResourceHistory((previous) => [
+            ...previous.slice(-239),
+            {
+              at: Date.now(),
+              cpu: measured(info.cpu_percent),
+              memory: measured(info.memory_percent),
+              swap: measured(info.swap_percent),
+              disk: measured(info.disk_percent),
+            },
+          ]);
+        }
+      }
       const failure = [ov, n, s, system].find(
         (result) => result.status === "rejected",
       );
@@ -514,6 +549,8 @@ export function Dashboard() {
     }
   }, [session]);
   useEffect(() => {
+    setResourceHistory([]);
+    setShowAddress(false);
     void load();
     return () => {
       request.current?.abort();
@@ -531,19 +568,52 @@ export function Dashboard() {
     disabled = Math.max(0, (o?.clients_total ?? 0) - (o?.clients_active ?? 0)),
     maxProto = Math.max(1, ...(o?.protocols || []).map((x) => x.count));
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={t("Dashboard")}
-        description={t("Client traffic and server status.")}
-        actions={
+    <div className="dashboard-page space-y-4">
+      <div className="dashboard-toolbar">
+        <div className="dashboard-toolbar-title">
+          <h2>{t("Dashboard")}</h2>
+          {!reseller && (
+            <span
+              className={`dashboard-node-status ${local?.status === "ok" ? "node-online" : ""}`}
+            >
+              <i />
+              {local
+                ? `${local.name} · ${local.status === "ok" ? t("online") : local.status || t("Unknown")}`
+                : t("No nodes registered")}
+            </span>
+          )}
+        </div>
+        <div className="dashboard-actions">
+          {!reseller && (
+            <>
+              {canVisit(session, "xray") && (
+                <a href="/xray">
+                  <FaIcon icon="microchip" />
+                  {t("Cores")}
+                </a>
+              )}
+              {canVisit(session, "operations") && (
+                <a href="/operations">
+                  <FaIcon icon="chart-line" />
+                  {t("Operations")}
+                </a>
+              )}
+              {canVisit(session, "settings") && (
+                <a href="/settings">
+                  <FaIcon icon="gear" />
+                  {t("Settings")}
+                </a>
+              )}
+            </>
+          )}
           <Button variant="outline" onClick={load} disabled={busy}>
             <RefreshCw
               className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`}
             />
             {t("Refresh")}
           </Button>
-        }
-      />
+        </div>
+      </div>
       {cfg?.announcement && (
         <div className="rounded-lg border border-[var(--brand)] bg-[var(--surface-2)] px-4 py-3 text-[11px] text-[var(--muted-strong)]">
           <FaIcon icon="bullhorn" className="mr-2 text-[var(--brand)]" />
@@ -707,84 +777,62 @@ export function Dashboard() {
           />
         </section>
       ) : (
-        <>
-          <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-            <Metric
-              label={t("CPU")}
-              value={`${(sys?.cpu_percent ?? 0).toFixed(1)}%`}
-              note={`${sys?.cpu_count ?? 0} ${(sys?.cpu_count ?? 0) === 1 ? "Core" : "Cores"}`}
-              icon="microchip"
-              tone={(sys?.cpu_percent ?? 0) > 85 ? "amber" : "blue"}
-            />
-            <Metric
-              label={t("Memory")}
-              value={`${(sys?.memory_percent ?? 0).toFixed(1)}%`}
-              note={`${fmt(sys?.memory_used_bytes ?? 0)} / ${fmt(sys?.memory_total_bytes ?? 0)}`}
-              icon="memory"
-              tone={(sys?.memory_percent ?? 0) > 85 ? "amber" : "green"}
-            />
-            <Metric
-              label={t("Swap")}
-              value={`${(sys?.swap_percent ?? 0).toFixed(1)}%`}
-              note={
-                sys?.swap_total_bytes
+        <section
+          className="dashboard-resource-grid"
+          aria-label={t("Server resources", "منابع سرور")}
+        >
+          <ResourceCard
+            label={t("CPU")}
+            icon="microchip"
+            value={sys?.cpu_percent}
+            note={
+              sys
+                ? `${sys.cpu_count} ${t(sys.cpu_count === 1 ? "Core" : "Cores", "هسته")}`
+                : "—"
+            }
+            samples={resourceHistory.map((p) => p.cpu)}
+          />
+          <ResourceCard
+            label={t("Memory")}
+            icon="memory"
+            value={sys?.memory_percent}
+            note={
+              sys
+                ? `${fmt(sys.memory_used_bytes)} / ${fmt(sys.memory_total_bytes)}`
+                : "—"
+            }
+            samples={resourceHistory.map((p) => p.memory)}
+          />
+          <ResourceCard
+            label={t("Swap")}
+            icon="arrows-rotate"
+            value={sys?.swap_percent}
+            note={
+              sys
+                ? sys.swap_total_bytes
                   ? `${fmt(sys.swap_used_bytes)} / ${fmt(sys.swap_total_bytes)}`
                   : t("Not configured")
-              }
-              icon="arrows-rotate"
-            />
-            <Metric
-              label={t("Disk")}
-              value={`${(sys?.disk_percent ?? 0).toFixed(1)}%`}
-              note={`${fmt(sys?.disk_used_bytes ?? 0)} / ${fmt(sys?.disk_total_bytes ?? 0)}`}
-              icon="hard-drive"
-              tone={(sys?.disk_percent ?? 0) > 85 ? "amber" : "blue"}
-            />
-          </section>
-          <section className="grid grid-cols-2 gap-3 xl:grid-cols-5">
-            <Metric
-              label={t("Active clients")}
-              value={String(o?.clients_active ?? 0)}
-              note={tx(
-                "{0} total · {1} disabled",
-                o?.clients_total ?? 0,
-                disabled,
-              )}
-              icon="users"
-              tone="green"
-            />
-            <Metric
-              label={t("Healthy nodes")}
-              value={`${o?.nodes_online ?? 0}/${o?.nodes_total ?? 0}`}
-              note={""}
-              icon="server"
-              tone="blue"
-            />
-            <Metric
-              label={t("Recorded traffic")}
-              value={fmt(o?.traffic_raw_bytes ?? 0)}
-              note={""}
-              icon="chart-area"
-            />
-            <Metric
-              label={t("Inbounds")}
-              value={String(o?.inbounds_total ?? 0)}
-              note={""}
-              icon="diagram-project"
-              tone="amber"
-            />
-            <Metric
-              label={t("Expiring soon")}
-              value={String(o?.clients_expiring_7d ?? 0)}
-              note={t("Within the next 7 days")}
-              icon="hourglass-half"
-              tone="amber"
-            />
-          </section>
-        </>
+                : "—"
+            }
+            samples={resourceHistory.map((p) => p.swap)}
+          />
+          <ResourceCard
+            label={t("Disk")}
+            icon="hard-drive"
+            value={sys?.disk_percent}
+            note={
+              sys
+                ? `${fmt(sys.disk_used_bytes)} / ${fmt(sys.disk_total_bytes)}`
+                : "—"
+            }
+            samples={resourceHistory.map((p) => p.disk)}
+          />
+        </section>
       )}
-      <section className="grid gap-4">
-        <Card>
+      <section
+        className={`dashboard-main-grid ${reseller ? "dashboard-reseller-grid" : ""}`}
+      >
+        <Card className="dashboard-traffic-card">
           <CardHeader>
             <div>
               <CardTitle>{t("Traffic overview")}</CardTitle>
@@ -799,22 +847,6 @@ export function Dashboard() {
             </div>
           </CardHeader>
           <CardContent className="p-3 sm:p-5">
-            <div className="traffic-directions">
-              <div>
-                <span className="traffic-direction-label">
-                  <ArrowUpRight size={15} />
-                  {t("Upload")}
-                </span>
-                <strong>{fmt(o?.traffic_upload_bytes ?? 0)}</strong>
-              </div>
-              <div>
-                <span className="traffic-direction-label download">
-                  <ArrowDownLeft size={15} />
-                  {t("Download")}
-                </span>
-                <strong>{fmt(o?.traffic_download_bytes ?? 0)}</strong>
-              </div>
-            </div>
             {o &&
               o.traffic_raw_bytes >
                 (o.traffic_upload_bytes || 0) +
@@ -834,43 +866,156 @@ export function Dashboard() {
               error={historyError}
               onRetry={load}
             />
+            <div className="traffic-directions">
+              <div>
+                <span className="traffic-direction-label">
+                  <ArrowUpRight size={15} />
+                  {t("Upload")}
+                </span>
+                <strong>{fmt(o?.traffic_upload_bytes ?? 0)}</strong>
+              </div>
+              <div>
+                <span className="traffic-direction-label download">
+                  <ArrowDownLeft size={15} />
+                  {t("Download")}
+                </span>
+                <strong>{fmt(o?.traffic_download_bytes ?? 0)}</strong>
+              </div>
+            </div>
           </CardContent>
         </Card>
-      </section>
-      <section className={reseller ? "hidden" : "grid gap-4 lg:grid-cols-2"}>
         {!reseller && (
-          <>
-            <Card className="xl:col-span-1">
-              <CardHeader>
+          <Card className="dashboard-client-card">
+            <CardHeader>
+              <CardTitle>{t("Active clients")}</CardTitle>
+              <span className="dashboard-side-caption">
+                {t("Last 24 hours", "۲۴ ساعت گذشته")}
+              </span>
+            </CardHeader>
+            <CardContent>
+              <div className="client-primary-value">
+                {o ? o.clients_active : "—"}
+                <span>{t("active", "فعال")}</span>
+              </div>
+              <p className="client-total-note">
+                {tx(
+                  "{0} total · {1} disabled",
+                  o?.clients_total ?? 0,
+                  disabled,
+                )}
+              </p>
+              <DashboardSparkline
+                values={history
+                  .map((p) => p.active_clients)
+                  .filter(
+                    (value) =>
+                      typeof value === "number" && Number.isFinite(value),
+                  )}
+                label={t("Active client history", "سابقهٔ کاربران فعال")}
+                className="client-history-chart"
+              />
+              <div className="dashboard-client-stats">
                 <div>
-                  <CardTitle>{t("Protocol mix")}</CardTitle>
+                  <span>{t("Healthy nodes")}</span>
+                  <strong>
+                    {o ? `${o.nodes_online}/${o.nodes_total}` : "—"}
+                  </strong>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
+                <div>
+                  <span>{t("Inbounds")}</span>
+                  <strong>{o?.inbounds_total ?? "—"}</strong>
+                </div>
+                <div>
+                  <span>{t("Expiring soon")}</span>
+                  <strong>{o?.clients_expiring_7d ?? "—"}</strong>
+                </div>
+              </div>
+              <div className="dashboard-protocols">
+                <h4>{t("Protocol mix")}</h4>
                 {o?.protocols?.length ? (
                   o.protocols.map((p) => (
-                    <div key={p.protocol}>
-                      <div className="flex justify-between text-[10px]">
-                        <span>{names[p.protocol] || p.protocol}</span>
-                        <span className="text-[var(--muted)]">{p.count}</span>
-                      </div>
-                      <div className="mt-1.5 h-1.5 rounded-full bg-[var(--surface-3)]">
-                        <div
-                          className="h-full rounded-full bg-[var(--brand)]"
+                    <div className="dashboard-protocol" key={p.protocol}>
+                      <span>{names[p.protocol] || p.protocol}</span>
+                      <div>
+                        <i
                           style={{
                             width: `${Math.max(5, (p.count / maxProto) * 100)}%`,
                           }}
                         />
                       </div>
+                      <b>{p.count}</b>
                     </div>
                   ))
                 ) : (
-                  <div className="py-8 text-center text-[11px] text-[var(--muted)]">
-                    {t("No inbounds yet.")}
-                  </div>
+                  <p>{t("No inbounds yet.")}</p>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </section>
+      {!reseller && (
+        <section
+          className="dashboard-runtime"
+          aria-label={t("Server information", "اطلاعات سرور")}
+        >
+          <div>
+            <span>
+              <FaIcon icon="clock-rotate-left" />
+              {t("Server uptime", "زمان روشن‌بودن سرور")}
+            </span>
+            <strong>{uptime(sys?.uptime_seconds)}</strong>
+          </div>
+          <div>
+            <span>
+              <FaIcon icon="gauge-high" />
+              {t("Panel uptime", "زمان اجرای پنل")}
+            </span>
+            <strong>{uptime(sys?.panel_uptime_seconds)}</strong>
+          </div>
+          <div>
+            <span>
+              <FaIcon icon="microchip" />
+              {t("Load average", "میانگین بار")}
+            </span>
+            <strong>
+              {sys?.load_average?.length
+                ? sys.load_average.map((v) => v.toFixed(2)).join(" / ")
+                : "—"}
+            </strong>
+          </div>
+          <div className="runtime-address">
+            <span>
+              <FaIcon icon="globe" />
+              {t("Server address", "آدرس سرور")}
+            </span>
+            <strong>
+              {local?.public_host || sys?.hostname
+                ? showAddress
+                  ? local?.public_host || sys?.hostname
+                  : "••••••••"
+                : "—"}
+            </strong>
+            {(local?.public_host || sys?.hostname) && (
+              <button
+                type="button"
+                onClick={() => setShowAddress((v) => !v)}
+                aria-label={
+                  showAddress
+                    ? t("Hide server address", "پنهان‌کردن آدرس سرور")
+                    : t("Show server address", "نمایش آدرس سرور")
+                }
+                aria-pressed={showAddress}
+              >
+                {showAddress ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+      <section className={reseller ? "hidden" : "dashboard-node-section"}>
+        {!reseller && (
+          <>
             <Card>
               <CardHeader>
                 <div>
@@ -936,15 +1081,6 @@ export function Dashboard() {
           </>
         )}
       </section>
-    </div>
-  );
-}
-function Box({ label, value }: { label: string; value: number }) {
-  useLocale();
-  return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3">
-      <div className="text-[9px] text-[var(--muted)]">{label}</div>
-      <div className="mt-1 text-[15px] font-semibold">{value}</div>
     </div>
   );
 }

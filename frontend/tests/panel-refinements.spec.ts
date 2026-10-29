@@ -3350,3 +3350,84 @@ test("AnyTLS preset selects its supported core and preserves TLS on mobile", asy
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(390);
 });
+
+test("dashboard resource history uses successful samples and masks the server address", async ({
+  page,
+}) => {
+  await panel(page, "/dashboard");
+  const cpu = page
+    .locator(".dashboard-resource")
+    .filter({ has: page.getByRole("heading", { name: "CPU", exact: true }) });
+  await expect(cpu.locator(".resource-value")).toHaveText("0.0%");
+  await expect(
+    cpu.getByText("Collecting samples…", { exact: true }),
+  ).toBeVisible();
+  await expect(cpu.locator(".sparkline-trace")).toHaveCount(0);
+  await page.route("**/api/system-info", (route) =>
+    route.fulfill({
+      json: {
+        hostname: "Local",
+        uptime_seconds: 100,
+        panel_uptime_seconds: 95,
+        cpu_percent: 40,
+        cpu_count: 2,
+        memory_percent: 50,
+        swap_percent: 0,
+        disk_percent: 50,
+        load_average: [0, 0, 0],
+      },
+    }),
+  );
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(cpu.locator(".resource-value")).toHaveText("40.0%");
+  await expect(cpu.locator(".resource-statistics")).toContainText(
+    "Average 20.0%",
+  );
+  await expect(cpu.locator(".resource-statistics")).toContainText("Peak 40.0%");
+  await expect(cpu.locator(".sparkline-trace")).toHaveCount(1);
+  await page.route("**/api/system-info", (route) =>
+    route.fulfill({ status: 503, json: { detail: "Metrics unavailable" } }),
+  );
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Metrics unavailable" }),
+  ).toBeVisible();
+  await expect(cpu.locator(".resource-statistics")).toContainText(
+    "Average 20.0%",
+  );
+  const address = page.locator(".runtime-address");
+  await expect(address).not.toContainText("Local");
+  await page
+    .getByRole("button", { name: "Show server address", exact: true })
+    .click();
+  await expect(address).toContainText("Local");
+  await page
+    .getByRole("button", { name: "Hide server address", exact: true })
+    .click();
+  await expect(address).not.toContainText("Local");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});
+
+test("dashboard shortcuts respect each route permission", async ({ page }) => {
+  await panel(page, "/dashboard", {
+    "auth/me": {
+      json: {
+        id: 3,
+        username: "limited",
+        role: "staff",
+        is_superuser: false,
+        permissions: ["dashboard.read", "nodes.read"],
+      },
+    },
+  });
+  const actions = page.locator(".dashboard-actions");
+  await expect(
+    actions.getByRole("button", { name: "Refresh", exact: true }),
+  ).toBeVisible();
+  await expect(actions.getByRole("link")).toHaveCount(0);
+});
