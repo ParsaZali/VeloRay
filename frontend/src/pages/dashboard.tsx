@@ -135,7 +135,7 @@ function Metric({
     </Card>
   );
 }
-function TrafficChart({
+export function TrafficChart({
   points,
   loading,
   error,
@@ -209,8 +209,8 @@ function TrafficChart({
   }, []);
   useEffect(() => {
     const css = getComputedStyle(document.documentElement),
-      color = css.getPropertyValue("--chart-line").trim();
-    const downloadColor = css.getPropertyValue("--info").trim();
+      color = css.getPropertyValue("--chart-upload").trim();
+    const downloadColor = css.getPropertyValue("--chart-download").trim();
     const directions = [
       {
         name: t("Upload"),
@@ -245,14 +245,23 @@ function TrafficChart({
     const series = directions.map((direction) => ({
       name: direction.name,
       type: "line",
-      smooth: 0.25,
+      smooth: 0.35,
+      smoothMonotone: "x",
+      symbol: "circle",
+      symbolSize: 5,
+      emphasis: { focus: "series", scale: 1.4 },
       showSymbol: points.length < 2,
       sampling: "lttb",
-      lineStyle: { color: direction.color, width: 2.5 },
+      lineStyle: {
+        color: direction.color,
+        width: 1.8,
+        cap: "round",
+        join: "round",
+      },
       itemStyle: { color: direction.color },
       areaStyle: {
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: direction.color + "25" },
+          { offset: 0, color: direction.color + "18" },
           { offset: 1, color: direction.color + "00" },
         ]),
       },
@@ -282,12 +291,23 @@ function TrafficChart({
     chart.current?.setOption(
       {
         animation: !matchMedia("(prefers-reduced-motion: reduce)").matches,
-        animationDurationUpdate: 500,
+        animationDuration: 900,
+        animationDurationUpdate: 450,
+        animationEasing: "cubicOut",
+        animationEasingUpdate: "cubicOut",
         textStyle: { fontFamily: "Inter, Vazirmatn, sans-serif" },
-        grid: { left: 64, right: 24, top: 40, bottom: 32 },
+        grid: { left: 8, right: 12, top: 48, bottom: 10, containLabel: true },
         legend: {
-          top: 0,
-          textStyle: { color: css.getPropertyValue("--muted") },
+          top: 4,
+          left: 8,
+          itemWidth: 16,
+          itemHeight: 3,
+          itemGap: 22,
+          textStyle: {
+            color: css.getPropertyValue("--muted-strong").trim(),
+            fontSize: 11,
+          },
+          inactiveColor: css.getPropertyValue("--muted").trim(),
           icon: "roundRect",
         },
         tooltip: {
@@ -297,6 +317,9 @@ function TrafficChart({
           backgroundColor: css.getPropertyValue("--card"),
           borderColor: css.getPropertyValue("--border"),
           textStyle: { color: css.getPropertyValue("--fg") },
+          padding: [10, 14],
+          extraCssText:
+            "border-radius:8px;box-shadow:0 8px 28px #0002;font-size:12px;",
           axisPointer: {
             type: "line",
             lineStyle: {
@@ -310,6 +333,7 @@ function TrafficChart({
         xAxis: {
           type: "time",
           boundaryGap: false,
+          splitNumber: 6,
           axisLine: { show: false },
           axisTick: { show: false },
           axisLabel: {
@@ -322,6 +346,9 @@ function TrafficChart({
         yAxis: {
           type: "value",
           min: 0,
+          splitNumber: 3,
+          axisLine: { show: false },
+          axisTick: { show: false },
           axisLabel: {
             color: css.getPropertyValue("--muted"),
             fontSize: 10,
@@ -329,8 +356,10 @@ function TrafficChart({
           },
           splitLine: {
             lineStyle: {
-              color: css.getPropertyValue("--chart-grid"),
-              type: "dashed",
+              color: css.getPropertyValue("--chart-grid").trim(),
+              type: [3, 5],
+              width: 1,
+              opacity: 0.6,
             },
           },
         },
@@ -348,7 +377,7 @@ function TrafficChart({
     );
   }, [points, resolved, mode, locale]);
   return (
-    <div>
+    <div className="traffic-chart-shell">
       <div className="chart-mode">
         <button
           type="button"
@@ -367,7 +396,7 @@ function TrafficChart({
       </div>
       <div
         ref={root}
-        className="h-[300px] w-full"
+        className="traffic-chart-canvas h-[300px] w-full"
         role="img"
         aria-label={t("Traffic chart")}
       />
