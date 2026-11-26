@@ -132,3 +132,30 @@ func TestIntegrationSingBoxConfigurationMatrix(t *testing.T) {
 		})
 	}
 }
+
+func TestTrustedSourceIPsExemptFromConcurrentLimit(t *testing.T) {
+	now := time.Now()
+	c := Data{"device_limit": 1, "trusted_source_ips": []any{"203.0.113.15/24", "2001:db8::42", "203.0.113.0/24"},
+		"_device_seen": Data{"203.0.113.9": now.Unix()}, "_device_denied": Data{"2001:db8::42": now.Unix()}}
+	if err := normalizeTrustedSourceIPs(c); err != nil {
+		t.Fatal(err)
+	}
+	if values := array(c, "trusted_source_ips"); len(values) != 2 || values[0] != "203.0.113.0/24" {
+		t.Fatalf("unexpected prefixes: %v", values)
+	}
+	if !updateDevicePolicy(c, Data{"::ffff:203.0.113.9": true, "2001:db8::42": true, "198.51.100.8": true}, now) {
+		t.Fatal("expected stale policy to be replaced")
+	}
+	if len(obj(c, "_device_denied")) != 0 || obj(c, "_device_seen")["198.51.100.8"] == nil || len(obj(c, "_device_seen")) != 1 {
+		t.Fatalf("unexpected policy: %v", c)
+	}
+	updateDevicePolicy(c, Data{"198.51.100.9": true}, now.Add(time.Second))
+	if obj(c, "_device_denied")["198.51.100.8"] == nil {
+		t.Fatal("non-trusted client should still be subject to limit")
+	}
+	for _, value := range []string{"0.0.0.0/0", "::/0", "host.example", "fe80::1%eth0"} {
+		if normalizeTrustedSourceIPs(Data{"trusted_source_ips": []any{value}}) == nil {
+			t.Fatalf("accepted %q", value)
+		}
+	}
+}

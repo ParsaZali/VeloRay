@@ -99,6 +99,7 @@ type Editor = {
   owner_id?: number;
   note: string;
   devices: string;
+  trustedSourceIPs: string;
   hwidLimit: string;
   startAfter: boolean;
 };
@@ -144,6 +145,7 @@ const blank = (
   multiplier: "1",
   note: "",
   devices: "0",
+  trustedSourceIPs: "",
   hwidLimit: "0",
   startAfter: false,
 });
@@ -408,6 +410,7 @@ export function ClientsPage() {
           : "0",
         days: String(c.duration_days || 30),
         devices: String(c.device_limit || 0),
+        trustedSourceIPs: (c.trusted_source_ips ?? []).join("\n"),
         hwidLimit: String(c.hwid_limit || 0),
         startAfter: !!c.start_after_first_use,
         expiry: toLocalInput(c.expires_at),
@@ -465,6 +468,9 @@ export function ClientsPage() {
           : {}),
         note: editor.note,
         device_limit: Number(editor.devices) || 0,
+        trusted_source_ips: editor.trustedSourceIPs
+          .split(/[\s,]+/)
+          .filter(Boolean),
         hwid_limit: Number(editor.hwidLimit) || 0,
         start_after_first_use: editor.startAfter,
         duration_days: Number(editor.days) || 30,
@@ -1528,6 +1534,23 @@ function ClientModal({
             />
             <span className="field-hint">
               {t("0 = unlimited · concurrent IPs")}
+            </span>
+          </label>
+          <label className="label sm:col-span-2">
+            {t("Trusted source IPs", "آی‌پی‌های مبدأ مورد اعتماد")}
+            <Textarea
+              className="input"
+              rows={2}
+              dir="ltr"
+              placeholder="203.0.113.10, 2001:db8:42::/64"
+              value={editor.trustedSourceIPs}
+              onChange={(e) => set("trustedSourceIPs", e.target.value)}
+            />
+            <span className="field-hint">
+              {t(
+                "These addresses do not count toward the concurrent IP limit.",
+                "این آدرس‌ها در سقف آی‌پی هم‌زمان شمارش نمی‌شوند.",
+              )}
             </span>
           </label>
           <label className="label">

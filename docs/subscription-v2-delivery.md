@@ -1,15 +1,8 @@
 # Subscription Portal v2 — verified delivery inventory
 
-**Status:** implementation on `feat/pasarguard-style-portal-parity`; not a production deployment.
-This independently developed VeloRay page is inspired by PasarGuard's user
-experience but uses VeloRay's own Go templates, backend accounting and existing
-subscription-token authorization. The classic `compact` page remains available.
+VeloRay’s modern portal uses its own templates, accounting and subscription-token authorization. The compact layout remains available.
 
 ## Implemented behaviors and improvements (individually inspectable)
-
-The list below is **granular delivered functionality**. It is **not** a claim
-that thirty separate feature categories in the earlier 96-gap comparison have
-been closed. Several improvements belong to the same original category.
 
 1. Default modern subscription dashboard layout.
 2. Keep the old compact portal selectable without breaking existing links.

@@ -16,7 +16,7 @@ import (
 var editable = map[string]string{
 	"nodes":         "profile_id name public_host agent_url agent_token agent_cert_sha256 enabled verify_tls config_patch",
 	"inbounds":      "name node core listen port protocol transport security flow path host_header service_name tls_server_name tls_cert_file tls_key_file reality_dest reality_server_name reality_private_key reality_public_key reality_short_id protocol_settings stream_settings enabled",
-	"clients":       "renewal_period renewal_every renewal_timezone hwid_limit device_limit start_after_first_use duration_days owner_id inbound name credential protocol_settings subscription_token enabled expires_at traffic_limit_bytes renewal_interval_days next_renewal_at traffic_multiplier note",
+	"clients":       "renewal_period renewal_every renewal_timezone hwid_limit device_limit trusted_source_ips start_after_first_use duration_days owner_id inbound name credential protocol_settings subscription_token enabled expires_at traffic_limit_bytes renewal_interval_days next_renewal_at traffic_multiplier note",
 	"outbounds":     "name node core tag protocol config enabled",
 	"routing_rules": "name node core priority config enabled",
 	"users":         "ldap_dn oidc_issuer oidc_subject username email is_active is_staff is_superuser password role permissions allowed_inbounds own_clients_only max_clients traffic_budget_bytes can_delegate max_subresellers",
@@ -1243,7 +1243,7 @@ func (s *Server) batchClients(w http.ResponseWriter, r *http.Request, a Actor) (
 	if err != nil {
 		return nil, 0, err
 	}
-	if err = allowed(input, "owner_id name inbound count expires_at traffic_limit_bytes traffic_multiplier renewal_interval_days note hwid_limit device_limit start_after_first_use duration_days"); err != nil {
+	if err = allowed(input, "owner_id name inbound count expires_at traffic_limit_bytes traffic_multiplier renewal_interval_days note hwid_limit device_limit trusted_source_ips start_after_first_use duration_days"); err != nil {
 		return nil, 0, fail(400, err.Error())
 	}
 	template := defaults("clients")

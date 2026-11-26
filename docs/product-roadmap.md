@@ -1,15 +1,6 @@
-# VeloRay competitor-parity engineering roadmap
+# VeloRay engineering roadmap
 
-This is a **living gap backlog**, not a claim that the listed capabilities are
-absent from every deployed version. Always check the latest VeloRay source,
-existing implementations, upstream feature revisions and real-world behavior
-before starting any work.
-
-The goal is to close verified gaps versus 3x-ui, Marzban, Hiddify Manager,
-X-UI, S-UI and Remnawave **without copying GPL-licensed source code into
-VeloRay's MIT repository**. Independently implement features and consult
-project maintainers on licensing whenever reusing third-party code.
-
+This roadmap records shipped capabilities and remaining verification and development work.
 
 ## Delivered subscription slice (current source)
 
@@ -193,11 +184,3 @@ See [core versions](core-versions.md) for sing-box user-IP compatibility and con
    plaintext admin credentials, or new network-SSRF surfaces.
 6. Tested with both Xray and sing-box where relevant, with named versions.
 7. Owners sign off explicitly before production deployment or merge to main.
-
-## Upstream sources for independent specification review
-- https://github.com/MHSanaei/3x-ui
-- https://github.com/Gozargah/Marzban
-- https://github.com/hiddify/Hiddify-Manager
-- https://github.com/alireza0/x-ui
-- https://github.com/alireza0/s-ui
-- https://github.com/remnawave/panel

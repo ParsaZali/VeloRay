@@ -13,7 +13,7 @@ import (
 	qrcode "github.com/skip2/go-qrcode"
 )
 
-// The lower-camel names are the 3x-ui subscription-page contract. Directional
+// The lower-camel names are the legacy subscription-template contract. Directional
 // values are real traffic; usedByte remains the authoritative charged quota.
 func legacyPortalData(c, cfg Data, subscriptionURL string, details []Data) Data {
 	used, limit := num(c, "used_traffic_bytes"), num(c, "traffic_limit_bytes")

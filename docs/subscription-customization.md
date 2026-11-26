@@ -2,8 +2,7 @@
 
 This delivery adds file-backed HTML pages, a simple built-in page, export
 configuration templates, subscription hosts, HWID admission/revocation,
-a compatibility report and authenticated Prometheus metrics. It does **not**
-complete the entire competitor-parity backlog.
+a compatibility report and authenticated Prometheus metrics.
 
 ## Built-in pages
 
@@ -157,10 +156,10 @@ The version stays **1.0**. Native TUIC/AmneziaWG/MTProto, hot application of
 traffic-core changes, service/access squads, shared config profiles, remote
 subscription fetching, Cloudflare provisioning, Discord integration, expanded
 OS support and full container deployment remain separate engineering work.
-See `docs/competitor-parity-roadmap.md`; unchecked entries are not delivered
+See `docs/product-roadmap.md`; unchecked entries are not delivered
 features. A PR/CI run does not install these changes on the production server.
 
-## 3x-ui style templates
+## Legacy HTML templates
 
 Lower-camel legacy variables, scoped info polling, local QR helpers and the three
 provided examples are supported by the [compatibility adapter](legacy-subscription-templates.md).

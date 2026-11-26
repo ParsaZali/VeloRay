@@ -207,6 +207,7 @@ export type ClientItem = {
   freeze_until?: string;
   hwid_limit?: number;
   device_limit: number;
+  trusted_source_ips?: string[];
   device_count: number;
   start_after_first_use: boolean;
   duration_days: number;

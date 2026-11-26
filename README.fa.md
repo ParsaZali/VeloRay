@@ -78,12 +78,15 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/insta
 
 این تصاویر با حساب‌های نمایشی تهیه شده‌اند و حاوی اطلاعات کاربران واقعی نیستند.
 
+<img src="docs/media/dashboard.webp" alt="داشبورد مصرف و سلامت نودها در VeloRay" width="100%">
+
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/settings-dark.webp"><img src="docs/media/settings-light.webp" alt="تنظیمات دسته‌بندی‌شده و سایدبار فشرده VeloRay" width="100%"></picture>
 
 <details><summary>صفحه ورود و صفحه پیش‌فرض اشتراک</summary>
 
 <img src="docs/media/login.webp" alt="ورود به VeloRay" width="100%">
 <img src="docs/media/subscription.webp" alt="صفحه ساده اشتراک" width="800">
+<img src="docs/media/subscription-mobile.webp" alt="صفحه اشتراک VeloRay روی موبایل" width="320">
 
 </details>
 
@@ -146,7 +149,7 @@ https://vpn.example.com:23457/USER_TOKEN
 - [تست اتصال](docs/client-connection-tests.md)
 - [Docker و cloud-init](docs/container-deployment.md)
 - [عملیات و اعلان‌ها](docs/operations-and-alerts.md)
-- [امکانات تحویل‌شده و نقشه راه](docs/competitor-parity-roadmap.md)
+- [امکانات تحویل‌شده و نقشه راه](docs/product-roadmap.md)
 
 مرجع REST/OpenAPI از بخش **API** پنل قابل مشاهده است. وضعیت CI شامل تست Go و race، PostgreSQL، هسته‌های ثابت، مرورگر، PWA، نصب و استقرار واقعی Docker است. بسته‌های هر دو معماری باید با manifest سورس تطابق داشته باشند.
 

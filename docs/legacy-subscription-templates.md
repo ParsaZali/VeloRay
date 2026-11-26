@@ -1,4 +1,4 @@
-# 3x-ui style subscription HTML compatibility
+# Legacy subscription HTML compatibility
 
 VeloRay 1.0 can render the supplied `modernX.html`, `sub (2).html` and `sub.html`
 without editing those original files. Settings → Subscription → Custom HTML file

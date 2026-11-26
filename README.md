@@ -95,6 +95,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/insta
 
 Screenshots use demonstration accounts, not production credentials.
 
+<img src="docs/media/dashboard.webp" alt="VeloRay dashboard showing usage and node health" width="100%">
+
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/settings-dark.webp"><img src="docs/media/settings-light.webp" alt="Compact navigation and categorized VeloRay settings" width="100%"></picture>
 
 <details>
@@ -102,6 +104,7 @@ Screenshots use demonstration accounts, not production credentials.
 
 <img src="docs/media/login.webp" alt="VeloRay login with light/dark appearance and language selection" width="100%">
 <img src="docs/media/subscription.webp" alt="Default subscription page with quota, expiry, app formats, QR and traffic history" width="800">
+<img src="docs/media/subscription-mobile.webp" alt="VeloRay subscription on mobile" width="320">
 
 </details>
 
@@ -193,7 +196,7 @@ Downloads are manual; enabling them does not schedule automatic core changes. Pa
 | [Routing & balancing](docs/fallbacks-and-balancing.md) | Fallbacks, selectors and safe deployment |
 | [Notifications](docs/webhooks.md) | Signed webhooks and event destinations |
 | [Operations](docs/operations-and-alerts.md) | Health checks, email and hosting budgets |
-| [Feature roadmap](docs/competitor-parity-roadmap.md) | Delivered features and remaining work |
+| [Feature roadmap](docs/product-roadmap.md) | Delivered features and remaining work |
 
 The authenticated **API** page contains the REST/OpenAPI reference. Server backups and operational logs stay private; subscription tokens are redacted from application request logs.
 

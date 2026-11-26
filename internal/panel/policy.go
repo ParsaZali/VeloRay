@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -31,6 +33,69 @@ func connectionName(c, i Data) string {
 	}
 	return name
 }
+func sourcePrefix(value string) (netip.Prefix, error) {
+	if address, err := netip.ParseAddr(value); err == nil && address.Zone() == "" {
+		address = address.Unmap()
+		return netip.PrefixFrom(address, address.BitLen()), nil
+	}
+	prefix, err := netip.ParsePrefix(value)
+	if err != nil || prefix.Addr().Is4In6() || prefix.Bits() == 0 {
+		return netip.Prefix{}, fmt.Errorf("invalid trusted source IP or CIDR: %q", value)
+	}
+	return prefix.Masked(), nil
+}
+
+func normalizeTrustedSourceIPs(d Data) error {
+	raw, exists := d["trusted_source_ips"]
+	if !exists {
+		return nil
+	}
+	entries, ok := raw.([]any)
+	if !ok || len(entries) > 32 {
+		return fmt.Errorf("trusted source IPs must be a list of at most 32 IPs or ranges")
+	}
+	canonical := make([]any, 0, len(entries))
+	seen := map[netip.Prefix]bool{}
+	for _, entry := range entries {
+		value, ok := entry.(string)
+		if !ok || len(value) > 80 {
+			return fmt.Errorf("invalid trusted source IP or CIDR")
+		}
+		prefix, err := sourcePrefix(strings.TrimSpace(value))
+		if err != nil {
+			return err
+		}
+		if !seen[prefix] {
+			canonical = append(canonical, prefix.String())
+			seen[prefix] = true
+		}
+	}
+	d["trusted_source_ips"] = canonical
+	return nil
+}
+
+func trustedSourceMatcher(c Data) func(string) bool {
+	prefixes := []netip.Prefix{}
+	for _, v := range array(c, "trusted_source_ips") {
+		if p, e := sourcePrefix(fmt.Sprint(v)); e == nil {
+			prefixes = append(prefixes, p)
+		}
+	}
+	return func(value string) bool {
+		if len(prefixes) == 0 {
+			return false
+		}
+		if addr, err := netip.ParseAddr(value); err == nil {
+			for _, prefix := range prefixes {
+				if prefix.Contains(addr.Unmap()) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+}
+
 func updateDevicePolicy(c Data, online Data, now time.Time) bool {
 	limit := num(c, "device_limit")
 	if limit == 0 {
@@ -43,20 +108,26 @@ func updateDevicePolicy(c Data, online Data, now time.Time) bool {
 	}
 	seen, denied := obj(c, "_device_seen"), obj(c, "_device_denied")
 	changed := false
+	trusted := trustedSourceMatcher(c)
 	for ip, v := range denied {
-		if now.Unix()-num(Data{"v": v}, "v") > 600 {
+		if trusted(ip) || now.Unix()-num(Data{"v": v}, "v") > 600 {
 			delete(denied, ip)
 			changed = true
 		}
 	}
 	for ip, v := range seen {
+		if trusted(ip) {
+			delete(seen, ip)
+			changed = true
+			continue
+		}
 		if _, present := online[ip]; !present && now.Unix()-num(Data{"v": v}, "v") > 90 {
 			delete(seen, ip)
 		}
 	}
 	candidates := []string{}
 	for ip := range online {
-		if net.ParseIP(ip) == nil {
+		if net.ParseIP(ip) == nil || trusted(ip) {
 			continue
 		}
 		if _, no := denied[ip]; no {
@@ -118,8 +189,9 @@ func deviceRulesForNode(ctx context.Context, q Query, node Data, core string) ([
 			continue
 		}
 		ips := []any{}
+		trusted := trustedSourceMatcher(c)
 		for ip, v := range obj(c, "_device_denied") {
-			if net.ParseIP(ip) != nil && time.Now().Unix()-num(Data{"v": v}, "v") <= 600 {
+			if net.ParseIP(ip) != nil && !trusted(ip) && time.Now().Unix()-num(Data{"v": v}, "v") <= 600 {
 				if core == "singbox" {
 					if net.ParseIP(ip).To4() != nil {
 						ip += "/32"

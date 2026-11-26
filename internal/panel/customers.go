@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const customerEditable = "renewal_period renewal_every renewal_timezone name note owner_id inbound_ids service_ids plan_id enabled expires_at traffic_limit_bytes traffic_multiplier hwid_limit device_limit start_after_first_use duration_days renewal_interval_days next_renewal_at"
-const planEditable = "renewal_period renewal_every renewal_timezone traffic_limit_bytes traffic_multiplier hwid_limit device_limit start_after_first_use duration_days renewal_interval_days"
+const customerEditable = "renewal_period renewal_every renewal_timezone name note owner_id inbound_ids service_ids plan_id enabled expires_at traffic_limit_bytes traffic_multiplier hwid_limit device_limit trusted_source_ips start_after_first_use duration_days renewal_interval_days next_renewal_at"
+const planEditable = "renewal_period renewal_every renewal_timezone traffic_limit_bytes traffic_multiplier hwid_limit device_limit trusted_source_ips start_after_first_use duration_days renewal_interval_days"
 
 func customerDefaults() Data {
 	d := defaults("clients")
@@ -388,6 +388,9 @@ func (s *Server) customersAPI(w http.ResponseWriter, r *http.Request, path strin
 			return nil, e
 		}
 		d = merge(d, input)
+		if e := normalizeTrustedSourceIPs(d); e != nil {
+			return nil, fail(400, e.Error())
+		}
 		if !flag(a.User, "is_superuser") && input["owner_id"] != nil && num(input, "owner_id") != num(prior, "owner_id") {
 			return nil, fail(403, "only administrators can assign customer owners")
 		}
@@ -606,6 +609,9 @@ func (s *Server) servicesAPI(w http.ResponseWriter, r *http.Request, path string
 			return nil, fail(400, e.Error())
 		}
 		if e = typed(plan, defaults("clients")); e != nil {
+			return nil, fail(400, e.Error())
+		}
+		if e = normalizeTrustedSourceIPs(plan); e != nil {
 			return nil, fail(400, e.Error())
 		}
 		raw, _ := json.Marshal(plan)

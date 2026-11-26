@@ -166,3 +166,7 @@ The database additions are compatible with the preceding binary, but native
 customer/group/profile management requires this version; an older binary will
 not apply those policies. Never treat binary downgrade as a policy rollback:
 restore a tested pre-upgrade database snapshot or forward-fix on staging first.
+
+## Trusted source IPs
+
+The client editor accepts up to 32 IPv4 or IPv6 addresses and CIDR ranges. They are shared across the connections of a shared account and excluded from concurrent IP limits. They do not bypass subscription authentication, HWID restrictions, quota or expiry. Specify narrow ranges and use an empty list to clear the policy.

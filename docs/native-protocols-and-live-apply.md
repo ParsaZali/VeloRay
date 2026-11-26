@@ -87,7 +87,7 @@ local network test is claimed for a test omitted under that flag.
 
 [MTProto and AmneziaWG](mtproto-and-amneziawg.md) now have separate embedded native engines. SSH, additional client ecosystems, full
 hot remove/update and structural hot apply remain tracked individually in the
-competitor roadmap. They are not implemented by merely adding a protocol label.
+product roadmap. They are not implemented by merely adding a protocol label.
 
 CI gives `CAP_NET_ADMIN` only to its extracted temporary Xray binary so the existing
 TUN configuration check can open a TUN device. This is runner-only test setup; it

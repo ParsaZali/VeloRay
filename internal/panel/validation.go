@@ -284,6 +284,9 @@ func validateInbound(ctx context.Context, q Query, c Config, d Data) error {
 	return nil
 }
 func validateClient(ctx context.Context, q Query, d Data) error {
+	if err := normalizeTrustedSourceIPs(d); err != nil {
+		return err
+	}
 	if frozen(d) && flag(d, "enabled") {
 		return errors.New("resume the frozen subscription before enabling it")
 	}
