@@ -9,7 +9,7 @@ VeloRay 1.0 · Server management
   veloray                         Interactive menu
   veloray status | doctor | url
   veloray start | stop | restart
-  veloray logs [web|agent|xray|singbox|subscriptions|install]
+  veloray logs [web|agent|xray|singbox|subscriptions|install] [--follow]
   veloray audit [LIMIT]
   veloray reset [USERNAME]
   veloray passkeys-reset [USERNAME]
@@ -73,52 +73,60 @@ doctor() {
 menu() {
  local selection value
  while true;do
-  [[ ! -t 1 ]]||printf '\033[2J\033[H'
   summary
-  cat <<'MENU'
-
-  SERVICES                         ACCESS
-   1  Service status                7  Reset administrator password
-   2  Panel address                 8  Change domain or IP
-   3  Restart services              9  Change panel port
-   4  Start services               10  HTTPS certificate
-   5  Stop services
-   6  View logs
-
-  MAINTENANCE                      NETWORK
-  11  Create backup                19  Inspect VPN ports
-  12  Restore backup               20  Change inbound port
-  13  Daily backups                21  List inbounds
-  14  Health check
-  15  Recover Xray
-  16  Update VeloRay
-  17  Uninstall VeloRay
-  18  Automatic updates
-
-   0  Exit
-MENU
-  [[ -t 0 ]]||return 0
-  read -rp "$(vr_text 'Select [0–21]: ' 'انتخاب [۰ تا ۲۱]: ')" selection||return 0
+  [[ -t 0 ]]||{ vr_say "Commands: sudo veloray --help" "دستورها: sudo veloray --help";return 0; }
+  printf '\n';vr_say 'SERVICES' 'سرویس‌ها'
+  vr_say '   1  Service status' '   1  وضعیت سرویس'
+  vr_say '   2  Panel address' '   2  آدرس پنل'
+  vr_say '   3  Restart services' '   3  راه‌اندازی مجدد'
+  vr_say '   4  Start services' '   4  شروع سرویس‌ها'
+  vr_say '   5  Stop services' '   5  توقف سرویس‌ها'
+  vr_say '   6  Recent logs' '   6  آخرین گزارش‌ها'
+  printf '\n';vr_say 'ACCESS' 'دسترسی'
+  vr_say '   7  Reset administrator password' '   7  تغییر رمز مدیر'
+  vr_say '   8  Change domain or IP' '   8  تغییر دامنه یا آی‌پی'
+  vr_say '   9  Change panel port' '   9  تغییر پورت پنل'
+  vr_say '  10  HTTPS certificate' '  10  گواهی HTTPS'
+  printf '\n';vr_say 'MAINTENANCE' 'نگهداری'
+  vr_say '  11  Create backup' '  11  ساخت پشتیبان'
+  vr_say '  12  Restore backup' '  12  بازیابی پشتیبان'
+  vr_say '  13  Daily backups' '  13  پشتیبان روزانه'
+  vr_say '  14  Health check' '  14  بررسی سلامت'
+  vr_say '  15  Recover Xray' '  15  بازیابی Xray'
+  vr_say '  16  Update VeloRay' '  16  به‌روزرسانی'
+  vr_say '  17  Uninstall VeloRay' '  17  حذف نصب'
+  vr_say '  18  Automatic updates' '  18  به‌روزرسانی خودکار'
+  printf '\n';vr_say 'NETWORK' 'شبکه'
+  vr_say '  19  Inspect VPN ports' '  19  بررسی پورت‌ها'
+  vr_say '  20  Change inbound port' '  20  تغییر پورت اتصال'
+  vr_say '  21  List inbounds' '  21  لیست اتصال‌ها'
+  printf '\n';vr_say '   0  Exit' '   0  خروج'
+  read -rp "$(vr_text 'Select [0–21; Enter = exit]: ' 'انتخاب [۰ تا ۲۱؛ Enter = خروج]: ')" selection||return 0
   local -a operation=()
   case "$selection" in
-   0) return 0;;1) operation=(status);;2) operation=(url);;3) operation=(restart);;4) operation=(start);;5) operation=(stop);;
-   6) read -rp "$(vr_text 'Log [web/agent/xray/install]: ' 'گزارش [web/agent/xray/install]: ')" value;operation=(logs "${value:-web}");;
-   7) read -rp "$(vr_text 'Username [Enter = detect administrator]: ' 'نام کاربری [Enter = تشخیص مدیر]: ')" value;operation=(reset);[[ -z "$value" ]]||operation+=("$value");;
-   8) read -rp "$(vr_text 'New domain or IP: ' 'دامنه یا آی‌پی جدید: ')" value;operation=(domain "$value");;
-   9) read -rp "$(vr_text 'New port: ' 'پورت جدید: ')" value;operation=(port "$value");;
-   10) read -rp "$(vr_text 'Certificate email: ' 'ایمیل گواهی: ')" value;operation=(ssl "$value");;
+   0|"") return 0;;1) operation=(status);;2) operation=(url);;3) operation=(restart);;4) operation=(start);;5) operation=(stop);;
+   6) read -rp "$(vr_text 'Log [web/agent/xray/install]: ' 'گزارش [web/agent/xray/install]: ')" value||return 0;operation=(logs "${value:-web}");;
+   7) read -rp "$(vr_text 'Username [Enter = detect administrator]: ' 'نام کاربری [Enter = تشخیص مدیر]: ')" value||return 0;operation=(reset);[[ -z "$value" ]]||operation+=("$value");;
+   8) read -rp "$(vr_text 'New domain or IP: ' 'دامنه یا آی‌پی جدید: ')" value||return 0;operation=(domain "$value");;
+   9) read -rp "$(vr_text 'New port: ' 'پورت جدید: ')" value||return 0;operation=(port "$value");;
+   10) read -rp "$(vr_text 'Certificate email: ' 'ایمیل گواهی: ')" value||return 0;operation=(ssl "$value");;
    11) operation=(backup);;
-   12) read -rp "$(vr_text 'Backup path: ' 'مسیر فایل پشتیبان: ')" value;operation=(restore "$value");;
-   13) read -rp "$(vr_text 'Daily backups [daily/off]: ' 'پشتیبان روزانه [daily/off]: ')" value;operation=(backup-schedule "$value");;
+   12) read -rp "$(vr_text 'Backup path: ' 'مسیر فایل پشتیبان: ')" value||return 0;operation=(restore "$value");;
+   13) read -rp "$(vr_text 'Daily backups [daily/off]: ' 'پشتیبان روزانه [daily/off]: ')" value||return 0;operation=(backup-schedule "$value");;
    14) operation=(doctor);;15) operation=(repair);;16) operation=(update);;17) operation=(uninstall);;
-   18) read -rp "$(vr_text 'Auto-update [enable/disable/status/check/run]: ' 'به‌روزرسانی خودکار [enable/disable/status/check/run]: ')" value;operation=(auto-update "${value:-status}");;
+   18) read -rp "$(vr_text 'Auto-update [enable/disable/status/check/run]: ' 'به‌روزرسانی خودکار [enable/disable/status/check/run]: ')" value||return 0;operation=(auto-update "${value:-status}");;
    19) operation=(ports);;
-   20) veloray host-inbounds|jq -r '.[]|"ID=\(.id)  \(.name)  :\(.port)"';read -rp "$(vr_text 'Inbound ID: ' 'شناسه اتصال: ')" value;read -rp "$(vr_text 'New VPN port: ' 'پورت جدید VPN: ')" port;operation=(inbound-port "$value" "$port");;
+   20) veloray host-inbounds|jq -r '.[]|"ID=\(.id)  \(.name)  :\(.port)"';read -rp "$(vr_text 'Inbound ID: ' 'شناسه اتصال: ')" value||return 0;read -rp "$(vr_text 'New VPN port: ' 'پورت جدید VPN: ')" port||return 0;operation=(inbound-port "$value" "$port");;
    21) operation=(inbounds);;
    *) vr_say 'Choose a listed number.' 'یکی از شماره‌های منو را وارد کنید.';continue;;
   esac
-  "$0" "${operation[@]}"||true
-  [[ "$selection" != 17 || -x "$0" ]]||return 0
+  if "$0" "${operation[@]}";then
+   [[ "$selection" != 17 ]]||return 0
+  else
+   local result=$?
+   vr_warn "Command exited with status $result." "دستور با کد $result پایان یافت."
+  fi
+  [[ -f "$ENV_FILE" ]]||return 0
   set -a;source "$ENV_FILE";set +a;export VELORAY_LANGUAGE="${VELORAY_LANGUAGE:-en}"
   read -rp "$(vr_text 'Press Enter to return…' 'برای بازگشت Enter بزنید…')" value||return 0
  done
@@ -149,9 +157,15 @@ case "$command" in
   doctor
  fi
  summary;;
- logs) unit="$WEB";case "${1:-web}" in agent) unit="$AGENT";;subscriptions) unit="$SUBSCRIPTIONS";;singbox) unit=sing-box.service;;xray) unit=xray.service;;web) ;;
- install) latest="$(find /var/log/veloray -maxdepth 1 -name 'install-*.log' -type f | sort | tail -1)";[[ -n "$latest" ]]||{ vr_say 'No installation log found.' 'گزارش نصب موجود نیست.';exit 1; };exec tail -n 100 "$latest";;
- *) vr_say 'Use web, agent, xray, singbox, subscriptions or install.' 'گزینهٔ web، agent، xray، singbox، subscriptions یا install را انتخاب کنید.';exit 2;;esac;exec journalctl -u "$unit" -n 100 -f;;
+ logs)
+ [[ $# -le 2 ]]||{ echo 'Usage: veloray logs [SERVICE] [--follow]' >&2;exit 2; }
+ service="${1:-web}";follow=()
+ if [[ "$service" == --follow && $# -eq 1 ]];then service=web;follow=(-f)
+ elif [[ "${2:-}" == --follow ]];then follow=(-f)
+ elif [[ $# -eq 2 ]];then echo 'Usage: veloray logs [SERVICE] [--follow]' >&2;exit 2;fi
+ unit="$WEB";case "$service" in agent) unit="$AGENT";;subscriptions) unit="$SUBSCRIPTIONS";;singbox) unit=sing-box.service;;xray) unit=xray.service;;web) ;;
+ install) latest="$(find /var/log/veloray -maxdepth 1 -name 'install-*.log' -type f | sort | tail -1)";[[ -n "$latest" ]]||{ vr_say 'No installation log found.' 'گزارش نصب موجود نیست.';exit 1; };exec tail -n 100 "${follow[@]}" -- "$latest";;
+ *) vr_say 'Use web, agent, xray, singbox, subscriptions or install.' 'گزینهٔ web، agent، xray، singbox، subscriptions یا install را انتخاب کنید.';exit 2;;esac;exec journalctl --no-pager -u "$unit" -n 100 "${follow[@]}";;
  language) [[ "${1:-}" == en || "${1:-}" == fa ]]||exit 2;veloray set-env VELORAY_LANGUAGE "$1";vr_say 'Language saved.' 'زبان ذخیره شد.';;
  backup) dir=/var/lib/veloray/backups;install -d -m 0700 "$dir"; file="${1:-$dir/veloray-$(date -u +%Y%m%dT%H%M%S%NZ).tar.gz}"; veloray backup "$file";echo "$file"; ;;
  restore) [[ $# -eq 1 ]] || { echo 'Usage: velorayctl restore FILE.tar.gz' >&2;exit 2; }
@@ -203,12 +217,12 @@ case "$command" in
  else exit 1;fi
  vr_say "Administrator: $administrator" "حساب مدیر: $administrator"
  if [[ -z "${VELORAY_ADMIN_PASSWORD:-}" ]];then
-  read -rsp "$(vr_text 'New password [Enter = random]: ' 'رمز جدید [Enter = تصادفی]: ')" VELORAY_ADMIN_PASSWORD||true;printf '\n'
+  read -rsp "$(vr_text 'New password [Enter = random]: ' 'رمز جدید [Enter = تصادفی]: ')" VELORAY_ADMIN_PASSWORD||{ printf '\n';exit 2; };printf '\n'
   generated_password=false
   if [[ -z "$VELORAY_ADMIN_PASSWORD" ]];then
    VELORAY_ADMIN_PASSWORD="$(openssl rand -hex 16)";generated_password=true
   else
-   read -rsp "$(vr_text 'Confirm password: ' 'تکرار رمز جدید: ')" confirmation;printf '\n'
+   read -rsp "$(vr_text 'Confirm password: ' 'تکرار رمز جدید: ')" confirmation||{ printf '\n';exit 2; };printf '\n'
    [[ "$VELORAY_ADMIN_PASSWORD" == "$confirmation" ]]||{ vr_failure 'Passwords do not match.' 'رمزها یکسان نیستند.' >&2;exit 2; }
   fi
  fi
@@ -286,7 +300,7 @@ TIMER
    vr_say 'Stop/remove program services. Existing users, VPN configurations, keys and backups are kept for reinstall.' 'سرویس‌های برنامه متوقف و حذف می‌شوند؛ کاربران، کانفیگ‌های VPN، کلیدها و بکاپ‌ها برای نصب مجدد باقی می‌مانند.'
    vr_say 'For a clean installation instead, cancel and run: sudo veloray uninstall --purge' 'برای نصب از صفر، لغو کنید و این دستور را اجرا کنید: sudo veloray uninstall --purge'
   fi
-  read -rp "$(vr_text "Type $confirmation_word to continue: " "برای ادامه $confirmation_word را وارد کنید: ")" confirmation
+  read -rp "$(vr_text "Type $confirmation_word to continue: " "برای ادامه $confirmation_word را وارد کنید: ")" confirmation||exit 2
   [[ "$confirmation" == "$confirmation_word" ]]||{ vr_say 'Cancelled.' 'لغو شد.';exit 0; }
   vr_install_lock
   if $purge;then

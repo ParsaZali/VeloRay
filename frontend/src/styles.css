@@ -238,28 +238,28 @@
 
 :root,
 .dark {
-  --bg: #101318;
-  --sidebar: #14181e;
-  --card: #191e25;
-  --surface-2: #20262e;
-  --surface-3: #2b333e;
-  --border: #323a45;
-  --border-subtle: #29313b;
-  --border-strong: #526071;
-  --fg: #fafafa;
-  --muted: #9ba8ba;
+  --bg: #0e0e0e;
+  --sidebar: #101010;
+  --card: #212121;
+  --surface-2: #292929;
+  --surface-3: #333333;
+  --border: #383838;
+  --border-subtle: #252525;
+  --border-strong: #626262;
+  --fg: #f5f5f5;
+  --muted: #adadad;
   --muted-strong: #d4d4d4;
-  --primary: #fafafa;
+  --primary: #f5f5f5;
   --primary-fg: #090909;
   --brand: #67e8a5;
   --brand-strong: #4ed28b;
   --info: #60a5fa;
-  --brand-tile: #050506;
+  --brand-tile: #0e0e0e;
   --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
   --ring: rgba(103, 232, 165, 0.25);
   --danger: #ef4444;
   --warning: #f59e0b;
-  --chart-grid: #242424;
+  --chart-grid: #393939;
   --chart-line: #67e8a5;
   --chart-upload: #75dba2;
   --chart-download: #65a9f3;

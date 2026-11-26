@@ -8,17 +8,30 @@ vr_step() { VR_STEP="$(vr_text "$1" "$2")";printf '\n  ';vr_color 36 '•';print
 vr_log_init() {
  local previous_mask="$(umask)"
  umask 077
- if [[ -z "${VELORAY_INSTALL_LOG:-}" ]];then
-  install -d -m 0700 /var/log/veloray
-  VELORAY_INSTALL_LOG="$(mktemp "/var/log/veloray/${1:-operation}-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX.log")"
- fi
- [[ -f "$VELORAY_INSTALL_LOG" && ! -L "$VELORAY_INSTALL_LOG" ]]||{ echo 'Invalid operation log.' >&2;return 1; }
- chmod 0600 "$VELORAY_INSTALL_LOG"
+ install -d -m 0700 /var/log/veloray
+ VELORAY_INSTALL_LOG="$(mktemp "/var/log/veloray/${1:-operation}-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX.log")"
  export VELORAY_INSTALL_LOG
  umask "$previous_mask"
 }
 vr_run() { "$@" >>"$VELORAY_INSTALL_LOG" 2>&1; }
-vr_run_visible() { if [[ "${VELORAY_VERBOSE:-0}" == 1 ]];then "$@" 2>&1 | tee -a "$VELORAY_INSTALL_LOG";else vr_run "$@";fi; }
+vr_run_visible() {
+ if [[ "${VELORAY_VERBOSE:-0}" == 1 ]];then "$@" 2>&1 | tee -a "$VELORAY_INSTALL_LOG";return;fi
+ if [[ ! -t 2 ]];then vr_run "$@";return;fi
+ local ticker status=0 elapsed=$SECONDS
+ (
+  trap - EXIT ERR
+  trap 'if [[ -n ${pause:-} ]];then kill "$pause" 2>/dev/null || true;fi;exit 0' TERM
+  while true;do
+   sleep 20 & pause=$!
+   wait "$pause" || exit 0
+   vr_say "  Still working ($((SECONDS-elapsed))s). Log: $VELORAY_INSTALL_LOG" "  همچنان در حال انجام ($((SECONDS-elapsed)) ثانیه). گزارش: $VELORAY_INSTALL_LOG" >&2
+  done
+ ) 9>&- & ticker=$!
+ vr_run "$@" || status=$?
+ kill "$ticker" 2>/dev/null || true
+ wait "$ticker" 2>/dev/null || true
+ return "$status"
+}
 vr_error() {
  local line="$1" status="${2:-1}"
  printf 'Failure: step=%s line=%s status=%s\n' "${VR_STEP:-operation}" "$line" "$status" >>"$VELORAY_INSTALL_LOG"
@@ -38,16 +51,20 @@ VeloRay installer
              [--repo OWNER/REPOSITORY] [--ref BRANCH_OR_TAG_OR_COMMIT]
 Docker is the default for panel installations. Existing native data is migrated with a recovery backup.
 PostgreSQL is the supported database. Default repository: ParsaZali/VeloRay, ref: main.
+Installation details go to a private log. Set VELORAY_VERBOSE=1 to also show package output.
 HELP
 }
 version_at_least() { [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" == "$2" ]]; }
 fetch() {
  local status=0 timeout="${3:-900}" log="${VELORAY_INSTALL_LOG:-/dev/null}"
+ local -a progress=(--silent --show-error)
+ [[ ! -t 2 ]]||progress=(--progress-bar --show-error)
  printf '  Download: %s\n' "$1" | tee -a "$log"
- curl --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --location --silent --show-error --no-progress-meter \
+ curl -q --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --location "${progress[@]}" \
   --retry 2 --retry-max-time 120 --connect-timeout 15 --max-time "$timeout" \
   --speed-time 30 --speed-limit 1024 --write-out '  Received %{size_download} bytes in %{time_total}s (%{speed_download} bytes/s)\n' \
-  "$1" -o "$2" 2> >(tee -a "$log" >&2) || status=$?
+  "$1" -o "$2" |
+  tee -a "$log" || status=$?
  if [[ "$status" -ne 0 ]];then
   printf 'Download failed (curl %s): %s\n' "$status" "$1" | tee -a "$log" >&2
   return "$status"
@@ -118,7 +135,7 @@ vr_say "Log: $VELORAY_INSTALL_LOG" "گزارش: $VELORAY_INSTALL_LOG"
 vr_step 'Prepare system packages' 'آماده‌سازی بسته‌های سیستم'
 packages=(ca-certificates curl jq tar xz-utils unzip openssl iproute2 python3)
 [[ "$action" != install || "$mode" == docker ]]||packages+=(postgresql postgresql-client nginx certbot python3)
-apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o DPkg::Lock::Timeout=45)
 vr_run_visible env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get "${apt_options[@]}" update
 vr_run_visible env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get "${apt_options[@]}" install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "${packages[@]}"
 export VELORAY_DEPENDENCIES_READY=true

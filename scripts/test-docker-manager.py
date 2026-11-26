@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Offline lifecycle failure and hostile-backup tests. No host changes."""
+import errno
 import importlib.util
 import io
 import json
@@ -78,6 +79,42 @@ class ManagerTests(unittest.TestCase):
         with patch.dict(os.environ, {'VELORAY_INSTALL_LOG':str(log)}), self.assertRaises(ValueError):
             with m.installation_output():
                 pass
+
+    def test_interactive_setup_retries_invalid_values_and_cancels_on_eof(self):
+        answers = ['https://vpn.example', 'vpn.example', '80', '24442', '24443', '24443', '24444']
+        env = {'VELORAY_INSTALL_LANG': 'en', 'VELORAY_TLS_MODE': 'local'}
+        validate_port = m.port
+
+        def check_port(value, excluded=()):
+            if value == '24442':
+                raise OSError(errno.EADDRINUSE, 'Address already in use')
+            return validate_port(value, excluded, check=False)
+
+        with (
+            patch.dict(os.environ, env, clear=True), patch('sys.stdin.isatty', return_value=True),
+            patch('builtins.input', side_effect=answers), patch.object(m, 'port', side_effect=check_port),
+            redirect_stdout(io.StringIO()) as console,
+        ):
+            values = m.configure()
+        self.assertEqual(values['VELORAY_DOMAIN'], 'vpn.example')
+        self.assertEqual(values['VELORAY_PANEL_PORT'], '24443')
+        self.assertEqual(values['VELORAY_SUBSCRIPTION_PORT'], '24444')
+        self.assertIn('without a scheme or port', console.getvalue())
+        self.assertIn('That port is unavailable', console.getvalue())
+        with (
+            patch.dict(os.environ, env, clear=True), patch('sys.stdin.isatty', return_value=True),
+            patch('builtins.input', side_effect=EOFError), redirect_stdout(io.StringIO()),
+            self.assertRaisesRegex(ValueError, 'Setup was cancelled'),
+        ):
+            m.configure()
+
+    def test_management_menu_returns_on_closed_input_without_running_command(self):
+        with (
+            patch('sys.stdin.isatty', return_value=True), patch('builtins.input', side_effect=['8', EOFError]),
+            patch.object(m.subprocess, 'run') as run, redirect_stdout(io.StringIO()),
+        ):
+            m.menu()
+        run.assert_not_called()
 
     def test_saved_unused_tls_paths_do_not_block_migration(self):
         missing = str(self.root/'old-missing.pem')

@@ -93,7 +93,7 @@ func run() error {
   veloray reset [USERNAME]         Change an administrator password
   veloray passkeys-reset [USERNAME] Revoke lost administrator passkeys
   veloray admin-list               List existing administrator usernames
-  veloray logs [web|agent|xray|singbox|subscriptions] Follow service logs
+  veloray logs [SERVICE] [--follow]  Show recent service logs
   veloray audit [LIMIT]            Read server audit events
   veloray backup [FILE]            Create a private recovery backup
   veloray restore FILE            Verify and restore a backup

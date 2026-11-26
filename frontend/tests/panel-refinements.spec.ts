@@ -431,7 +431,7 @@ test("readable dark and light palette, raw upload and download", async ({
         .getPropertyValue("--bg")
         .trim(),
     ),
-  ).toBe("#101318");
+  ).toBe("#0e0e0e");
   await page.getByRole("button", { name: "Theme: dark" }).click();
   await expect(page.locator("html")).toHaveClass(/light/);
   expect(

@@ -21,6 +21,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -46,11 +47,30 @@ def say(en, fa=None, color=None):
 
 
 def run(args, **kwargs):
-    if INSTALL_LOG is not None and os.environ.get('VELORAY_VERBOSE') != '1':
-        # Captured SQL/secret values stay in their pipe, never in the log.
-        kwargs.setdefault('stdout', INSTALL_LOG)
-        kwargs.setdefault('stderr', INSTALL_LOG)
-    return subprocess.run([str(x) for x in args], check=True, **kwargs)
+    command = [str(x) for x in args]
+    if INSTALL_LOG is None or os.environ.get('VELORAY_VERBOSE') == '1':
+        return subprocess.run(command, check=True, **kwargs)
+    # Captured SQL/secret values stay in their pipe, never in the log.
+    kwargs.setdefault('stdout', INSTALL_LOG)
+    kwargs.setdefault('stderr', INSTALL_LOG)
+    if not sys.stdout.isatty():
+        return subprocess.run(command, check=True, **kwargs)
+
+    done = threading.Event()
+    started = time.monotonic()
+
+    def progress():
+        while not done.wait(20):
+            elapsed = int(time.monotonic() - started)
+            say(f'    Still working ({elapsed}s).', f'    همچنان در حال انجام ({elapsed} ثانیه).')
+
+    ticker = threading.Thread(target=progress, daemon=True)
+    ticker.start()
+    try:
+        return subprocess.run(command, check=True, **kwargs)
+    finally:
+        done.set()
+        ticker.join()
 
 
 @contextlib.contextmanager
@@ -190,21 +210,74 @@ def origin(values):
     return f'https://{name}' + (f':{number}' if number != 443 else '')
 
 
+def terminal_prompt(en, fa, *, required=False):
+    question = fa if os.environ.get('VELORAY_INSTALL_LANG', os.environ.get('VELORAY_LANGUAGE')) == 'fa' else en
+    while True:
+        try:
+            value = input(question).strip()
+        except (EOFError, KeyboardInterrupt):
+            print(flush=True)
+            return None
+        if value or not required:
+            return value
+        say('Enter a value, or press Ctrl+C to cancel.', 'مقداری وارد کنید یا برای لغو Ctrl+C بزنید.', '33')
+
+
+def require_terminal_confirmation(en, fa, expected):
+    try:
+        question = fa if os.environ.get('VELORAY_LANGUAGE') == 'fa' else en
+        return input(question) == expected
+    except (EOFError, KeyboardInterrupt):
+        say('\nCancelled.', '\nلغو شد.')
+        return False
+
+
+def install_value(en, fa):
+    value = terminal_prompt(en, fa)
+    if value is None:
+        raise ValueError('Setup was cancelled; no new deployment was created')
+    return value
+
+
 def configure():
     name = os.environ.get('VELORAY_PUBLIC_HOST', '')
-    if not name:
-        if not sys.stdin.isatty():
-            raise ValueError('Set VELORAY_PUBLIC_HOST for unattended installation')
-        say('Do you have a domain pointing to this server?', 'دامنه‌ای که به این سرور متصل باشد دارید؟')
-        domain = input('[Y/n]: ').strip().lower() not in ('n', 'no')
-        name = input('Domain: ' if domain else 'Public IP: ').strip()
-    name = host(name)
+    interactive = sys.stdin.isatty()
+    if not name and not interactive:
+        raise ValueError('Set VELORAY_PUBLIC_HOST for unattended installation')
+    if interactive:
+        say('\nInstallation setup', '\nتنظیمات نصب')
+    if name:
+        name = host(name)
+    else:
+        while True:
+            value = install_value('  Public domain or IP: ', '  دامنه یا آی‌پی عمومی: ')
+            try:
+                name = host(value)
+                break
+            except ValueError:
+                say('  Enter a valid domain or IP, without a scheme or port.', '  دامنه یا آی‌پی معتبر را بدون پروتکل یا پورت وارد کنید.', '33')
     values = {'VELORAY_DOMAIN': name, 'VELORAY_LANGUAGE': os.environ.get('VELORAY_INSTALL_LANG', 'en')}
-    for key, label in (('VELORAY_PANEL_PORT', 'Panel port'), ('VELORAY_SUBSCRIPTION_PORT', 'Subscription port')):
-        value = os.environ.get(key, '')
-        if not value and sys.stdin.isatty():
-            value = input(f'{label} [Enter = random]: ').strip()
-        values[key] = str(port(value, [int(values['VELORAY_PANEL_PORT'])] if 'VELORAY_PANEL_PORT' in values else []) if value else random_port([int(values['VELORAY_PANEL_PORT'])] if 'VELORAY_PANEL_PORT' in values else []))
+    for key, en, fa in (
+        ('VELORAY_PANEL_PORT', 'Panel port', 'پورت پنل'),
+        ('VELORAY_SUBSCRIPTION_PORT', 'Subscription port', 'پورت اشتراک'),
+    ):
+        excluded = [int(values['VELORAY_PANEL_PORT'])] if 'VELORAY_PANEL_PORT' in values else []
+        env_value = os.environ.get(key, '')
+        if env_value or not interactive:
+            number = port(env_value, excluded) if env_value else random_port(excluded)
+        else:
+            while True:
+                value = install_value(f'  {en} [Enter = random]: ', f'  {fa} [Enter = تصادفی]: ')
+                try:
+                    number = port(value, excluded) if value else random_port(excluded)
+                    break
+                except OSError as exc:
+                    if exc.errno not in (errno.EADDRINUSE, errno.EACCES):
+                        raise
+                    say('  That port is unavailable; choose another.', '  این پورت در دسترس نیست؛ پورت دیگری انتخاب کنید.', '33')
+                except ValueError as exc:
+                    say('  ' + str(exc), color='33')
+        values[key] = str(number)
     try:
         ipaddress.ip_address(name)
         tls = 'local'
@@ -623,7 +696,7 @@ def restore(path, confirmed=False):
     with tempfile.TemporaryDirectory(prefix='veloray-docker-restore-') as tmp:
         root = Path(tmp)
         manifest = verify_backup(path, root)
-        if not confirmed and input('Replace current data? Type RESTORE: ') != 'RESTORE':
+        if not confirmed and not require_terminal_confirmation('Replace current data? Type RESTORE: ', 'برای جایگزینی داده‌ها RESTORE را بنویسید: ', 'RESTORE'):
             return
         source = Path('/opt/veloray/releases') / ('docker-' + manifest['commit'])
         if not source.is_dir():
@@ -781,7 +854,12 @@ def import_certificate(name, certificate, key):
     with contextlib.suppress(ValueError):
         ipaddress.ip_address(name)
         check = '-checkip'
-    match = output(['openssl', 'x509', '-in', certificate, '-noout', check, name], stderr=subprocess.DEVNULL, env=dict(os.environ, LC_ALL='C')).decode().strip()
+    try:
+        match = output(['openssl', 'x509', '-in', certificate, '-noout', check, name], stderr=subprocess.DEVNULL, env=dict(os.environ, LC_ALL='C')).decode().strip()
+    except subprocess.CalledProcessError as exc:
+        if exc.returncode != 1:
+            raise
+        raise ValueError('Cannot verify that the certificate covers this hostname or IP') from None
     if not match.endswith(' does match certificate'):
         raise ValueError('Certificate does not cover this hostname or IP')
     run(['openssl', 'x509', '-in', certificate, '-noout', '-checkend', '3600'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -1275,23 +1353,94 @@ def captured_project_exists():
     return bool(output(['docker', 'ps', '-aq', '--filter', 'label=com.docker.compose.project=veloray']).strip() or output(['docker', 'volume', 'ls', '-q', '--filter', 'label=com.docker.compose.project=veloray']).strip())
 
 
+MENU_SECTIONS = (
+    ('Services', 'سرویس‌ها', (
+        ('1', 'Status', 'وضعیت', 'status'),
+        ('2', 'Panel address', 'آدرس پنل', 'url'),
+        ('3', 'Restart', 'راه‌اندازی مجدد', 'restart'),
+        ('4', 'Start', 'شروع', 'start'),
+        ('5', 'Stop', 'توقف', 'stop'),
+        ('6', 'Recent logs', 'آخرین گزارش‌ها', 'logs'),
+    )),
+    ('Access', 'دسترسی', (
+        ('7', 'Reset password', 'تغییر رمز', 'reset'),
+        ('8', 'Change domain or IP', 'تغییر دامنه یا آی‌پی', 'domain'),
+        ('9', 'Change panel port', 'تغییر پورت پنل', 'port'),
+    )),
+    ('Maintenance', 'نگهداری', (
+        ('10', 'Backup', 'پشتیبان‌گیری', 'backup'),
+        ('11', 'Restore backup', 'بازیابی پشتیبان', 'restore'),
+        ('12', 'Health check', 'بررسی سلامت', 'doctor'),
+        ('13', 'Update VeloRay', 'به‌روزرسانی', 'update'),
+        ('14', 'Uninstall', 'حذف نصب', 'uninstall'),
+    )),
+)
+
+
+def logs_options(values):
+    services = [value for value in values if value != '--follow']
+    if len(services) > 1 or len(values) > 2 or values.count('--follow') > 1:
+        raise ValueError('Usage: sudo veloray logs [SERVICE] [--follow]')
+    service = (services or ['panel'])[0]
+    service = {'web': 'panel', 'xray': 'agent', 'singbox': 'agent'}.get(service, service)
+    if service not in SERVICES + ['db', 'install']:
+        raise ValueError('Choose panel, agent, subscriptions, proxy, db or install')
+    return service, '--follow' in values
+
+
 def menu():
+    if not (CONFIG / '.env').is_file():
+        raise ValueError('Docker installation was not found; run the installer first')
+    address = origin(read_env(CONFIG / '.env'))
+    if not sys.stdin.isatty():
+        say('Panel: ' + address, 'آدرس پنل: ' + address)
+        say('Commands: sudo veloray --help', 'دستورها: sudo veloray --help')
+        return
+    actions = {number: command for _, _, rows in MENU_SECTIONS for number, _, _, command in rows}
+    prompts = {
+        'domain': ('Public domain or IP: ', 'دامنه یا آی‌پی عمومی: '),
+        'port': ('New panel port: ', 'پورت جدید پنل: '),
+        'restore': ('Backup file path: ', 'مسیر فایل پشتیبان: '),
+        'logs': ('Service [Enter = panel; agent / subscriptions / proxy / db / install]: ',
+                 'سرویس [Enter = پنل؛ agent / subscriptions / proxy / db / install]: '),
+        'reset': ('Administrator username [Enter = detect]: ', 'نام کاربری مدیر [Enter = تشخیص خودکار]: '),
+    }
     while True:
-        say('\nVeloRay · Docker\n', '\nVeloRay · Docker\n')
-        compose('ps')
-        print('\n  1  Status                  7  Reset password\n  2  Panel address           8  Change domain / IP\n  3  Restart                 9  Change panel port\n  4  Start                  10  Backup\n  5  Stop                   11  Restore\n  6  Logs                   12  Health check\n                            13  Update VeloRay\n                            14  Uninstall\n  0  Exit\n')
-        if not sys.stdin.isatty():
+        say('\nVeloRay 1.0 | Docker')
+        say(f'Panel: {address}', f'آدرس پنل: {address}')
+        for en, fa, rows in MENU_SECTIONS:
+            say('\n' + en, '\n' + fa, '1')
+            for number, label, translated, _ in rows:
+                say(f'  {number:>2}  {label}', f'  {number:>2}  {translated}')
+        say('\n   0  Exit', '\n   0  خروج')
+        say('  Commands: sudo veloray --help', '  دستورها: sudo veloray --help')
+        choice = terminal_prompt('\nSelect [0–14; Enter = exit]: ', '\nانتخاب [۰ تا ۱۴؛ Enter = خروج]: ')
+        if choice in (None, '', '0'):
             return
-        choice = input('Select [0–14]: ').strip()
-        actions = {'1': ['status'], '2': ['url'], '3': ['restart'], '4': ['start'], '5': ['stop'], '6': ['logs'], '7': ['reset'], '8': ['domain', None], '9': ['port', None], '10': ['backup'], '11': ['restore', None], '12': ['doctor'], '13': ['update'], '14': ['uninstall']}
-        if choice == '0':
+        command = actions.get(choice)
+        if command is None:
+            say('Choose a listed number.', 'یکی از شماره‌های منو را وارد کنید.', '33')
+            continue
+        args = [command]
+        if command in prompts:
+            value = terminal_prompt(*prompts[command], required=command in ('domain', 'port', 'restore'))
+            if value is None:
+                return
+            if value:
+                args.append(value)
+        try:
+            result = subprocess.run(['/usr/local/bin/veloray', *args], check=False)
+        except KeyboardInterrupt:
+            say('Returned to management.', 'به منوی مدیریت برگشتید.')
+        else:
+            if result.returncode:
+                say(f'Command exited with status {result.returncode}.', f'دستور با کد {result.returncode} پایان یافت.', '33')
+            elif not (CONFIG / '.env').is_file() or command == 'uninstall':
+                return
+            else:
+                address = origin(read_env(CONFIG / '.env'))
+        if terminal_prompt('Press Enter to return (Ctrl+C exits): ', 'برای بازگشت Enter بزنید (Ctrl+C خروج): ') is None:
             return
-        args = actions.get(choice)
-        if args:
-            if args[-1] is None:
-                args[-1] = input('Value: ').strip()
-            subprocess.run(['/usr/local/bin/veloray'] + args, check=False)
-        input('Press Enter to return…')
 
 
 def acquire_operation_lock(lock, background=False):
@@ -1309,12 +1458,29 @@ def acquire_operation_lock(lock, background=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(prog='veloray', description='VeloRay 1.0 | Docker management',
+        formatter_class=argparse.RawDescriptionHelpFormatter, epilog='''Commands:
+  status | doctor | url | ports | inbounds | audit [LIMIT]
+  start | stop | restart | logs [SERVICE] [--follow]
+  reset [USERNAME] | admin-list | passkeys-reset [USERNAME]
+  domain HOST | port PORT | ssl
+  backup [FILE] | restore FILE
+  update | auto-update enable|disable|status|check|run
+  backup-schedule daily|off|status
+  certificate-sync | certificate-import HOST CERTIFICATE KEY
+  uninstall [--purge]''')
     parser.add_argument('command', nargs='?', default='menu')
     parser.add_argument('values', nargs='*')
     parser.add_argument('--source', type=Path)
     parser.add_argument('--purge', action='store_true')
+    parser.add_argument('--follow', action='store_true', help='follow service logs until Ctrl+C')
     args = parser.parse_args()
+    if args.command == 'help':
+        return parser.print_help()
+    if args.follow:
+        if args.command != 'logs':
+            parser.error('--follow is only available with logs')
+        args.values.append('--follow')
     if os.geteuid() != 0:
         raise ValueError('Run with sudo')
     os.umask(0o077)
@@ -1323,9 +1489,6 @@ def main():
         os.environ['VELORAY_LANGUAGE'] = read_env(CONFIG / '.env').get('VELORAY_LANGUAGE', 'en')
     if command == 'version':
         return print((CURRENT / 'VERSION').read_text().strip())
-    if command == 'help':
-        print('VeloRay Docker management\n  status | doctor | url | ports | inbounds\n  start | stop | restart | logs [SERVICE]\n  reset [USERNAME] | admin-list | passkeys-reset [USERNAME]\n  domain HOST | port PORT | ssl\n  backup [FILE] | restore FILE\n  update | auto-update enable|disable|status|check|run\n  backup-schedule daily|off|status\n  certificate-sync | certificate-import HOST CERTIFICATE KEY\n  uninstall [--purge]\n')
-        return
     if command == 'menu':
         return menu()
     if command in ('status', 'url', 'logs', 'admin-list', 'inbounds', 'audit', 'doctor'):
@@ -1369,11 +1532,14 @@ def main():
         elif command == 'stop':
             return compose('stop', '-t', '30')
         elif command == 'logs':
-            service = (values or ['panel'])[0]
-            service = {'web': 'panel', 'xray': 'agent', 'singbox': 'agent'}.get(service, service)
-            if service not in SERVICES + ['db']:
-                raise ValueError('Choose panel, agent, subscriptions, proxy or db')
-            return compose('logs', '--tail', '100', '-f', service)
+            service, follow = logs_options(values)
+            if service == 'install':
+                logs = sorted(Path('/var/log/veloray').glob('install-*.log'), reverse=True)
+                path = next((p for p in logs if p.is_file() and not p.is_symlink()), None)
+                if path is None:
+                    raise ValueError('No installation log found')
+                return run(['tail', '-n', '100', *(['-f'] if follow else []), '--', path])
+            return compose('logs', '--tail', '100', *(['--follow'] if follow else []), service)
         elif command in ('reset', 'admin-reset', 'passkeys-reset', 'admin-list', 'inbounds', 'inbound-port', 'audit'):
             action = {'reset': 'reset-password', 'admin-reset': 'reset-password', 'passkeys-reset': 'reset-passkeys', 'inbounds': 'host-inbounds', 'inbound-port': 'host-inbound-port', 'audit': 'host-audit'}.get(command, command)
             if command in ('reset', 'admin-reset'):
@@ -1424,7 +1590,11 @@ def main():
             return schedule('backup', {'daily': 'enable', 'off': 'disable'}.get(values[0] if values else 'status', values[0] if values else 'status'))
         elif command == 'uninstall':
             confirmation = 'PURGE' if args.purge else 'REMOVE'
-            if input(('Delete VeloRay containers, database, keys and volumes? Type PURGE: ' if args.purge else 'Remove VeloRay containers; preserve all data? Type REMOVE: ')) != confirmation:
+            if not require_terminal_confirmation(
+                'Delete VeloRay containers, database, keys and volumes? Type PURGE: ' if args.purge else 'Remove VeloRay containers; preserve all data? Type REMOVE: ',
+                'برای حذف کانتینرها و داده‌ها PURGE بنویسید: ' if args.purge else 'برای حذف کانتینرها و حفظ داده‌ها REMOVE بنویسید: ',
+                confirmation,
+            ):
                 return
             if args.purge:
                 backup()
@@ -1460,6 +1630,12 @@ if __name__ == '__main__':
     try:
         with installation_output() if len(sys.argv) > 1 and sys.argv[1] in ('install', 'preflight') else contextlib.nullcontext():
             main()
+    except EOFError:
+        say('Input closed; command cancelled.', 'ورودی بسته شد؛ دستور لغو شد.')
+        sys.exit(2)
+    except KeyboardInterrupt:
+        say('\nInterrupted.', '\nعملیات متوقف شد.')
+        sys.exit(130)
     except (ValueError, OSError, subprocess.SubprocessError) as exc:
         # Subprocess command arguments may contain sensitive environment values;
         # report only the return code, never repr(CalledProcessError.cmd).
