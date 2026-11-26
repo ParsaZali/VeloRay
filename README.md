@@ -30,6 +30,8 @@ The installer takes you through the essentials:
 3. A domain uses automatic HTTPS; an IP uses a local certificate.
 4. Open the printed address and sign in with the **generated username and password**.
 
+These prompts appear on a fresh installation. Re-running the installer on an existing Docker installation reuses its saved address and ports, even after a removal with retained data. Change the domain with `sudo veloray domain YOUR_DOMAIN`, the panel port in **Settings → General**, and the subscription port in **Settings → Subscription**.
+
 **Docker Engine and Compose are installed automatically.** PostgreSQL, the panel, subscription server, agent, Xray, sing-box, native protocols and Caddy run inside containers. Durable volumes preserve database records, traffic ledgers, managed cores and HTTPS state. Encryption keys and the generated initial password remain under the root-only `/etc/veloray/docker/` directory. Domain HTTPS needs correct DNS and available ports 80/443. IP-only installation uses local HTTPS.
 
 Rerun the quick installer to migrate an existing native installation. It builds first, creates a coordinated private backup, preserves accounts, subscription tokens, quota and ledger identity, then starts Docker. Native services are restored on a failed migration. Existing native `veloray update` stays native; it does not silently migrate. See the [Docker guide](docs/container-deployment.md) for recovery, custom certificates and deployment boundaries. Add `--mode native` for the legacy Ubuntu 24.04 installer.
@@ -102,7 +104,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/insta
 
 ## Screenshots
 
-Screenshots use demonstration accounts, not production credentials.
+Screenshots were captured from the current VeloRay interface with demo accounts and sample traffic.
 
 <img src="docs/media/dashboard.webp" alt="VeloRay dashboard showing usage and node health" width="100%">
 
@@ -113,7 +115,7 @@ Screenshots use demonstration accounts, not production credentials.
 
 <img src="docs/media/login.webp" alt="VeloRay login with light/dark appearance and language selection" width="100%">
 <img src="docs/media/subscription.webp" alt="Default subscription page with quota, expiry, app formats, QR and traffic history" width="800">
-<img src="docs/media/subscription-mobile.webp" alt="VeloRay subscription on mobile" width="320">
+<img src="docs/media/subscription-mobile.webp" alt="VeloRay subscription on mobile with its traffic chart" width="390">
 
 </details>
 

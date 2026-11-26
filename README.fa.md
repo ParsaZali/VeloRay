@@ -28,6 +28,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/insta
 3. برای دامنه HTTPS خودکار و برای آی‌پی گواهی محلی تنظیم می‌شود.
 4. آدرس چاپ‌شده را باز کنید و با **نام کاربری و رمز تصادفی ساخته‌شده** وارد شوید.
 
+این سؤال‌ها فقط در نصب تازه نمایش داده می‌شوند. اجرای دوبارهٔ نصاب روی نصب قبلی Docker، حتی پس از حذف با حفظ داده، از آدرس و پورت‌های ذخیره‌شده استفاده می‌کند. برای تغییر دامنه `sudo veloray domain YOUR_DOMAIN` را اجرا کنید. پورت پنل در **تنظیمات ← عمومی** و پورت اشتراک در **تنظیمات ← اشتراک** قابل تغییر است.
+
 **Docker Engine و Compose خودکار نصب می‌شوند.** پایگاه داده، پنل، ساب مستقل، ایجنت، Xray، sing-box، پروتکل‌های بومی و Caddy داخل کانتینر اجرا می‌شوند. داده‌ها، مصرف، هسته‌های مدیریت‌شده و وضعیت HTTPS در volume پایدار نگهداری می‌شوند. کلیدها و رمز اولیه داخل `/etc/veloray/docker/` با دسترسی مخصوص root هستند. نیازی به نصب Go یا Node.js نیست.
 
 برای انتقال نصب مستقیم قبلی، دوباره دستور نصب سریع را اجرا کنید؛ ابتدا ایمیج ساخته و بکاپ هماهنگ گرفته می‌شود و سپس حساب‌ها، لینک‌ها، سهمیه و شناسهٔ ثبت مصرف منتقل می‌شوند. اگر انتقال شکست بخورد، سرویس‌های قبلی برمی‌گردند. آپدیت معمول نصب مستقیم، روش اجرا را خودکار تغییر نمی‌دهد. گزینهٔ `--mode native` نصب مستقیم قدیمی روی Ubuntu 24.04 را نگه می‌دارد.
@@ -83,7 +85,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/insta
 
 ## تصاویر
 
-این تصاویر با حساب‌های نمایشی تهیه شده‌اند و حاوی اطلاعات کاربران واقعی نیستند.
+این تصاویر از رابط فعلی VeloRay با حساب‌های نمایشی و ترافیک نمونه گرفته شده‌اند.
 
 <img src="docs/media/dashboard.webp" alt="داشبورد مصرف و سلامت نودها در VeloRay" width="100%">
 
@@ -93,7 +95,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/insta
 
 <img src="docs/media/login.webp" alt="ورود به VeloRay" width="100%">
 <img src="docs/media/subscription.webp" alt="صفحه ساده اشتراک" width="800">
-<img src="docs/media/subscription-mobile.webp" alt="صفحه اشتراک VeloRay روی موبایل" width="320">
+<img src="docs/media/subscription-mobile.webp" alt="صفحه اشتراک VeloRay و نمودار مصرف روی موبایل" width="390">
 
 </details>
 

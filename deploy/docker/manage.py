@@ -508,7 +508,9 @@ def install(source):
     if (CONFIG / 'migration-pending.json').exists():
         raise ValueError('A native migration was interrupted. Run sudo python3 /opt/veloray/docker-current/deploy/docker/manage.py recover-migration before reinstalling')
     if (CONFIG / '.env').exists():
-        say('Existing Docker data and keys will be preserved.', 'اطلاعات و کلیدهای نصب قبلی حفظ می‌شوند.')
+        say('Existing Docker installation found. Reusing its address, ports and data.', 'نصب قبلی Docker پیدا شد؛ آدرس، پورت‌ها و داده‌های آن حفظ می‌شوند.')
+        say('Address setup runs on a fresh installation. To change ports, open Settings → General or Settings → Subscription.',
+            'تنظیم آدرس هنگام نصب تازه انجام می‌شود. برای تغییر پورت به تنظیمات ← عمومی یا تنظیمات ← اشتراک بروید.')
         if (CONFIG / 'installing').exists():
             install_step('Build application images', 'آماده‌سازی ایمیج‌ها')
             compose('build', 'panel', 'proxy')
@@ -552,10 +554,15 @@ def native_environment_for_install(path):
     return read_env(path)
 
 
-def show_credentials(values, migrated=False):
-    say('\n  ✓ Installation complete', '\n  ✓ نصب کامل شد', '32')
+def show_credentials(values, migrated=False, resumed=False):
+    if resumed:
+        say('\n  ✓ Existing installation is running', '\n  ✓ نصب قبلی در حال اجراست', '32')
+    else:
+        say('\n  ✓ Installation complete', '\n  ✓ نصب کامل شد', '32')
     say('  Panel: ' + origin(values), '  آدرس پنل: ' + origin(values))
     if not migrated:
+        sub = origin(dict(values, VELORAY_PANEL_PORT=values['VELORAY_SUBSCRIPTION_PORT']))
+        say('  Subscription listener: ' + sub, '  آدرس سرویس اشتراک: ' + sub)
         say('  Username: ' + values['VELORAY_ADMIN_USERNAME'], '  نام کاربری: ' + values['VELORAY_ADMIN_USERNAME'])
         # Only the interactive operator sees the generated credential; never tee
         # it into the installation log or a CI artifact.
@@ -569,7 +576,7 @@ def show_credentials(values, migrated=False):
     say('  Management: sudo veloray', '  مدیریت: sudo veloray')
     say('  Reset password: sudo veloray reset\n', '  تغییر رمز: sudo veloray reset\n')
     if values.get('VELORAY_TLS_MODE') == 'local':
-        say('HTTPS uses a local certificate. Set a domain using sudo veloray domain HOST for public TLS.', 'گواهی HTTPS محلی است؛ برای گواهی معتبر دامنه را با sudo veloray domain HOST تنظیم کنید.', '33')
+        say('TLS: local certificate. To switch to a domain, run sudo veloray domain YOUR_DOMAIN.', 'TLS: گواهی محلی. برای تغییر به دامنه، sudo veloray domain YOUR_DOMAIN را اجرا کنید.', '33')
 
 
 def backup(path=None):
@@ -835,7 +842,7 @@ def upgrade(source, sha):
     if values.get('VELORAY_INSTALLED_COMMIT') == sha:
         up()
         install_tools()
-        show_credentials(values, migrated=True)
+        show_credentials(values, migrated=True, resumed=True)
         return
     before = dict(values)
     # Build while the previous services remain live. Revisions have unique tags.
@@ -861,9 +868,10 @@ def upgrade(source, sha):
         write_env(before)
         restore(recovery, confirmed=True)
         raise
-    say('✓ Docker update completed.', '✓ آپدیت کانتینرها کامل شد.', '32')
     if INSTALL_LOG is not None:
-        show_credentials(values, migrated=True)
+        show_credentials(values, migrated=True, resumed=True)
+    else:
+        say('✓ Docker update completed.', '✓ آپدیت کانتینرها کامل شد.', '32')
 
 
 def set_address(key, value):
