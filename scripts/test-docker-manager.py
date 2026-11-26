@@ -8,6 +8,7 @@ import os
 import shutil
 from pathlib import Path
 import subprocess
+import sys
 import tarfile
 import tempfile
 import threading
@@ -16,6 +17,7 @@ from contextlib import redirect_stdout
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'deploy/docker'))
 spec = importlib.util.spec_from_file_location('docker_manager', ROOT / 'deploy/docker/manage.py')
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)

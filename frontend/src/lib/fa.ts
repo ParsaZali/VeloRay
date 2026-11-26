@@ -222,6 +222,7 @@ Check a proposed inbound port|بررسی پورت پیشنهادی اینبان�
 Check bot connection|بررسی ارتباط ربات
 Check listeners and current socket owners|بررسی پورت‌های باز و سرویس استفاده‌کننده
 Check port|بررسی پورت
+{0} port {1} is in use: {2}|پورت {0} شمارهٔ {1} در حال استفاده است: {2}
 Checking listeners…|در حال بررسی پورت‌ها…
 Checking port…|در حال بررسی پورت…
 Choose a port, protocol and connection security.|پورت، پروتکل و امنیت اتصال را انتخاب کنید.
@@ -508,6 +509,7 @@ Quota renewal (days)|تمدید سهمیه (روز)
 Quota warning %|درصد هشدار سهمیه
 REALITY identity|مشخصات ریالیتی
 REALITY key pair generated.|جفت کلید ریالیتی ساخته شد.
+REALITY requires valid private/public keys and server name|برای REALITY باید کلید خصوصی، کلید عمومی و نام سرور معتبر وارد کنید.
 REST endpoints and automation reference|مسیرهای رابط برنامه‌نویسی و راهنمای خودکارسازی
 Raw|خام
 Read + write|خواندن و نوشتن

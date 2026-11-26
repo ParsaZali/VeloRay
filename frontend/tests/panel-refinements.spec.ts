@@ -691,6 +691,89 @@ test("Xray balancing deploys groups, keeps conflict drafts and selects a routing
   ).toBeLessThanOrEqual(390);
 });
 
+test("inbound errors stay visible inside the editor on mobile and allow retry", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 780 });
+  await panel(page, "/inbounds");
+  const validation =
+    "REALITY requires valid private/public keys and server name";
+  const conflict =
+    "Local Node: port conflict: tcp 0.0.0.0:443 (in-1-Main), owner unavailable; choose another inbound port";
+  let creates = 0;
+  await page.route("**/api/inbounds/", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    if (++creates === 1)
+      return route.fulfill({ status: 400, json: { detail: validation } });
+    if (route.request().postDataJSON().port === 443)
+      return route.fulfill({ status: 409, json: { detail: conflict } });
+    return route.fulfill({
+      status: 201,
+      json: { id: 1, ...route.request().postDataJSON() },
+    });
+  });
+  await page.route("**/api/nodes/1/reality-keypair/", (route) =>
+    route.fulfill({
+      json: {
+        private_key: "GeneratedPrivateKey",
+        public_key: "GeneratedPublicKey",
+      },
+    }),
+  );
+  await page.route("**/api/nodes/1/check-listener/", (route) =>
+    route.fulfill({
+      json: {
+        ports: [
+          {
+            network: "tcp",
+            port: 443,
+            state: "conflict",
+            owner: "saved inbound Main",
+          },
+        ],
+      },
+    }),
+  );
+
+  await page.getByRole("button", { name: "New inbound", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "New inbound" });
+  const deploy = dialog.getByRole("button", { name: "Create & deploy" });
+  const toast = dialog.getByRole("alert");
+  await deploy.click();
+  await expect(toast).toBeInViewport();
+  await expect(toast).toContainText("Generate a REALITY key pair");
+  expect(creates).toBe(0);
+
+  await dialog.getByRole("button", { name: "Check port", exact: true }).click();
+  await expect(toast).toHaveText(/TCP port 443 is in use: saved inbound Main/);
+  await dialog.getByRole("button", { name: "Dismiss notification" }).click();
+  await expect(toast).toHaveCount(0);
+
+  await dialog.getByLabel("Private key", { exact: true }).fill("invalid");
+  await dialog.getByLabel("Public key", { exact: true }).fill("invalid");
+  await deploy.click();
+  await expect(toast).toHaveText(validation);
+  await dialog.getByRole("button", { name: "Generate", exact: true }).click();
+  await expect(dialog.getByRole("status")).toHaveText(
+    "REALITY key pair generated.",
+  );
+  await deploy.click();
+  await expect(toast).toBeInViewport();
+  await expect(toast).toHaveText(conflict);
+  await expect(dialog.getByLabel("Private key", { exact: true })).toHaveValue(
+    "GeneratedPrivateKey",
+  );
+  await expect(deploy).toBeInViewport();
+  await expect
+    .poll(() => dialog.evaluate((el) => el.scrollWidth <= el.clientWidth))
+    .toBe(true);
+  await dialog.getByLabel("Port", { exact: true }).fill("2053");
+  await expect(toast).toHaveCount(0);
+  await deploy.click();
+  await expect(dialog).toHaveCount(0);
+  expect(creates).toBe(3);
+});
+
 test("inbound fallback editor preserves fields and hides unsupported transports", async ({
   page,
 }) => {

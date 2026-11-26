@@ -10,6 +10,8 @@ import { useLocale, tx } from "@/lib/i18n";
 import { Dialog } from "@/components/common/dialog";
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import {
+  CircleAlert,
+  CircleCheck,
   Copy,
   KeyRound,
   Pause,
@@ -17,6 +19,7 @@ import {
   Play,
   Plus,
   Rocket,
+  Network,
   Trash2,
   X,
 } from "lucide-react";
@@ -32,6 +35,44 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
 import { FaIcon } from "@/components/ui/fa-icon";
 import { cn } from "@/lib/cn";
+
+type EditorNotice = { tone: "error" | "success"; text: string };
+
+function InboundToast({
+  notice,
+  onDismiss,
+}: {
+  notice: EditorNotice;
+  onDismiss: () => void;
+}) {
+  const error = notice.tone === "error";
+  const Icon = error ? CircleAlert : CircleCheck;
+  return (
+    <div
+      className="inbound-toast"
+      data-tone={notice.tone}
+      role={error ? "alert" : "status"}
+    >
+      <Icon size={17} aria-hidden="true" />
+      <p>{notice.text}</p>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7"
+        aria-label={t("Dismiss notification", "بستن اعلان")}
+        onClick={onDismiss}
+      >
+        <X size={14} />
+      </Button>
+    </div>
+  );
+}
+
+function inboundError(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : t("The inbound request failed.", "درخواست اینباند ناموفق بود.");
+}
 
 type FormState = {
   fallbacks: FallbackEntry[];
@@ -176,12 +217,13 @@ function Choice({
     <button
       type="button"
       disabled={disabled}
+      aria-pressed={active}
       onClick={() => onClick(value)}
       className={cn(
-        "min-h-10 rounded-lg border px-2.5 text-[10px] font-semibold transition",
+        "min-h-9 rounded-md border px-2.5 text-[12px] font-medium transition focus-visible:outline-offset-2",
         active
-          ? "border-[var(--brand)] bg-[var(--surface-2)] text-[var(--brand)] shadow-[0_0_0_3px_var(--ring)]"
-          : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--muted-strong)] hover:border-[var(--border-strong)] hover:text-[var(--fg)]",
+          ? "border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--fg)]"
+          : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-strong)] hover:border-[var(--border-strong)] hover:text-[var(--fg)]",
         "disabled:cursor-not-allowed disabled:opacity-35",
       )}
     >
@@ -224,26 +266,15 @@ export function InboundsPage() {
     [items, setItems] = useState<InboundItem[]>([]),
     [form, setForm] = useState<FormState>(fresh()),
     [msg, setMsg] = useState(""),
-    [busy, setBusy] = useState(false),
+    [busy, setBusy] = useState<"saving" | "keys" | "port" | null>(null),
+    [editorNotice, setEditorNotice] = useState<EditorNotice | null>(null),
     [editing, setEditing] = useState<InboundItem | null>(null);
   const [cloning, setCloning] = useState<InboundItem | null>(null),
     [cloneNode, setCloneNode] = useState(""),
     [clonePort, setClonePort] = useState(""),
     [cloneName, setCloneName] = useState(""),
-    [cloneBusy, setCloneBusy] = useState(false);
-  const [portResult, setPortResult] = useState("");
-  const [portBusy, setPortBusy] = useState(false);
-  const [portSignature, setPortSignature] = useState("");
-  const signature = JSON.stringify([
-    editing?.id || 0,
-    form.node,
-    form.listen,
-    form.port,
-    form.protocol,
-    form.transport,
-    form.socks_udp,
-    form.tunnel_network,
-  ]);
+    [cloneBusy, setCloneBusy] = useState(false),
+    [cloneNotice, setCloneNotice] = useState<EditorNotice | null>(null);
   function preset(value: string) {
     if (!value) return;
     const next = fresh(form.node);
@@ -287,17 +318,12 @@ export function InboundsPage() {
       next.flow = "";
     }
     setForm(next);
-    setPortResult("");
-    setMsg(
-      next.security === "tls"
-        ? t("Set the server name and certificate paths, then check the port.")
-        : t("Generate the server keypair, then check the port."),
-    );
+    setEditorNotice(null);
   }
   async function checkPort() {
-    const snapshot = signature;
-    setPortBusy(true);
-    setPortSignature(snapshot);
+    if (busy || !form.node) return;
+    setBusy("port");
+    setEditorNotice(null);
     try {
       const result = await api<PortReport>(
         `/nodes/${form.node}/check-listener/`,
@@ -306,25 +332,32 @@ export function InboundsPage() {
           body: JSON.stringify({ ...payload(), id: editing?.id || 0 }),
         },
       );
+      if (result.error) throw new Error(result.error);
       const conflicts = result.ports.filter((p) => p.state === "conflict");
-      setPortResult(
+      setEditorNotice(
         conflicts.length
-          ? conflicts
-              .map(
-                (p) =>
-                  `${p.network.toUpperCase()} :${p.port} — ${p.owner || "occupied"}`,
-              )
-              .join(" · ")
-          : t(
-              "Port check passed. Availability is checked again before deployment.",
-            ),
+          ? {
+              tone: "error",
+              text: conflicts
+                .map((p) =>
+                  tx(
+                    "{0} port {1} is in use: {2}",
+                    p.network.toUpperCase(),
+                    p.port,
+                    p.owner || t("Unknown owner", "مالک نامشخص"),
+                  ),
+                )
+                .join(" · "),
+            }
+          : {
+              tone: "success",
+              text: t("Port check passed.", "بررسی پورت موفق بود."),
+            },
       );
     } catch (error: unknown) {
-      setPortResult(
-        error instanceof Error ? error.message : t("Port check failed."),
-      );
+      setEditorNotice({ tone: "error", text: inboundError(error) });
     } finally {
-      setPortBusy(false);
+      setBusy(null);
     }
   }
   const load = async () => {
@@ -344,6 +377,7 @@ export function InboundsPage() {
     load().catch((e) => setMsg(e.message));
   }, []);
   function set(k: keyof FormState, v: any) {
+    setEditorNotice(null);
     setForm((f) => {
       const n: any = { ...f, [k]: v };
       if (k === "protocol") {
@@ -387,57 +421,74 @@ export function InboundsPage() {
           n.flow = "";
         }
       }
-      if (k === "transport" && v !== "raw") n.flow = "";
+      if (k === "transport" && v !== "raw") {
+        n.flow = "";
+        if (n.security === "reality" && !["grpc", "xhttp"].includes(v))
+          n.security = "none";
+      }
       if (k === "security" && v !== "reality") n.flow = "";
       if (
         n.protocol === "vless" &&
         n.transport === "raw" &&
         n.security === "reality" &&
-        !n.flow
+        (f.protocol !== "vless" ||
+          f.transport !== "raw" ||
+          f.security !== "reality")
       )
         n.flow = "xtls-rprx-vision";
       return n;
     });
   }
-  async function realityKeys() {
-    if (!form.node) return;
-    setBusy(true);
+  async function generateKeys(kind: "reality" | "wireguard") {
+    if (busy || !form.node) return;
+    setBusy("keys");
+    setEditorNotice(null);
     try {
-      const k: any = await api(`/nodes/${form.node}/reality-keypair/`, {
-        method: "POST",
-      });
+      const k = await api<{ private_key: string; public_key: string }>(
+        `/nodes/${form.node}/${kind}-keypair/`,
+        { method: "POST" },
+      );
       setForm((f) => ({
         ...f,
-        reality_private_key: k.private_key,
-        reality_public_key: k.public_key,
+        ...(kind === "reality"
+          ? {
+              reality_private_key: k.private_key,
+              reality_public_key: k.public_key,
+            }
+          : { wg_secret_key: k.private_key, wg_public_key: k.public_key }),
       }));
-      setMsg(t("REALITY key pair generated."));
-    } catch (e: any) {
-      setMsg(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function wgKeys() {
-    if (!form.node) return;
-    setBusy(true);
-    try {
-      const k: any = await api(`/nodes/${form.node}/wireguard-keypair/`, {
-        method: "POST",
+      setEditorNotice({
+        tone: "success",
+        text: t(
+          kind === "reality"
+            ? "REALITY key pair generated."
+            : "WireGuard server key pair generated.",
+        ),
       });
-      setForm((f) => ({
-        ...f,
-        wg_secret_key: k.private_key,
-        wg_public_key: k.public_key,
-      }));
-      setMsg(t("WireGuard server key pair generated."));
-    } catch (e: any) {
-      setMsg(e.message);
+    } catch (error: unknown) {
+      setEditorNotice({ tone: "error", text: inboundError(error) });
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
   function payload() {
+    let streamSettings: unknown;
+    try {
+      streamSettings = JSON.parse(form.stream_json || "{}");
+    } catch {
+      streamSettings = null;
+    }
+    if (
+      !streamSettings ||
+      typeof streamSettings !== "object" ||
+      Array.isArray(streamSettings)
+    )
+      throw new Error(
+        t(
+          "Stream settings must be a JSON object.",
+          "تنظیمات جریان باید یک آبجکت JSON باشد.",
+        ),
+      );
     const p: any = {
       core: form.core,
       node: Number(form.node),
@@ -461,7 +512,7 @@ export function InboundsPage() {
       reality_short_id: form.reality_short_id,
       enabled: editing?.enabled ?? true,
       protocol_settings: { ...(editing?.protocol_settings || {}) },
-      stream_settings: JSON.parse(form.stream_json || "{}"),
+      stream_settings: streamSettings,
     };
     delete p.protocol_settings.fallbacks;
     if (
@@ -545,9 +596,25 @@ export function InboundsPage() {
   }
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (busy) return;
-    setBusy(true);
+    if (busy || !form.node) return;
+    if (
+      form.security === "reality" &&
+      (!form.reality_private_key.trim() ||
+        !form.reality_public_key.trim() ||
+        !form.reality_server_name.trim())
+    ) {
+      setEditorNotice({
+        tone: "error",
+        text: t(
+          "Generate a REALITY key pair and enter a server name before deploying.",
+          "قبل از اعمال، جفت کلید REALITY را بسازید و نام سرور را وارد کنید.",
+        ),
+      });
+      return;
+    }
+    setBusy("saving");
     setMsg("");
+    setEditorNotice(null);
     try {
       if (editing) {
         await api(`/inbounds/${editing.id}/`, {
@@ -566,15 +633,16 @@ export function InboundsPage() {
       setEditorOpen(false);
       setEditing(null);
       setForm(fresh(keep));
-      await load();
-    } catch (e: any) {
-      setMsg(e.message);
+      void load().catch((error) => setMsg(inboundError(error)));
+    } catch (error: unknown) {
+      setEditorNotice({ tone: "error", text: inboundError(error) });
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
   function beginEdit(i: InboundItem) {
     const ps = i.protocol_settings || {};
+    setEditorNotice(null);
     setEditorOpen(true);
     setEditing(i);
     setForm({
@@ -638,13 +706,14 @@ export function InboundsPage() {
       tun_interface: String(ps.outbound_interface || "auto"),
       stream_json: JSON.stringify(i.stream_settings || {}, null, 2),
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function cancelEdit() {
+    if (busy) return;
     const node = form.node;
     setEditorOpen(false);
     setEditing(null);
     setForm(fresh(node));
+    setEditorNotice(null);
   }
   async function deploy(i: InboundItem) {
     try {
@@ -676,6 +745,7 @@ export function InboundsPage() {
     }
   }
   function beginClone(i: InboundItem) {
+    setCloneNotice(null);
     setCloning(i);
     setCloneNode(String(i.node));
     setClonePort(
@@ -686,6 +756,7 @@ export function InboundsPage() {
   async function clone() {
     if (!cloning || cloneBusy) return;
     setCloneBusy(true);
+    setCloneNotice(null);
     try {
       await api(`/inbounds/${cloning.id}/clone/`, {
         method: "POST",
@@ -696,9 +767,9 @@ export function InboundsPage() {
         }),
       });
       setCloning(null);
-      await load();
-    } catch (e: any) {
-      setMsg(e.message);
+      void load().catch((error) => setMsg(inboundError(error)));
+    } catch (error: unknown) {
+      setCloneNotice({ tone: "error", text: inboundError(error) });
     } finally {
       setCloneBusy(false);
     }
@@ -708,6 +779,13 @@ export function InboundsPage() {
     tls = form.security === "tls",
     vision = form.protocol === "vless" && form.transport === "raw" && reality;
   const plaintext = form.protocol === "http" || form.protocol === "socks";
+  const hasStreamControls = ![
+    "wireguard",
+    "tunnel",
+    "tun",
+    "mtproto",
+    "amneziawg",
+  ].includes(form.protocol);
   const protocolCounts = useMemo(
     () =>
       Object.fromEntries(
@@ -752,80 +830,93 @@ export function InboundsPage() {
             onClose={cancelEdit}
             padded={false}
             size="lg"
+            className="inbound-editor"
           >
-            <Card>
-              <CardHeader>
-                <div>
-                  <CardTitle>
-                    {editing ? t("Edit inbound") : t("New inbound")}
-                  </CardTitle>
+            <form onSubmit={save} className="inbound-editor-form">
+              <header className="inbound-editor-header">
+                <div className="inbound-editor-heading">
+                  <span className="inbound-editor-icon" aria-hidden="true">
+                    <Network size={18} />
+                  </span>
+                  <div className="min-w-0">
+                    <h2>{editing ? t("Edit inbound") : t("New inbound")}</h2>
+                    {editing && <p>{editing.name}</p>}
+                  </div>
                 </div>
-                {true && (
-                  <Button variant="ghost" size="icon" onClick={cancelEdit}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={save} className="space-y-5">
-                  <Field label="Core">
-                    <Select
-                      className="input"
-                      value={form.core}
-                      onChange={(e) => {
-                        set("core", e.target.value);
-                        set(
-                          "protocol",
-                          e.target.value === "native" ? "mtproto" : "vless",
-                        );
-                        set("transport", "raw");
-                        set("security", "none");
-                        set("flow", "");
-                      }}
-                    >
-                      <option value="xray">Xray · Primary</option>
-                      <option value="singbox">sing-box</option>
-                      <option value="native">
-                        VeloRay · MTProto / AmneziaWG
-                      </option>
-                    </Select>
-                  </Field>
-                  {!editing && form.core !== "native" && (
-                    <label className="label">
-                      {t("Connection preset")}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={cancelEdit}
+                  disabled={!!busy}
+                  aria-label={t("Close")}
+                >
+                  <X size={17} />
+                </Button>
+              </header>
+              <div className="inbound-editor-body">
+                <fieldset className="inbound-editor-fields" disabled={!!busy}>
+                  <div className="inbound-editor-grid inbound-editor-section">
+                    <Field label="Core">
                       <Select
                         className="input"
-                        aria-label={t("Connection preset")}
-                        value=""
-                        onChange={(e) => preset(e.target.value)}
-                        disabled={busy}
+                        value={form.core}
+                        onChange={(e) => {
+                          set("core", e.target.value);
+                          set(
+                            "protocol",
+                            e.target.value === "native" ? "mtproto" : "vless",
+                          );
+                          set("transport", "raw");
+                          set("security", "none");
+                          set("flow", "");
+                        }}
                       >
-                        <option value="">{t("Choose a starting point")}</option>
-                        <option value="reality">
-                          {t("VLESS · REALITY · Vision")}
-                        </option>
-                        <option value="websocket">
-                          {t("VLESS · WebSocket · TLS")}
-                        </option>
-                        <option value="trojan">{t("Trojan · TLS")}</option>
-                        {form.core === "xray" && (
-                          <option value="wireguard">
-                            {t("WireGuard · UDP")}
-                          </option>
-                        )}
-                        <option value="anytls">AnyTLS · TLS</option>
-                        <option value="hysteria">
-                          {t("Hysteria2 · UDP · TLS")}
+                        <option value="xray">Xray · Primary</option>
+                        <option value="singbox">sing-box</option>
+                        <option value="native">
+                          VeloRay · MTProto / AmneziaWG
                         </option>
                       </Select>
-                    </label>
-                  )}
-                  <section>
-                    <div className="panel-section-title mb-3">
+                    </Field>
+                    {!editing && form.core !== "native" && (
+                      <label className="label">
+                        {t("Connection preset")}
+                        <Select
+                          className="input"
+                          aria-label={t("Connection preset")}
+                          value=""
+                          onChange={(e) => preset(e.target.value)}
+                          disabled={!!busy}
+                        >
+                          <option value="">
+                            {t("Choose a starting point")}
+                          </option>
+                          <option value="reality">
+                            {t("VLESS · REALITY · Vision")}
+                          </option>
+                          <option value="websocket">
+                            {t("VLESS · WebSocket · TLS")}
+                          </option>
+                          <option value="trojan">{t("Trojan · TLS")}</option>
+                          {form.core === "xray" && (
+                            <option value="wireguard">
+                              {t("WireGuard · UDP")}
+                            </option>
+                          )}
+                          <option value="anytls">AnyTLS · TLS</option>
+                          <option value="hysteria">
+                            {t("Hysteria2 · UDP · TLS")}
+                          </option>
+                        </Select>
+                      </label>
+                    )}
+                  </div>
+                  <section className="inbound-editor-section">
+                    <h3 className="inbound-editor-section-title">
                       {t("Listener")}
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label={t("Node")} className="sm:col-span-2">
+                    </h3>
+                    <div className="inbound-editor-grid">
+                      <Field label={t("Node")}>
                         <Select
                           className="input"
                           value={form.node}
@@ -849,6 +940,17 @@ export function InboundsPage() {
                           required
                         />
                       </Field>
+                      {form.protocol !== "tun" && (
+                        <Field label={t("Listen address")}>
+                          <Input
+                            className="input"
+                            value={form.listen}
+                            onChange={(e) => set("listen", e.target.value)}
+                            placeholder={t("0.0.0.0 or ::")}
+                            required
+                          />
+                        </Field>
+                      )}
                       <Field
                         label={
                           form.protocol === "tun"
@@ -867,95 +969,119 @@ export function InboundsPage() {
                           required
                         />
                       </Field>
-                      {form.protocol !== "tun" && (
-                        <Field
-                          label={t("Listen address")}
-                          className="sm:col-span-2"
-                        >
-                          <Input
-                            className="input"
-                            value={form.listen}
-                            onChange={(e) => set("listen", e.target.value)}
-                            placeholder={t("0.0.0.0 or ::")}
-                            required
-                          />
-                          <span className="mt-1 text-[10px] font-normal text-[var(--muted)]">
-                            {t(
-                              "Use 0.0.0.0 for IPv4 or :: for IPv6. Enter a specific IP to restrict the listener.",
-                            )}
-                          </span>
-                        </Field>
-                      )}
                     </div>
                     {form.protocol !== "tun" && (
-                      <div className="mt-3 space-y-2">
+                      <div className="mt-3 flex justify-end">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={checkPort}
-                          disabled={portBusy || busy || !form.node}
+                          disabled={!!busy || !form.node}
                         >
                           <FaIcon icon="shield-halved" />
-                          {portBusy ? t("Checking port…") : t("Check port")}
+                          {busy === "port"
+                            ? t("Checking port…")
+                            : t("Check port")}
                         </Button>
-                        {portResult && portSignature === signature && (
-                          <p
-                            role="status"
-                            className="break-words text-[11px] leading-5 text-[var(--muted-strong)]"
-                          >
-                            {portResult}
-                          </p>
-                        )}
                       </div>
                     )}
                   </section>
-                  <section>
-                    <div className="panel-section-title mb-3">
-                      {t("Protocol")}
+                  <section className="inbound-editor-section">
+                    <h3 className="inbound-editor-section-title">
+                      {t("Connection", "اتصال")}
+                    </h3>
+                    <div className="inbound-editor-grid">
+                      <Field label="Protocol">
+                        <Select
+                          className="input"
+                          aria-label={t("Protocol")}
+                          value={form.protocol}
+                          onChange={(e) => set("protocol", e.target.value)}
+                        >
+                          {protocolOptions
+                            .filter(
+                              ([v]) =>
+                                (form.core === "xray" &&
+                                  ![
+                                    "tuic",
+                                    "anytls",
+                                    "naive",
+                                    "snell",
+                                    "shadowtls",
+                                    "mtproto",
+                                    "amneziawg",
+                                  ].includes(v)) ||
+                                (form.core === "singbox" &&
+                                  [
+                                    "vless",
+                                    "vmess",
+                                    "trojan",
+                                    "shadowsocks",
+                                    "hysteria",
+                                    "tuic",
+                                    "anytls",
+                                    "naive",
+                                    "snell",
+                                    "shadowtls",
+                                    "http",
+                                    "socks",
+                                  ].includes(v)) ||
+                                (form.core === "native" &&
+                                  ["mtproto", "amneziawg"].includes(v)),
+                            )
+                            .map(([v, l]) => (
+                              <option key={v} value={v}>
+                                {t(l)}
+                              </option>
+                            ))}
+                        </Select>
+                      </Field>
+                      {hasStreamControls && (
+                        <Field label="Transport">
+                          {form.protocol === "hysteria" ? (
+                            <Input value={t("Hysteria2 / QUIC")} readOnly />
+                          ) : (
+                            <Select
+                              className="input"
+                              aria-label={t("Transport")}
+                              value={form.transport}
+                              onChange={(e) => set("transport", e.target.value)}
+                            >
+                              {transportOptions
+                                .filter(
+                                  ([v]) =>
+                                    form.core === "xray" ||
+                                    [
+                                      "raw",
+                                      "ws",
+                                      "grpc",
+                                      "httpupgrade",
+                                    ].includes(v),
+                                )
+                                .map(([v, l]) => (
+                                  <option
+                                    key={v}
+                                    value={v}
+                                    disabled={
+                                      [
+                                        "shadowsocks",
+                                        "socks",
+                                        "tuic",
+                                        "anytls",
+                                        "naive",
+                                        "snell",
+                                        "shadowtls",
+                                      ].includes(form.protocol) && v !== "raw"
+                                    }
+                                  >
+                                    {t(l)}
+                                  </option>
+                                ))}
+                            </Select>
+                          )}
+                        </Field>
+                      )}
                     </div>
-                    <Select
-                      className="input"
-                      aria-label={t("Protocol")}
-                      value={form.protocol}
-                      onChange={(e) => set("protocol", e.target.value)}
-                    >
-                      {protocolOptions
-                        .filter(
-                          ([v]) =>
-                            (form.core === "xray" &&
-                              ![
-                                "tuic",
-                                "anytls",
-                                "naive",
-                                "snell",
-                                "shadowtls",
-                                "mtproto",
-                                "amneziawg",
-                              ].includes(v)) ||
-                            (form.core === "singbox" &&
-                              [
-                                "vless",
-                                "vmess",
-                                "trojan",
-                                "shadowsocks",
-                                "hysteria",
-                                "tuic",
-                                "anytls",
-                                "naive",
-                                "snell",
-                                "shadowtls",
-                                "http",
-                                "socks",
-                              ].includes(v)) ||
-                            (form.core === "native" &&
-                              ["mtproto", "amneziawg"].includes(v)),
-                        )
-                        .map(([v, l]) => (
-                          <option key={v} value={v}>
-                            {t(l)}
-                          </option>
-                        ))}
-                    </Select>
                     {plaintext && (
                       <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/7 px-3 py-2 text-[10px] leading-5 text-amber-500">
                         {t(
@@ -963,9 +1089,53 @@ export function InboundsPage() {
                         )}
                       </div>
                     )}
+                    {hasStreamControls && (
+                      <>
+                        {["ws", "xhttp", "httpupgrade"].includes(
+                          form.transport,
+                        ) && (
+                          <div className="inbound-editor-grid mt-3">
+                            <Field label={t("Path")}>
+                              <Input
+                                className="input"
+                                value={form.path}
+                                onChange={(e) => set("path", e.target.value)}
+                                placeholder={t("/veloray")}
+                              />
+                            </Field>
+                            {["ws", "httpupgrade"].includes(form.transport) && (
+                              <Field label={t("Host header")}>
+                                <Input
+                                  className="input"
+                                  value={form.host_header}
+                                  onChange={(e) =>
+                                    set("host_header", e.target.value)
+                                  }
+                                  placeholder={t("cdn.example.com")}
+                                />
+                              </Field>
+                            )}
+                          </div>
+                        )}
+                        {form.transport === "grpc" && (
+                          <div className="mt-3">
+                            <Field label={t("gRPC service")}>
+                              <Input
+                                className="input"
+                                value={form.service_name}
+                                onChange={(e) =>
+                                  set("service_name", e.target.value)
+                                }
+                                placeholder={t("veloray-grpc")}
+                              />
+                            </Field>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </section>
                   {form.protocol === "mtproto" && (
-                    <section className="space-y-3">
+                    <section className="inbound-editor-section space-y-3">
                       <Field label="FakeTLS hostname">
                         <Input
                           value={form.mtproto_host}
@@ -982,115 +1152,11 @@ export function InboundsPage() {
                       </p>
                     </section>
                   )}
-                  {![
-                    "wireguard",
-                    "tunnel",
-                    "tun",
-                    "mtproto",
-                    "amneziawg",
-                  ].includes(form.protocol) && (
-                    <section>
-                      <div className="panel-section-title mb-3">
-                        {t("Transport")}
-                      </div>
-                      {form.protocol === "hysteria" ? (
-                        <div className="grid grid-cols-2">
-                          <Choice
-                            value="hysteria"
-                            label={t("Hysteria2 / QUIC")}
-                            active
-                            onClick={() => {}}
-                          />
-                        </div>
-                      ) : (
-                        <Select
-                          className="input"
-                          aria-label={t("Transport")}
-                          value={form.transport}
-                          onChange={(e) => set("transport", e.target.value)}
-                        >
-                          {transportOptions
-                            .filter(
-                              ([v]) =>
-                                form.core === "xray" ||
-                                ["raw", "ws", "grpc", "httpupgrade"].includes(
-                                  v,
-                                ),
-                            )
-                            .map(([v, l]) => (
-                              <option
-                                key={v}
-                                value={v}
-                                disabled={
-                                  [
-                                    "shadowsocks",
-                                    "socks",
-                                    "tuic",
-                                    "anytls",
-                                    "naive",
-                                    "snell",
-                                    "shadowtls",
-                                  ].includes(form.protocol) && v !== "raw"
-                                }
-                              >
-                                {t(l)}
-                              </option>
-                            ))}
-                        </Select>
-                      )}
-                      {["ws", "xhttp", "httpupgrade"].includes(
-                        form.transport,
-                      ) && (
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          <Field label={t("Path")}>
-                            <Input
-                              className="input"
-                              value={form.path}
-                              onChange={(e) => set("path", e.target.value)}
-                              placeholder={t("/veloray")}
-                            />
-                          </Field>
-                          {["ws", "httpupgrade"].includes(form.transport) && (
-                            <Field label={t("Host header")}>
-                              <Input
-                                className="input"
-                                value={form.host_header}
-                                onChange={(e) =>
-                                  set("host_header", e.target.value)
-                                }
-                                placeholder={t("cdn.example.com")}
-                              />
-                            </Field>
-                          )}
-                        </div>
-                      )}
-                      {form.transport === "grpc" && (
-                        <div className="mt-3">
-                          <Field label={t("gRPC service")}>
-                            <Input
-                              className="input"
-                              value={form.service_name}
-                              onChange={(e) =>
-                                set("service_name", e.target.value)
-                              }
-                              placeholder={t("veloray-grpc")}
-                            />
-                          </Field>
-                        </div>
-                      )}
-                    </section>
-                  )}
-                  {![
-                    "wireguard",
-                    "tunnel",
-                    "tun",
-                    "mtproto",
-                    "amneziawg",
-                  ].includes(form.protocol) && (
-                    <section>
-                      <div className="panel-section-title mb-3">
+                  {hasStreamControls && (
+                    <section className="inbound-editor-section">
+                      <h3 className="inbound-editor-section-title">
                         {t("Security")}
-                      </div>
+                      </h3>
                       <div className="grid grid-cols-3 gap-2">
                         {[
                           ["none", t("None")],
@@ -1140,7 +1206,7 @@ export function InboundsPage() {
                         </div>
                       )}
                       {tls && (
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div className="inbound-editor-grid mt-3">
                           <Field label={t("TLS certificate")}>
                             <Input
                               className="input"
@@ -1181,28 +1247,23 @@ export function InboundsPage() {
                       )}
                       {reality && (
                         <div className="mt-3 space-y-3">
-                          <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
+                          <div className="inbound-editor-keybar">
                             <div>
                               <div className="text-[11px] font-semibold">
                                 {t("REALITY identity")}
-                              </div>
-                              <div className="mt-0.5 text-[9px] text-[var(--muted)]">
-                                {t(
-                                  "Generate X25519 keys on the selected node.",
-                                )}
                               </div>
                             </div>
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={realityKeys}
-                              disabled={busy}
+                              onClick={() => generateKeys("reality")}
+                              disabled={!!busy || !form.node}
                             >
                               <KeyRound className="h-3.5 w-3.5" />
                               {t("Generate")}
                             </Button>
                           </div>
-                          <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="inbound-editor-grid">
                             <Field label={t("Destination")}>
                               <Input
                                 className="input"
@@ -1225,6 +1286,8 @@ export function InboundsPage() {
                             <Field label={t("Private key")}>
                               <Input
                                 className="input mono"
+                                autoComplete="off"
+                                spellCheck={false}
                                 value={form.reality_private_key}
                                 onChange={(e) =>
                                   set("reality_private_key", e.target.value)
@@ -1246,32 +1309,29 @@ export function InboundsPage() {
                     </section>
                   )}
                   {["wireguard", "amneziawg"].includes(form.protocol) && (
-                    <section>
-                      <div className="panel-section-title mb-3">
+                    <section className="inbound-editor-section">
+                      <h3 className="inbound-editor-section-title">
                         {form.protocol === "amneziawg"
                           ? "AmneziaWG"
                           : "WireGuard"}
-                      </div>
-                      <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
+                      </h3>
+                      <div className="inbound-editor-keybar">
                         <div>
                           <div className="text-[11px] font-semibold">
                             {t("Server key pair")}
-                          </div>
-                          <div className="mt-0.5 text-[9px] text-[var(--muted)]">
-                            {t("Generated by Xray on the selected node.")}
                           </div>
                         </div>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={wgKeys}
-                          disabled={busy}
+                          onClick={() => generateKeys("wireguard")}
+                          disabled={!!busy || !form.node}
                         >
                           <KeyRound className="h-3.5 w-3.5" />
                           {t("Generate")}
                         </Button>
                       </div>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div className="inbound-editor-grid mt-3">
                         <Field label={t("Private key")}>
                           <Input
                             className="input mono"
@@ -1365,10 +1425,10 @@ export function InboundsPage() {
                     </section>
                   )}
                   {form.protocol === "socks" && (
-                    <section>
-                      <div className="panel-section-title mb-3">
+                    <section className="inbound-editor-section">
+                      <h3 className="inbound-editor-section-title">
                         {t("SOCKS options")}
-                      </div>
+                      </h3>
                       <label className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-[11px]">
                         <span>{t("Enable UDP relay")}</span>
                         <Input
@@ -1380,10 +1440,10 @@ export function InboundsPage() {
                     </section>
                   )}
                   {form.protocol === "shadowsocks" && (
-                    <section>
-                      <div className="panel-section-title mb-3">
+                    <section className="inbound-editor-section">
+                      <h3 className="inbound-editor-section-title">
                         {t("Shadowsocks")}
-                      </div>
+                      </h3>
                       <Field label={t("Cipher")}>
                         <Select
                           className="input"
@@ -1430,16 +1490,16 @@ export function InboundsPage() {
                     </section>
                   )}
                   {form.protocol === "shadowtls" && (
-                    <section>
-                      <div className="panel-section-title mb-3">
+                    <section className="inbound-editor-section">
+                      <h3 className="inbound-editor-section-title">
                         ShadowTLS v3
-                      </div>
+                      </h3>
                       <p className="mb-3 text-xs text-[var(--muted)]">
                         {t(
                           "TLS 1.3 handshake with authenticated Shadowsocks 2022 inside. TCP only; download sing-box JSON or Mihomo YAML from the subscription page.",
                         )}
                       </p>
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="inbound-editor-grid">
                         <Field label="Handshake server">
                           <Input
                             className="input"
@@ -1483,11 +1543,11 @@ export function InboundsPage() {
                     </section>
                   )}
                   {form.protocol === "hysteria" && (
-                    <section>
-                      <div className="panel-section-title mb-3">
+                    <section className="inbound-editor-section">
+                      <h3 className="inbound-editor-section-title">
                         {t("Hysteria2")}
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      </h3>
+                      <div className="inbound-editor-grid">
                         <Field label={t("UDP idle timeout")}>
                           <Input
                             className="input"
@@ -1511,11 +1571,11 @@ export function InboundsPage() {
                     </section>
                   )}
                   {form.protocol === "tunnel" && (
-                    <section>
-                      <div className="panel-section-title mb-3">
+                    <section className="inbound-editor-section">
+                      <h3 className="inbound-editor-section-title">
                         {t("Tunnel / port forwarding")}
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      </h3>
+                      <div className="inbound-editor-grid">
                         <Field label={t("Allowed network")}>
                           <Select
                             className="input"
@@ -1563,16 +1623,16 @@ export function InboundsPage() {
                     </section>
                   )}
                   {form.protocol === "tun" && (
-                    <section>
-                      <div className="panel-section-title mb-3">
+                    <section className="inbound-editor-section">
+                      <h3 className="inbound-editor-section-title">
                         {t("TUN interface")}
-                      </div>
+                      </h3>
                       <div className="rounded-lg border border-amber-500/20 bg-amber-500/7 px-3 py-2 text-[10px] leading-5 text-amber-500">
                         {t(
                           "TUN changes host routing. VeloRay validates the Xray config, but route design should still be tested carefully to avoid loops.",
                         )}
                       </div>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div className="inbound-editor-grid mt-3">
                         <Field label={t("Interface name")}>
                           <Input
                             className="input"
@@ -1642,7 +1702,7 @@ export function InboundsPage() {
                         onChange={(value) => set("fallbacks", value)}
                       />
                     )}
-                  <details className="rounded-lg border border-[var(--border)] p-3">
+                  <details className="inbound-editor-section">
                     <summary className="cursor-pointer text-[12px] font-medium">
                       {t("Advanced stream settings")}
                     </summary>
@@ -1656,21 +1716,34 @@ export function InboundsPage() {
                       />
                     </label>
                   </details>
+                </fieldset>
+              </div>
+              <footer className="inbound-editor-footer">
+                {editorNotice && (
+                  <InboundToast
+                    notice={editorNotice}
+                    onDismiss={() => setEditorNotice(null)}
+                  />
+                )}
+                <div className="inbound-editor-actions">
                   <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={busy || !form.node}
+                    variant="ghost"
+                    onClick={cancelEdit}
+                    disabled={!!busy}
                   >
-                    <Plus className="h-3.5 w-3.5" />
-                    {busy
-                      ? "Saving…"
+                    {t("Cancel")}
+                  </Button>
+                  <Button type="submit" disabled={!!busy || !form.node}>
+                    {editing ? <CircleCheck size={15} /> : <Plus size={15} />}
+                    {busy === "saving"
+                      ? t("Saving…")
                       : editing
                         ? t("Save & deploy")
                         : t("Create & deploy")}
                   </Button>
-                </form>
-              </CardContent>
-            </Card>
+                </div>
+              </footer>
+            </form>
           </Dialog>
         )}
         <Card>
@@ -1801,7 +1874,7 @@ export function InboundsPage() {
       {cloning && (
         <Dialog
           label={t("Clone inbound")}
-          onClose={() => setCloning(null)}
+          onClose={() => !cloneBusy && setCloning(null)}
           padded={false}
         >
           <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
@@ -1817,6 +1890,8 @@ export function InboundsPage() {
               size="icon"
               variant="ghost"
               onClick={() => setCloning(null)}
+              disabled={cloneBusy}
+              aria-label={t("Close")}
             >
               <X className="h-4 w-4" />
             </Button>
@@ -1852,14 +1927,26 @@ export function InboundsPage() {
               />
             </Field>
           </div>
-          <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
-            <Button variant="outline" onClick={() => setCloning(null)}>
-              {t("Cancel")}
-            </Button>
-            <Button onClick={clone} disabled={cloneBusy}>
-              {cloneBusy ? "Cloning…" : t("Clone & deploy")}
-            </Button>
-          </div>
+          <footer className="inbound-editor-footer">
+            {cloneNotice && (
+              <InboundToast
+                notice={cloneNotice}
+                onDismiss={() => setCloneNotice(null)}
+              />
+            )}
+            <div className="inbound-editor-actions">
+              <Button
+                variant="ghost"
+                onClick={() => setCloning(null)}
+                disabled={cloneBusy}
+              >
+                {t("Cancel")}
+              </Button>
+              <Button onClick={clone} disabled={cloneBusy}>
+                {cloneBusy ? t("Cloning…") : t("Clone & deploy")}
+              </Button>
+            </div>
+          </footer>
         </Dialog>
       )}
     </div>

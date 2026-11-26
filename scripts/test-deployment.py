@@ -4,11 +4,13 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 import urllib.error
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "deploy/docker"))
 
 
 def module(name, path):
@@ -46,11 +48,23 @@ class DeploymentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             generator.generate(root, "VPN.Example.com")
-            self.assertEqual((root / ".env").read_text(), "VELORAY_DOMAIN=vpn.example.com\n")
+            env = dict(line.split("=", 1) for line in (root / ".env").read_text().splitlines())
+            self.assertEqual(env["VELORAY_DOMAIN"], "vpn.example.com")
+            username = env["VELORAY_ADMIN_USERNAME"]
+            self.assertRegex(username, r"^[A-Za-z][A-Za-z0-9]{9}$")
+            for pattern in (r"[a-z]", r"[A-Z]", r"[0-9]"):
+                self.assertRegex(username, pattern)
+            self.assertFalse(username.lower().startswith("vr"))
             self.assertEqual((root / "secrets").stat().st_mode & 0o777, 0o700)
             before = {item.name: item.read_bytes() for item in (root / "secrets").iterdir()}
             self.assertEqual(len(before), 5)
             self.assertEqual(len(set(before.values())), 5)
+            password = before["admin_password"].decode().strip()
+            self.assertRegex(password, r"^[A-Za-z0-9!%+_-]{18}$")
+            for pattern in (r"[a-z]", r"[A-Z]", r"[0-9]", r"[!%+_-]"):
+                self.assertRegex(password, pattern)
+            self.assertFalse(password.lower().startswith("vr"))
+            self.assertNotIn(username.lower(), password.lower())
             with self.assertRaises(ValueError):
                 generator.generate(root, "other.example.com")
             self.assertEqual(before, {item.name: item.read_bytes() for item in (root / "secrets").iterdir()})

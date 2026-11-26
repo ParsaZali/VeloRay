@@ -649,11 +649,16 @@ unset TEST_PORTS_CONFLICT
 # Real random-credential and managed-version branches against the disposable host.
 rm -f "$HOST_ROOT/admin"
 (unset VELORAY_ADMIN_PASSWORD;host_install)
-( source "$HOST_ROOT/etc/veloray/install-result.env";[[ "$USERNAME" == vr_* && ${#PASSWORD} -ge 32 ]] )
+( source "$HOST_ROOT/etc/veloray/install-result.env"
+  [[ "$USERNAME" =~ ^[A-Za-z][A-Za-z0-9]{9}$ && "${USERNAME,,}" != vr* ]]
+  [[ "$USERNAME" =~ [A-Z] && "$USERNAME" =~ [a-z] && "$USERNAME" =~ [0-9] ]]
+  [[ "$PASSWORD" =~ ^[A-Za-z0-9!%+_-]{18}$ && "${PASSWORD,,}" != vr* ]]
+  [[ "$PASSWORD" =~ [A-Z] && "$PASSWORD" =~ [a-z] && "$PASSWORD" =~ [0-9] && "$PASSWORD" =~ [!%+_-] ]]
+)
 [[ "$(stat -c %a "$HOST_ROOT/etc/veloray/install-result.env")" == 600 ]]
 pass generated-credentials-are-private
 printf '\n' | env -u VELORAY_ADMIN_PASSWORD bash "$HOST_ROOT/usr/local/bin/velorayctl" reset >"$TEST_ROOT/host-result" 2>&1
-grep -Eq 'Password: [a-f0-9]{32}' "$TEST_ROOT/host-result";pass empty-password-generates-random-secret
+grep -Eq 'Password: [A-Za-z0-9!%+_-]{18}$' "$TEST_ROOT/host-result";pass empty-password-generates-random-secret
 slot="$HOST_ROOT/var/lib/veloray-cores/xray"
 printf '#!/usr/bin/env bash\necho official-core\n' >"$slot/binary-official-test";chmod 0755 "$slot/binary-official-test"
 ln -sfn "$slot/binary-official-test" "$slot/current"

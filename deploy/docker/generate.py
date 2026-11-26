@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+from admin_credentials import admin_password, admin_username
 
 
 def generate(directory: Path, domain: str) -> None:
@@ -24,17 +25,18 @@ def generate(directory: Path, domain: str) -> None:
         raise ValueError("Existing deployment preserved; do not regenerate encryption keys")
     directory.mkdir(parents=True, exist_ok=True)
     secret_dir.mkdir(mode=0o700)
+    username = admin_username()
     try:
         for name in ("database_password", "secret_key", "field_key", "admin_password", "agent_token"):
             # The parent is operator-only. File mounts must be readable by each
             # container's dedicated non-root identity (Compose local secrets).
             path = secret_dir / name
             with path.open("x", encoding="utf-8") as stream:
-                stream.write(("Vr!" + secrets.token_hex(32) if name == "admin_password" else secrets.token_urlsafe(48)) + "\n")
+                stream.write((admin_password(username) if name == "admin_password" else secrets.token_urlsafe(48)) + "\n")
             path.chmod(0o444)
         env = directory / ".env"
         with env.open("x", encoding="utf-8") as stream:
-            stream.write(f"VELORAY_DOMAIN={domain.lower()}\n")
+            stream.write(f"VELORAY_DOMAIN={domain.lower()}\nVELORAY_ADMIN_USERNAME={username}\n")
         env.chmod(0o600)
         (directory / "certificates").mkdir(mode=0o755)
     except BaseException:

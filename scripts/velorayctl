@@ -228,7 +228,7 @@ case "$command" in
   read -rsp "$(vr_text 'New password [Enter = random]: ' 'رمز جدید [Enter = تصادفی]: ')" VELORAY_ADMIN_PASSWORD||{ printf '\n';exit 2; };printf '\n'
   generated_password=false
   if [[ -z "$VELORAY_ADMIN_PASSWORD" ]];then
-   VELORAY_ADMIN_PASSWORD="$(openssl rand -hex 16)";generated_password=true
+   VELORAY_ADMIN_PASSWORD="$(vr_admin_credentials password "$administrator")";generated_password=true
   else
    read -rsp "$(vr_text 'Confirm password: ' 'تکرار رمز جدید: ')" confirmation||{ printf '\n';exit 2; };printf '\n'
    [[ "$VELORAY_ADMIN_PASSWORD" == "$confirmation" ]]||{ vr_failure 'Passwords do not match.' 'رمزها یکسان نیستند.' >&2;exit 2; }

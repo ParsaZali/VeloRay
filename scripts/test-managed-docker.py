@@ -20,6 +20,7 @@ if os.geteuid() != 0 or os.environ.get('VELORAY_MANAGED_DOCKER_TEST') != '1':
     raise SystemExit('Run as root on a disposable VM with VELORAY_MANAGED_DOCKER_TEST=1')
 if Path('/etc/veloray').exists() or Path('/opt/veloray/current').exists():
     raise SystemExit('Refusing to reuse an existing installation')
+sys.path.insert(0, str(ROOT / 'deploy/docker'))
 spec = importlib.util.spec_from_file_location('docker_manager', ROOT / 'deploy/docker/manage.py')
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)

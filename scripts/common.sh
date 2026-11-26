@@ -9,6 +9,7 @@ vr_color() {
 vr_success() { vr_color 32 "  ✓ $(vr_text "$1" "$2")";printf '\n'; }
 vr_warn() { vr_color 33 "  ! $(vr_text "$1" "$2")";printf '\n'; }
 vr_failure() { vr_color 31 "  ✗ $(vr_text "$1" "$2")";printf '\n'; }
+vr_admin_credentials() { python3 "${BASH_SOURCE[0]%/*}/../deploy/docker/admin_credentials.py" "$@"; }
 vr_random_port() {
  python3 - "$@" <<'PY'
 import secrets, socket, sys

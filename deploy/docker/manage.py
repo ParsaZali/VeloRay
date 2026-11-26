@@ -25,6 +25,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+from admin_credentials import admin_password, admin_username
 
 CONFIG = Path('/etc/veloray/docker')
 CURRENT = Path('/opt/veloray/docker-current')
@@ -298,7 +299,7 @@ def configure():
     if tls not in ('auto', 'local'):
         raise ValueError('TLS mode must be auto or local')
     values['VELORAY_TLS_MODE'] = tls
-    values['VELORAY_ADMIN_USERNAME'] = os.environ.get('VELORAY_ADMIN_USERNAME') or 'vr_' + secrets.token_hex(4)
+    values['VELORAY_ADMIN_USERNAME'] = os.environ.get('VELORAY_ADMIN_USERNAME') or admin_username()
     if not re.fullmatch('[a-zA-Z0-9_][a-zA-Z0-9_.-]{2,63}', values['VELORAY_ADMIN_USERNAME']):
         raise ValueError('Invalid administrator username')
     values['VELORAY_DATABASE_PORT'] = str(random_port([int(values['VELORAY_PANEL_PORT']), int(values['VELORAY_SUBSCRIPTION_PORT'])]))
@@ -333,7 +334,9 @@ def keys(values, native=None):
         value = native.get(mapping.get(name, ''), '') if native else ''
         if name == 'admin_password':
             value = os.environ.get('VELORAY_ADMIN_PASSWORD', '')
-        private_file(name, value or ('Vr!' + secrets.token_hex(24) if name == 'admin_password' else secrets.token_urlsafe(48)))
+        if name == 'admin_password':
+            value = value or admin_password(values.get('VELORAY_ADMIN_USERNAME', ''))
+        private_file(name, value or secrets.token_urlsafe(48))
     templates = CONFIG / 'templates'
     shutil.copytree(CURRENT.resolve() / 'examples/subscription', templates)
     certificates = CONFIG / 'certificates'
@@ -1705,7 +1708,7 @@ def main():
                 username = captured('exec', '-T', 'panel', 'veloray', 'admin-username', *values).decode().strip()
                 password = getpass.getpass('New password [Enter = random]: ') if sys.stdin.isatty() else ''
                 generated = not password
-                password = password or 'Vr!' + secrets.token_hex(24)
+                password = password or admin_password(username)
                 compose('exec', '-T', '--user', '0:0', 'panel', 'env', '-u', 'VELORAY_ADMIN_PASSWORD_FILE', '-u', 'VELORAY_ADMIN_PASSWORD', 'VELORAY_ADMIN_USERNAME=' + username, 'veloray', 'reset-password', input=(password + '\n').encode())
                 if generated:
                     if sys.stdout.isatty():

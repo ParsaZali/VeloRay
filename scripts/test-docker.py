@@ -14,6 +14,8 @@ from urllib.parse import urlsplit
 project = os.environ["VELORAY_TEST_COMPOSE_PROJECT"]
 assert project.startswith("veloray-ci-")
 compose = ["docker", "compose", "--project-name", project, "--env-file", os.environ["VELORAY_TEST_COMPOSE_ENV"], "-f", "deploy/docker/compose.yaml"]
+compose_env = dict(line.split("=", 1) for line in Path(os.environ["VELORAY_TEST_COMPOSE_ENV"]).read_text().splitlines())
+username = compose_env["VELORAY_ADMIN_USERNAME"]
 cookies = SimpleCookie()
 
 
@@ -103,7 +105,7 @@ while True:
 check_agent_privileges()
 request("GET", "/api/auth/csrf")
 password = (Path(os.environ["VELORAY_SECRET_DIRECTORY"]) / "admin_password").read_text().strip()
-request("POST", "/api/auth/login", {"username": "admin", "password": password})
+request("POST", "/api/auth/login", {"username": username, "password": password})
 assert request("GET", "/api/auth/me")["is_superuser"]
 endpoint = wait_subscription_endpoint(8444)
 node = next(row for row in request("GET", "/api/nodes") if row["is_local"])
@@ -183,7 +185,7 @@ while True:
         assert urlsplit(after["subscription_url"]).port == 19444
         assert request("GET", "/api/subscription-endpoint")["applied_port"] == 19444
         assert b"vless://" in request("GET", path + "?format=raw", authenticated=False, port=19444)
-        assert request("GET", "/api/auth/me")["username"] == "admin"
+        assert request("GET", "/api/auth/me")["username"] == username
         assert command("exec", "-T", "--user", "10002:10002", "agent", "jq", "-r", ".id", "/var/lib/veloray-agent/state.json").strip() == ledger
         break
     except (OSError, AssertionError, subprocess.CalledProcessError):
@@ -193,5 +195,5 @@ while True:
 # Repeated bootstrap must not add another administrator or reset the password.
 assert len(request("GET", "/api/admin/users")) == 1
 request("GET", "/api/auth/csrf")
-request("POST", "/api/auth/login", {"username": "admin", "password": password})
+request("POST", "/api/auth/login", {"username": username, "password": password})
 assert request("GET", "/api/auth/me")["is_superuser"]

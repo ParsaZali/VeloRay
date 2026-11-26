@@ -267,8 +267,10 @@ test("live port checks, batch creation and usage export", async ({ page }) => {
   await page.getByRole("button", { name: "Check port", exact: true }).click();
   await expect(
     page
-      .getByRole("status")
-      .filter({ hasText: `TCP :${process.env.VELORAY_E2E_OCCUPIED_PORT}` }),
+      .getByRole("alert")
+      .filter({
+        hasText: `TCP port ${process.env.VELORAY_E2E_OCCUPIED_PORT} is in use`,
+      }),
   ).toContainText(`pid=${process.env.VELORAY_E2E_OCCUPIED_PID}`);
   await page.getByLabel("Port", { exact: true }).fill("2053");
   await page.getByRole("button", { name: "Check port", exact: true }).click();

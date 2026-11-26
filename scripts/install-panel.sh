@@ -148,8 +148,9 @@ if $existing;then
 fi
 has_admin="$(PGHOST="${POSTGRES_HOST:-127.0.0.1}" PGPORT="${POSTGRES_PORT:-5432}" PGUSER="${POSTGRES_USER:-veloray}" PGPASSWORD="$POSTGRES_PASSWORD" psql -tAc "SELECT EXISTS(SELECT 1 FROM vr_users WHERE data->>'is_superuser'='true')" "${POSTGRES_DB:-veloray}")"
 if [[ "${has_admin//[[:space:]]/}" != t ]];then
- export VELORAY_ADMIN_USERNAME="${VELORAY_ADMIN_USERNAME:-vr_$(openssl rand -hex 4)}"
- export VELORAY_ADMIN_PASSWORD="${VELORAY_ADMIN_PASSWORD:-$(openssl rand -hex 16)}"
+ VELORAY_ADMIN_USERNAME="${VELORAY_ADMIN_USERNAME:-$(vr_admin_credentials username)}"
+ VELORAY_ADMIN_PASSWORD="${VELORAY_ADMIN_PASSWORD:-$(vr_admin_credentials password "$VELORAY_ADMIN_USERNAME")}"
+ export VELORAY_ADMIN_USERNAME VELORAY_ADMIN_PASSWORD
  vr_run veloray set-env VELORAY_ADMIN_USERNAME "$VELORAY_ADMIN_USERNAME"
  credentials_file=/etc/veloray/install-result.env
  (umask 077;printf 'PANEL_URL=%q\nUSERNAME=%q\nPASSWORD=%q\n' "$VELORAY_PUBLIC_URL" "$VELORAY_ADMIN_USERNAME" "$VELORAY_ADMIN_PASSWORD" >"$credentials_file")

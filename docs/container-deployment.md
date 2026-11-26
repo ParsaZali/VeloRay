@@ -99,9 +99,10 @@ docker compose --env-file deploy/docker/.env -f deploy/docker/compose.yaml up -d
 ```
 
 The generator refuses to replace existing files, creates an operator-only
-`secrets` directory and never prints passwords. Read `deploy/docker/secrets/admin_password`
-privately on the server for the first login as `admin`. Keep this directory with
-your recovery backup. The generated `.env` contains only the domain. The image
+`secrets` directory and never prints passwords. For the first login, read the
+generated username from `VELORAY_ADMIN_USERNAME` in `deploy/docker/.env` and
+read `deploy/docker/secrets/admin_password` privately on the server. Keep these
+files with your recovery backup. The image
 build context excludes credentials, local dependencies and test output. Images
 are built from the verified bundled binaries, not an unverified downloaded panel.
 
