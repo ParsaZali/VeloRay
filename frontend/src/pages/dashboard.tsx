@@ -442,6 +442,104 @@ export function TrafficChart({
     </div>
   );
 }
+type DashboardSystemInfo = Omit<SystemInfo, "users_total" | "admins_total"> & {
+  resource_history?: (Omit<ResourceSample, "at"> & { at: string })[];
+};
+
+function measuredPercent(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.min(100, value))
+    : null;
+}
+
+function useDashboardResources(
+  viewer: number | undefined,
+  allowed: boolean,
+  refreshSeconds: number | undefined,
+) {
+  const [sys, setSys] = useState<DashboardSystemInfo | null>(null);
+  const [resourceHistory, setResourceHistory] = useState<ResourceSample[]>([]);
+  const [resourceError, setResourceError] = useState("");
+  const request = useRef<AbortController | null>(null);
+  const loadResources = useCallback(async () => {
+    if (viewer === undefined || !allowed || request.current) return;
+    const controller = new AbortController();
+    request.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 8000);
+    try {
+      const info = await api<DashboardSystemInfo>("/system-info?resources=1", {
+        signal: controller.signal,
+      });
+      if (request.current !== controller) return;
+      setSys(info);
+      setResourceError("");
+      const history = info.resource_history;
+      if (Array.isArray(history) && history.length) {
+        setResourceHistory(
+          history
+            .map((sample) => ({
+              at: Date.parse(sample.at),
+              cpu: measuredPercent(sample.cpu),
+              memory: measuredPercent(sample.memory),
+              swap: measuredPercent(sample.swap),
+              disk: measuredPercent(sample.disk),
+            }))
+            .filter((sample) => Number.isFinite(sample.at))
+            .sort((a, b) => a.at - b.at)
+            .slice(-60),
+        );
+      } else {
+        const at = Date.now();
+        setResourceHistory((previous) => [
+          ...previous.slice(-59),
+          {
+            at,
+            cpu: measuredPercent(info.cpu_percent),
+            memory: measuredPercent(info.memory_percent),
+            swap: measuredPercent(info.swap_percent),
+            disk: measuredPercent(info.disk_percent),
+          },
+        ]);
+      }
+    } catch (error) {
+      if (request.current !== controller) return;
+      setResourceError(
+        controller.signal.aborted
+          ? t(
+              "Server metrics timed out.",
+              "دریافت آمار سرور بیش از حد طول کشید.",
+            )
+          : error instanceof Error
+            ? error.message
+            : t("Server metrics could not load.", "آمار سرور بارگیری نشد."),
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      if (request.current === controller) request.current = null;
+    }
+  }, [viewer, allowed]);
+  useEffect(() => {
+    setSys(null);
+    setResourceHistory([]);
+    setResourceError("");
+    void loadResources();
+    return () => {
+      const pending = request.current;
+      request.current = null;
+      pending?.abort();
+    };
+  }, [loadResources]);
+  useEffect(() => {
+    if (!allowed) return;
+    const timer = window.setInterval(
+      loadResources,
+      Math.max(5, refreshSeconds || 15) * 1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [allowed, loadResources, refreshSeconds]);
+  return { sys, resourceHistory, resourceError, loadResources };
+}
+
 export function Dashboard() {
   useLocale();
   const session = useSession();
@@ -450,11 +548,16 @@ export function Dashboard() {
     [nodes, setNodes] = useState<NodeItem[]>([]),
     [history, setHistory] = useState<TrafficPoint[]>([]),
     [cfg, setCfg] = useState<AppSettings | null>(null),
-    [sys, setSys] = useState<SystemInfo | null>(null),
     [msg, setMsg] = useState(""),
     [historyError, setHistoryError] = useState(""),
     [busy, setBusy] = useState(false);
-  const [resourceHistory, setResourceHistory] = useState<ResourceSample[]>([]);
+  const { sys, resourceHistory, resourceError, loadResources } =
+    useDashboardResources(
+      session?.id,
+      can(session, "nodes.read"),
+      cfg?.dashboard_refresh_seconds,
+    );
+  const latestResource = resourceHistory.at(-1);
   const [showAddress, setShowAddress] = useState(false);
   useEffect(() => {
     if (!session || typeof EventSource === "undefined") return;
@@ -484,16 +587,13 @@ export function Dashboard() {
     const options = { signal: controller.signal };
     setBusy(true);
     try {
-      const [ov, n, h, s, system] = await Promise.allSettled([
+      const [ov, n, h, s] = await Promise.allSettled([
         api<Overview>("/overview", options),
         can(session, "nodes.read")
           ? api<NodeItem[]>("/nodes/", options)
           : Promise.resolve([]),
         api<TrafficPoint[]>("/traffic-history?hours=24", options),
         api<AppSettings>("/settings", options),
-        can(session, "nodes.read")
-          ? api<SystemInfo>("/system-info", options)
-          : Promise.resolve(null),
       ]);
       if (controller.signal.aborted) return;
       // A server-info or client-list failure must not discard valid history.
@@ -513,27 +613,7 @@ export function Dashboard() {
             : t("Traffic history could not load."),
         );
       if (s.status === "fulfilled") setCfg(s.value);
-      if (system.status === "fulfilled") {
-        setSys(system.value);
-        if (system.value) {
-          const info = system.value;
-          const measured = (value: number) =>
-            Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : null;
-          setResourceHistory((previous) => [
-            ...previous.slice(-239),
-            {
-              at: Date.now(),
-              cpu: measured(info.cpu_percent),
-              memory: measured(info.memory_percent),
-              swap: measured(info.swap_percent),
-              disk: measured(info.disk_percent),
-            },
-          ]);
-        }
-      }
-      const failure = [ov, n, s, system].find(
-        (result) => result.status === "rejected",
-      );
+      const failure = [ov, n, s].find((result) => result.status === "rejected");
       setMsg(
         failure?.status === "rejected"
           ? String(failure.reason?.message || failure.reason)
@@ -549,7 +629,6 @@ export function Dashboard() {
     }
   }, [session]);
   useEffect(() => {
-    setResourceHistory([]);
     setShowAddress(false);
     void load();
     return () => {
@@ -606,7 +685,14 @@ export function Dashboard() {
               )}
             </>
           )}
-          <Button variant="outline" onClick={load} disabled={busy}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              void load();
+              void loadResources();
+            }}
+            disabled={busy}
+          >
             <RefreshCw
               className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`}
             />
@@ -620,13 +706,13 @@ export function Dashboard() {
           {cfg.announcement}
         </div>
       )}
-      {msg && (
+      {(msg || resourceError) && (
         <div
           role="status"
           aria-live="polite"
           className="rounded-md border border-red-500/20 bg-red-500/8 px-3 py-2.5 text-[12px] text-red-500"
         >
-          {msg}
+          {[msg, resourceError].filter(Boolean).join(" · ")}
         </div>
       )}
       {nodes.some((n) => n.enabled && n.status !== "ok") && (
@@ -784,7 +870,7 @@ export function Dashboard() {
           <ResourceCard
             label={t("CPU")}
             icon="microchip"
-            value={sys?.cpu_percent}
+            value={latestResource?.cpu ?? undefined}
             note={
               sys
                 ? `${sys.cpu_count} ${t(sys.cpu_count === 1 ? "Core" : "Cores", "هسته")}`
@@ -795,7 +881,7 @@ export function Dashboard() {
           <ResourceCard
             label={t("Memory")}
             icon="memory"
-            value={sys?.memory_percent}
+            value={latestResource?.memory ?? undefined}
             note={
               sys
                 ? `${fmt(sys.memory_used_bytes)} / ${fmt(sys.memory_total_bytes)}`
@@ -806,7 +892,7 @@ export function Dashboard() {
           <ResourceCard
             label={t("Swap")}
             icon="arrows-rotate"
-            value={sys?.swap_percent}
+            value={latestResource?.swap ?? undefined}
             note={
               sys
                 ? sys.swap_total_bytes
@@ -819,7 +905,7 @@ export function Dashboard() {
           <ResourceCard
             label={t("Disk")}
             icon="hard-drive"
-            value={sys?.disk_percent}
+            value={latestResource?.disk ?? undefined}
             note={
               sys
                 ? `${fmt(sys.disk_used_bytes)} / ${fmt(sys.disk_total_bytes)}`

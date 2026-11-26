@@ -35,7 +35,7 @@ func TestIntegrationHealthReportsDatabaseAndPanelUptime(t *testing.T) {
 	if err != nil || w.Code != 200 || str(info, "database") != "ok" || num(info, "uptime_seconds") < 90 || num(info, "uptime_seconds") > 92 {
 		t.Fatal(info, err, w.Code)
 	}
-	system, err := server.systemInfo(ctx)
+	system, err := server.systemInfo(ctx, false)
 	if err != nil || num(system, "panel_uptime_seconds") < 90 || str(system, "panel_started_at") == "" {
 		t.Fatal(system, err)
 	}

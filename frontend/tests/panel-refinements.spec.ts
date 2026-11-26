@@ -1,7 +1,7 @@
 import { readFileSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve, extname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Route } from "@playwright/test";
 import {
   outboundTemplate,
   setConfigPath,
@@ -16,6 +16,29 @@ const node = {
   enabled: true,
   status: "ok",
   config_patch: {},
+};
+const demoResources = {
+  hostname: "Local",
+  uptime_seconds: 9876543,
+  panel_uptime_seconds: 95,
+  cpu_percent: 15.1,
+  cpu_count: 2,
+  memory_total_bytes: 4_101_693_768,
+  memory_used_bytes: 1_127_428_096,
+  memory_percent: 27.5,
+  swap_total_bytes: 0,
+  swap_percent: 0,
+  disk_total_bytes: 31_591_482_491,
+  disk_used_bytes: 15_762_000_000,
+  disk_percent: 49.9,
+  load_average: [0, 0, 0],
+  resource_history: [5, 15, 8, 41, 22, 67.3, 19, 11, 15.1].map((cpu, i) => ({
+    at: new Date(Date.UTC(2026, 10, 26, 14, 0, i * 5)).toISOString(),
+    cpu,
+    memory: [26, 27, 26.2, 30.5, 28.2, 26.5, 27.8, 26.9, 27.5][i],
+    swap: 0,
+    disk: 49.9,
+  })),
 };
 test("sales workspace publishes an explicit-currency offer and preserves the sidebar", async ({
   page,
@@ -399,6 +422,7 @@ test("readable dark and light palette, raw upload and download", async ({
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await panel(page, "/dashboard", {
+    "system-info": { json: demoResources },
     settings: {
       json: {
         site_name: "VeloRay",
@@ -432,6 +456,9 @@ test("readable dark and light palette, raw upload and download", async ({
     "background-color",
     "rgb(33, 33, 33)",
   );
+  await expect(
+    page.locator(".dashboard-resource .sparkline-trace"),
+  ).toHaveCount(4);
   await preview(page, "dashboard-dark");
   expect(
     await page.evaluate(() =>
@@ -3371,7 +3398,8 @@ test("dashboard resource history uses successful samples and masks the server ad
     cpu.getByText("Collecting samples…", { exact: true }),
   ).toBeVisible();
   await expect(cpu.locator(".sparkline-trace")).toHaveCount(0);
-  await page.route("**/api/system-info", (route) =>
+  await expect(cpu.locator(".dashboard-sparkline circle")).toHaveCount(1);
+  await page.route("**/api/system-info?resources=1", (route) =>
     route.fulfill({
       json: {
         hostname: "Local",
@@ -3393,7 +3421,7 @@ test("dashboard resource history uses successful samples and masks the server ad
   );
   await expect(cpu.locator(".resource-statistics")).toContainText("Peak 40.0%");
   await expect(cpu.locator(".sparkline-trace")).toHaveCount(1);
-  await page.route("**/api/system-info", (route) =>
+  await page.route("**/api/system-info?resources=1", (route) =>
     route.fulfill({ status: 503, json: { detail: "Metrics unavailable" } }),
   );
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
@@ -3419,6 +3447,58 @@ test("dashboard resource history uses successful samples and masks the server ad
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+});
+
+test("server resource curves load with a slow overview and survive a reload", async ({
+  page,
+}) => {
+  await panel(page, "/dashboard", {
+    "system-info": { json: demoResources },
+  });
+  let overviewPending = false;
+  let finishOverview!: () => void;
+  const release = new Promise<void>((resolve) => {
+    finishOverview = resolve;
+  });
+  const overview = async (route: Route) => {
+    overviewPending = true;
+    await release;
+    await route.fallback();
+  };
+  await page.route("**/api/overview", overview);
+  try {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect.poll(() => overviewPending).toBe(true);
+    const traces = page.locator(".dashboard-resource .sparkline-trace");
+    await expect(traces).toHaveCount(4);
+    await expect(traces.first()).not.toHaveAttribute("d", /NaN|Infinity/);
+    const swap = page.locator(".dashboard-resource").filter({
+      has: page.getByRole("heading", { name: "Swap", exact: true }),
+    });
+    await expect(swap.locator(".resource-value")).toHaveText("0.0%");
+    await expect(swap.locator(".sparkline-trace")).toHaveAttribute(
+      "d",
+      /^M 0\.00 40\.00/,
+    );
+    await expect(
+      page.getByRole("button", { name: "Refresh", exact: true }),
+    ).toBeDisabled();
+    finishOverview();
+    await expect(
+      page.getByRole("button", { name: "Refresh", exact: true }),
+    ).toBeEnabled();
+    await page.unroute("**/api/overview", overview);
+    await page.reload();
+    await expect(traces).toHaveCount(4);
+    await expect(
+      page
+        .locator(".dashboard-resource")
+        .first()
+        .locator(".resource-statistics"),
+    ).toContainText("Peak 67.3%");
+  } finally {
+    finishOverview();
+  }
 });
 
 test("dashboard shortcuts respect each route permission", async ({ page }) => {

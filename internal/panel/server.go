@@ -22,6 +22,7 @@ var panelProcessStartedAt = time.Now()
 type Server struct {
 	project      projectCache
 	updates      updateCache
+	resources    resourceMetrics
 	EmailSend    func(context.Context, string, []string, []byte) error
 	alertMu      sync.Mutex
 	alertCursor  string
@@ -301,6 +302,15 @@ func Serve(ctx context.Context, c Config) error {
 	}
 	s := &Server{Config: c, Store: store, Logger: slog.Default()}
 	workerCtx, stopWorker := context.WithCancel(ctx)
+	if !c.SubscriptionOnly {
+		s.resources.collect()
+		resourcesDone := make(chan struct{})
+		go func() {
+			defer close(resourcesDone)
+			s.resources.run(workerCtx)
+		}()
+		defer func() { stopWorker(); <-resourcesDone }()
+	}
 	endpointDone := make(chan struct{})
 	go func() {
 		defer close(endpointDone)

@@ -219,7 +219,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request, path string, a Acto
 		}
 		return output, 200, nil
 	case "system-info":
-		out, e := s.systemInfo(ctx)
+		out, e := s.systemInfo(ctx, r.URL.Query().Get("resources") == "1")
 		return out, 200, e
 	case "traffic-history":
 		out, e := s.trafficHistoryForActor(ctx, r, a)

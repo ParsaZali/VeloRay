@@ -2,17 +2,23 @@ package panel
 
 import (
 	"context"
-	"golang.org/x/sys/unix"
+	"maps"
 	"os"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
-var cpuMu sync.Mutex
-var cpuPrevTotal, cpuPrevIdle float64
+type cpuMeter struct {
+	mu          sync.Mutex
+	total, idle float64
+}
+
+var onDemandCPU cpuMeter
 
 func readCPU() (float64, float64) {
 	raw, _ := os.ReadFile("/proc/stat")
@@ -33,7 +39,27 @@ func readCPU() (float64, float64) {
 	}
 	return total, idle
 }
+func (m *cpuMeter) sample() (float64, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	total, idle := readCPU()
+	if total <= 0 || total == m.total {
+		return 0, false
+	}
+	previousTotal, previousIdle := m.total, m.idle
+	m.total, m.idle = total, idle
+	if previousTotal <= 0 || total < previousTotal || idle < previousIdle {
+		return 0, false
+	}
+	return max(0, min(100, (1-(idle-previousIdle)/(total-previousTotal))*100)), true
+}
+
 func hostMetrics() Data {
+	d, _ := collectHostMetrics(&onDemandCPU)
+	return d
+}
+
+func collectHostMetrics(cpu *cpuMeter) (Data, bool) {
 	host, _ := os.Hostname()
 	d := Data{"hostname": host, "platform": runtime.GOOS + "/" + runtime.GOARCH, "go_version": runtime.Version(), "uptime_seconds": 0, "load_average": []float64{0, 0, 0}, "cpu_count": runtime.NumCPU(), "cpu_percent": float64(0)}
 	raw, _ := os.ReadFile("/proc/uptime")
@@ -79,14 +105,9 @@ func hostMetrics() Data {
 		d["disk_used_bytes"] = total - free
 		d["disk_percent"] = percent(total-free, total)
 	}
-	cpuMu.Lock()
-	t, i := readCPU()
-	if cpuPrevTotal > 0 && t > cpuPrevTotal {
-		d["cpu_percent"] = max(0, min(100, (1-(i-cpuPrevIdle)/(t-cpuPrevTotal))*100))
-	}
-	cpuPrevTotal, cpuPrevIdle = t, i
-	cpuMu.Unlock()
-	return d
+	usage, measured := cpu.sample()
+	d["cpu_percent"] = usage
+	return d, measured
 }
 func percent(a, b int64) float64 {
 	if b <= 0 {
@@ -94,14 +115,91 @@ func percent(a, b int64) float64 {
 	}
 	return float64(a) / float64(b) * 100
 }
-func (s *Server) systemInfo(ctx context.Context) (Data, error) {
-	d := hostMetrics()
-	var users, admins int
-	if e := s.Store.Pool.QueryRow(ctx, `SELECT count(*),count(*) FILTER(WHERE data->>'is_active'='true' AND data->>'is_superuser'='true') FROM vr_users`).Scan(&users, &admins); e != nil {
-		return nil, e
+
+const resourceSampleInterval = 5 * time.Second
+const resourceHistoryLimit = 60
+
+type resourceSample struct {
+	At     time.Time `json:"at"`
+	CPU    *float64  `json:"cpu"`
+	Memory *float64  `json:"memory"`
+	Swap   *float64  `json:"swap"`
+	Disk   *float64  `json:"disk"`
+}
+
+type resourceMetrics struct {
+	mu      sync.RWMutex
+	cpu     cpuMeter
+	latest  Data
+	samples []resourceSample
+}
+
+func (m *resourceMetrics) record(at time.Time, d Data, cpuMeasured bool) {
+	value := func(key string, available bool) *float64 {
+		if v, ok := d[key].(float64); available && ok {
+			return &v
+		}
+		return nil
 	}
-	d["users_total"] = users
-	d["admins_total"] = admins
+	sample := resourceSample{
+		At:     at.UTC(),
+		CPU:    value("cpu_percent", cpuMeasured),
+		Memory: value("memory_percent", num(d, "memory_total_bytes") > 0),
+		Swap:   value("swap_percent", num(d, "memory_total_bytes") > 0),
+		Disk:   value("disk_percent", num(d, "disk_total_bytes") > 0),
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.latest = d
+	if len(m.samples) == resourceHistoryLimit {
+		copy(m.samples, m.samples[1:])
+		m.samples[len(m.samples)-1] = sample
+	} else {
+		m.samples = append(m.samples, sample)
+	}
+}
+
+func (m *resourceMetrics) collect() {
+	d, cpuMeasured := collectHostMetrics(&m.cpu)
+	m.record(time.Now(), d, cpuMeasured)
+}
+
+func (m *resourceMetrics) run(ctx context.Context) {
+	ticker := time.NewTicker(resourceSampleInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			m.collect()
+		}
+	}
+}
+
+func (m *resourceMetrics) snapshot(includeHistory bool) Data {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	d := maps.Clone(m.latest)
+	if d != nil && includeHistory {
+		d["resource_history"] = append([]resourceSample{}, m.samples...)
+	}
+	return d
+}
+
+func (s *Server) systemInfo(ctx context.Context, resourcesOnly bool) (Data, error) {
+	d := s.resources.snapshot(resourcesOnly)
+	if d == nil {
+		d = hostMetrics()
+	}
+	if !resourcesOnly {
+		var users, admins int
+		if e := s.Store.Pool.QueryRow(ctx, `SELECT count(*),count(*) FILTER(WHERE data->>'is_active'='true' AND data->>'is_superuser'='true') FROM vr_users`).Scan(&users, &admins); e != nil {
+			return nil, e
+		}
+		d["users_total"] = users
+		d["admins_total"] = admins
+	}
 	runtime := s.panelRuntime(time.Now())
 	d["panel_uptime_seconds"] = runtime["uptime_seconds"]
 	d["panel_started_at"] = runtime["started_at"]

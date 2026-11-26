@@ -28,7 +28,7 @@ export function DashboardSparkline({
   const max = Math.max(1, ...measured);
   const points = measured.map((value, index) => ({
     x: (index / Math.max(1, measured.length - 1)) * 300,
-    y: 44 - (Math.max(0, value) / max) * 35,
+    y: 40 - (Math.max(0, value) / max) * 32,
   }));
   const line = smoothPath(points);
   return (
@@ -53,7 +53,7 @@ export function DashboardSparkline({
           <path d={line} className="sparkline-trace" />
         </>
       ) : points.length === 1 ? (
-        <circle cx="298" cy={points[0].y} r="2" fill="currentColor" />
+        <circle cx="291" cy={points[0].y} r="3" fill="currentColor" />
       ) : null}
     </svg>
   );
@@ -111,7 +111,7 @@ export function ResourceCard({
       <div className="resource-chart">
         <DashboardSparkline
           values={valid}
-          label={`${label} — ${t("Samples collected while this dashboard is open", "نمونه‌های ثبت‌شده از زمان بازشدن داشبورد")}`}
+          label={`${label} — ${t("Recent usage", "مصرف اخیر")}`}
         />
         {valid.length < 2 && (
           <span className="resource-collecting">
