@@ -423,6 +423,16 @@ test("readable dark and light palette, raw upload and download", async ({
   page.on("pageerror", (e) => errors.push(e.message));
   await panel(page, "/dashboard", {
     "system-info": { json: demoResources },
+    "traffic-history": {
+      json: [0, 1, 2, 3, 4, 5, 6].map((i) => ({
+        at: new Date(
+          Date.now() - (6 - i) * 3.5 * 3600000 - 300000,
+        ).toISOString(),
+        raw_upload_traffic_bytes: Math.round((i / 6) ** 1.1 * 1024 ** 3),
+        raw_download_traffic_bytes: Math.round((i / 6) ** 1.35 * 2 * 1024 ** 3),
+        interval_seconds: 300,
+      })),
+    },
     settings: {
       json: {
         site_name: "VeloRay",
@@ -980,31 +990,37 @@ test("Settings reports database and panel uptime even if host information fails"
   await page.screenshot({ path: "test-results/settings-status.png" });
 });
 
-test("custom chart range supports keyboard and pointer controls", async ({
+test("dashboard uses the last 24 hours and shows recorded totals without dated history", async ({
   page,
 }) => {
-  await panel(page, "/dashboard");
-  const start = page.getByRole("slider", { name: "Chart start", exact: true }),
-    end = page.getByRole("slider", { name: "Chart end", exact: true });
-  // Traffic loads asynchronously; focusing a disabled handle is a no-op.
-  await expect(start).toBeEnabled();
-  await expect(end).toBeEnabled();
-  await start.focus();
-  await page.keyboard.press("ArrowRight");
-  await expect(start).toHaveAttribute("aria-valuenow", "1");
-  await end.focus();
-  await page.keyboard.press("ArrowLeft");
-  await expect(end).toHaveAttribute("aria-valuenow", "99");
-  const box = await page.locator(".chart-window-track").boundingBox();
-  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(box!.x + box!.width * 0.55, box!.y + box!.height / 2);
-  await page.mouse.up();
-  await page.getByRole("button", { name: "Full range", exact: true }).click();
-  await expect(start).toHaveAttribute("aria-valuenow", "0");
-  await expect(end).toHaveAttribute("aria-valuenow", "100");
-  await expect(page.locator('input[type="range"]')).toHaveCount(0);
-  await page.screenshot({ path: "test-results/chart-range.png" });
+  const calls: URL[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/traffic-history") calls.push(url);
+  });
+  await panel(page, "/dashboard", { "traffic-history": { json: [] } });
+  const totals = page.getByRole("group", { name: "Recorded totals" });
+  await expect(totals).toBeVisible();
+  await expect(totals).toContainText("1.00 GB");
+  await expect(totals).toContainText("2.00 GB");
+  await expect(page.getByText("No traffic recorded yet.")).toHaveCount(0);
+  await expect(page.getByRole("slider", { name: "Chart start" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("button", { name: "Full range", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Transfer rate", exact: true })
+    .click();
+  await expect(
+    page.getByText("No transfer rate samples in the last 24 hours."),
+  ).toBeVisible();
+  await expect(totals).toHaveCount(0);
+  expect(calls.length).toBeGreaterThan(0);
+  expect(calls.every((url) => url.searchParams.get("hours") === "24")).toBe(
+    true,
+  );
 });
 
 test("compact subscription portal fits desktop and mobile while preserving connection details", async ({
@@ -2912,7 +2928,11 @@ for (const variant of ["simple", "modern"]) {
         body: html,
       }),
     );
+    await page.addInitScript(() => {
+      localStorage.setItem("veloray-subscription-lang", "en");
+    });
     let status = 200,
+      recordedUsage: Record<string, number> | undefined,
       points = [
         {
           at: "2026-10-21T00:00:00Z",
@@ -2924,8 +2944,12 @@ for (const variant of ["simple", "modern"]) {
     const addresses: string[] = [];
     await page.route("**/sub/**", (route) => {
       addresses.push(route.request().url());
-      return route.fulfill({ status, json: { points } });
+      return route.fulfill({
+        status,
+        json: { points, recorded_usage: recordedUsage },
+      });
     });
+    await page.clock.install();
     await page.goto("/subscription-regression");
     await expect(page.locator("#traffic-chart")).toBeVisible();
     await expect(page.locator("#chart-points circle")).toHaveCount(1);
@@ -2958,6 +2982,28 @@ for (const variant of ["simple", "modern"]) {
     await page.locator('[data-range="1h"]').click();
     await expect(page.locator("#chart-empty")).toBeVisible();
     await expect(page.locator("#traffic-chart")).toBeHidden();
+    recordedUsage = {
+      bytes: 3145728,
+      upload_bytes: 1048576,
+      download_bytes: 2097152,
+    };
+    await page.locator('[data-range="1h"]').click();
+    await expect(page.locator(".traffic-recorded")).toContainText("3 MB");
+    await expect(page.locator(".traffic-recorded progress")).toHaveCount(2);
+    await expect(page.locator("#chart-empty")).toHaveText(
+      "No timed samples in this period.",
+    );
+    points = [
+      {
+        at: "2026-10-21T00:05:00Z",
+        bytes: 524288,
+        upload_bytes: 262144,
+        download_bytes: 262144,
+      },
+    ];
+    await page.clock.fastForward(30001);
+    await expect(page.locator("#chart-total")).toHaveText("512 KB");
+    await expect(page.locator(".traffic-recorded")).toBeHidden();
     status = 503;
     await page.locator('[data-range="12h"]').click();
     await expect(page.locator("#chart-retry")).toBeVisible();

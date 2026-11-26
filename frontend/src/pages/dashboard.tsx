@@ -4,7 +4,6 @@ import {
   ResourceCard,
   type ResourceSample,
 } from "@/components/dashboard-resources";
-import { ChartRange } from "@/components/chart-range";
 import { t } from "@/lib/i18n";
 import { useLocale, tx } from "@/lib/i18n";
 import { can, isReseller, useSession } from "@/lib/session";
@@ -14,7 +13,6 @@ import {
   GridComponent,
   LegendComponent,
   TooltipComponent,
-  DataZoomComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 echarts.use([
@@ -22,11 +20,10 @@ echarts.use([
   GridComponent,
   LegendComponent,
   TooltipComponent,
-  DataZoomComponent,
   CanvasRenderer,
 ]);
 import { useTheme } from "@/components/theme/theme-provider";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
   ArrowDownLeft,
@@ -78,6 +75,7 @@ type TrafficPoint = {
   active_clients: number;
   online_nodes: number;
 };
+type RecordedTraffic = { total: number; upload: number; download: number };
 const fmt = (b: number) => {
   if (!b) return t("0 B");
   const u = ["B", t("KB"), t("MB"), t("GB"), t("TB")];
@@ -153,11 +151,13 @@ function Metric({
 }
 export function TrafficChart({
   points,
+  recorded,
   loading,
   error,
   onRetry,
 }: {
   points: TrafficPoint[];
+  recorded: RecordedTraffic | null;
   loading: boolean;
   error: string;
   onRetry: () => void;
@@ -167,54 +167,14 @@ export function TrafficChart({
     chart = useRef<echarts.ECharts | null>(null);
   const { resolved } = useTheme();
   const [mode, setMode] = useState("usage");
-  const [windowRange, setWindowRange] = useState<[number, number]>([0, 100]);
-  const range = useRef<[number, number]>([0, 100]);
-  const suppressZoomEvent = useRef(false);
-  const preview = useMemo(
-    () =>
-      points.map((point) => ({
-        at: point.at,
-        bytes: Math.max(
-          Number(point.used_traffic_bytes || 0),
-          Number(point.raw_upload_traffic_bytes || 0) +
-            Number(point.raw_download_traffic_bytes || 0),
-        ),
-      })),
-    [points],
-  );
-  const updateRange = (next: [number, number]) => {
-    range.current = next;
-    setWindowRange(next);
-    suppressZoomEvent.current = true;
-    try {
-      chart.current?.dispatchAction({
-        type: "dataZoom",
-        start: next[0],
-        end: next[1],
-      });
-    } finally {
-      suppressZoomEvent.current = false;
-    }
-  };
+  const rateSuffix = mode === "rate" ? "/s" : "";
+  const hasPoints = points.length > 0;
+  const hasRecorded =
+    recorded &&
+    Math.max(recorded.total, recorded.upload, recorded.download) > 0;
   useEffect(() => {
-    if (!root.current) return;
+    if (!root.current || !hasPoints) return;
     chart.current = echarts.init(root.current);
-    chart.current.on("datazoom", (raw: unknown) => {
-      if (suppressZoomEvent.current || !raw || typeof raw !== "object") return;
-      const event = raw as {
-        start?: number;
-        end?: number;
-        batch?: { start?: number; end?: number }[];
-      };
-      const data = event.batch?.[0] || event;
-      if (typeof data.start !== "number" || typeof data.end !== "number")
-        return;
-      const next: [number, number] = [data.start, data.end];
-      range.current = next;
-      setWindowRange((old) =>
-        old[0] === next[0] && old[1] === next[1] ? old : next,
-      );
-    });
     const observer = new ResizeObserver(() => chart.current?.resize());
     observer.observe(root.current);
     return () => {
@@ -222,8 +182,14 @@ export function TrafficChart({
       chart.current?.dispose();
       chart.current = null;
     };
-  }, []);
+  }, [hasPoints]);
   useEffect(() => {
+    if (!chart.current) return;
+    const now = Date.now();
+    const tickLabel = (value: number) =>
+      (mode === "rate" && value > 0 && value < 1
+        ? `${value.toFixed(2)} B`
+        : fmt(value)) + rateSuffix;
     const css = getComputedStyle(document.documentElement),
       color = css.getPropertyValue("--chart-upload").trim();
     const downloadColor = css.getPropertyValue("--chart-download").trim();
@@ -266,7 +232,8 @@ export function TrafficChart({
       symbol: "circle",
       symbolSize: 5,
       emphasis: { focus: "series", scale: 1.4 },
-      showSymbol: points.length < 2,
+      showSymbol: points.length === 1,
+      clip: false,
       sampling: "lttb",
       lineStyle: {
         color: direction.color,
@@ -343,11 +310,12 @@ export function TrafficChart({
               type: "dashed",
             },
           },
-          valueFormatter: (v: unknown) =>
-            fmt(Number(v)) + (mode === "rate" ? "/s" : ""),
+          valueFormatter: (v: unknown) => tickLabel(Number(v)),
         },
         xAxis: {
           type: "time",
+          min: Math.floor((now - 24 * 60 * 60 * 1000) / 300000) * 300000,
+          max: now,
           boundaryGap: false,
           splitNumber: 6,
           axisLine: { show: false },
@@ -362,13 +330,14 @@ export function TrafficChart({
         yAxis: {
           type: "value",
           min: 0,
+          minInterval: mode === "usage" ? 1 : 0,
           splitNumber: 3,
           axisLine: { show: false },
           axisTick: { show: false },
           axisLabel: {
             color: css.getPropertyValue("--muted"),
             fontSize: 10,
-            formatter: (v: number) => fmt(v) + (mode === "rate" ? "/s" : ""),
+            formatter: tickLabel,
           },
           splitLine: {
             lineStyle: {
@@ -379,19 +348,11 @@ export function TrafficChart({
             },
           },
         },
-        dataZoom: [
-          {
-            type: "inside",
-            zoomOnMouseWheel: false,
-            start: range.current[0],
-            end: range.current[1],
-          },
-        ],
         series,
       },
       true,
     );
-  }, [points, resolved, mode, locale]);
+  }, [points, resolved, mode, locale, rateSuffix]);
   return (
     <div className="traffic-chart-shell">
       <div className="chart-mode">
@@ -410,13 +371,14 @@ export function TrafficChart({
           {t("Transfer rate")}
         </button>
       </div>
-      <div
-        ref={root}
-        className="traffic-chart-canvas h-[300px] w-full"
-        role="img"
-        aria-label={t("Traffic chart")}
-      />
-      <ChartRange points={preview} value={windowRange} onChange={updateRange} />
+      {hasPoints && (
+        <div
+          ref={root}
+          className="traffic-chart-canvas h-[300px] w-full"
+          role="img"
+          aria-label={t("Traffic chart")}
+        />
+      )}
       {loading && !points.length && (
         <p role="status" className="text-center text-xs text-[var(--muted)]">
           {t("Loading…")}
@@ -434,10 +396,76 @@ export function TrafficChart({
           </Button>
         </div>
       )}
-      {!loading && !error && !points.length && (
-        <p className="text-center text-xs text-[var(--muted)]">
-          {t("No traffic recorded yet.")}
-        </p>
+      {!hasPoints && (hasRecorded || (!loading && !error && recorded)) && (
+        <div className="px-2 py-6 text-xs text-[var(--muted)]">
+          <p className="text-center">
+            {hasRecorded
+              ? error
+                ? t(
+                    "Recorded totals are still available.",
+                    "مجموع مصرف ثبت‌شده همچنان در دسترس است.",
+                  )
+                : loading
+                  ? t(
+                      "Recorded totals are still available.",
+                      "مجموع مصرف ثبت‌شده همچنان در دسترس است.",
+                    )
+                  : mode === "rate"
+                    ? t(
+                        "No transfer rate samples in the last 24 hours.",
+                        "در ۲۴ ساعت گذشته نمونه‌ای از نرخ انتقال ثبت نشده است.",
+                      )
+                    : t(
+                        "No timed samples in the last 24 hours.",
+                        "در ۲۴ ساعت گذشته نمونه‌ای با زمان ثبت نشده است.",
+                      )
+              : t("No traffic recorded yet.")}
+          </p>
+          {hasRecorded && mode === "usage" && (
+            <div
+              className="mx-auto mt-4 max-w-[380px] space-y-2"
+              role="group"
+              aria-label={t("Recorded totals", "مجموع مصرف ثبت‌شده")}
+            >
+              {[
+                [t("Upload"), recorded.upload, "--chart-upload"],
+                [t("Download"), recorded.download, "--chart-download"],
+                [
+                  t("Earlier traffic"),
+                  Math.max(
+                    0,
+                    recorded.total - recorded.upload - recorded.download,
+                  ),
+                  "--muted",
+                ],
+              ]
+                .filter(([, value]) => Number(value) > 0)
+                .map(([label, value, color]) => (
+                  <div
+                    key={label}
+                    className="grid grid-cols-[7rem_1fr_auto] items-center gap-2"
+                  >
+                    <span>{label}</span>
+                    <span
+                      className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-3)]"
+                      aria-hidden="true"
+                    >
+                      <span
+                        className="block h-full rounded-full"
+                        style={{
+                          background: `var(${color})`,
+                          width: `${(100 * Number(value)) / Math.max(recorded.total, recorded.upload + recorded.download)}%`,
+                        }}
+                      />
+                    </span>
+                    <strong className="text-[var(--fg)]">
+                      {fmt(Number(value))}
+                    </strong>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -549,8 +577,63 @@ export function Dashboard() {
     [history, setHistory] = useState<TrafficPoint[]>([]),
     [cfg, setCfg] = useState<AppSettings | null>(null),
     [msg, setMsg] = useState(""),
-    [historyError, setHistoryError] = useState(""),
     [busy, setBusy] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const historyRequest = useRef<AbortController | null>(null);
+  const viewer = session?.id;
+  const loadHistory = useCallback(async () => {
+    if (historyRequest.current) return;
+    const controller = new AbortController();
+    historyRequest.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 10000);
+    setHistoryLoading(true);
+    try {
+      const result = await api<TrafficPoint[]>("/traffic-history?hours=24", {
+        signal: controller.signal,
+      });
+      if (historyRequest.current !== controller) return;
+      if (!Array.isArray(result))
+        throw new Error(t("Traffic history could not load."));
+      const valid = result.filter(
+        (point) => point && Number.isFinite(Date.parse(point.at)),
+      );
+      if (result.length && !valid.length)
+        throw new Error(t("Traffic history could not load."));
+      setHistory(valid.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)));
+      setHistoryError("");
+    } catch (error) {
+      if (historyRequest.current !== controller) return;
+      setHistoryError(
+        controller.signal.aborted || !(error instanceof Error)
+          ? t("Traffic history could not load.")
+          : error.message,
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      if (historyRequest.current === controller) {
+        historyRequest.current = null;
+        setHistoryLoading(false);
+      }
+    }
+  }, []);
+  useEffect(() => {
+    setHistory([]);
+    setHistoryError("");
+    void loadHistory();
+    return () => {
+      const pending = historyRequest.current;
+      historyRequest.current = null;
+      pending?.abort();
+    };
+  }, [loadHistory, viewer]);
+  useEffect(() => {
+    const id = window.setInterval(
+      loadHistory,
+      Math.max(5, cfg?.dashboard_refresh_seconds || 15) * 1000,
+    );
+    return () => window.clearInterval(id);
+  }, [cfg?.dashboard_refresh_seconds, loadHistory]);
   const { sys, resourceHistory, resourceError, loadResources } =
     useDashboardResources(
       session?.id,
@@ -587,31 +670,19 @@ export function Dashboard() {
     const options = { signal: controller.signal };
     setBusy(true);
     try {
-      const [ov, n, h, s] = await Promise.allSettled([
-        api<Overview>("/overview", options),
+      const [ov, n, s] = await Promise.allSettled([
+        api<Overview>("/overview", options).then((value) => {
+          if (!controller.signal.aborted) setO(value);
+          return value;
+        }),
         can(session, "nodes.read")
           ? api<NodeItem[]>("/nodes/", options)
           : Promise.resolve([]),
-        api<TrafficPoint[]>("/traffic-history?hours=24", options),
         api<AppSettings>("/settings", options),
       ]);
       if (controller.signal.aborted) return;
       // A server-info or client-list failure must not discard valid history.
-      if (ov.status === "fulfilled") setO(ov.value);
       if (n.status === "fulfilled") setNodes(n.value);
-      if (h.status === "fulfilled") {
-        setHistory(
-          (Array.isArray(h.value) ? h.value : []).filter((point) =>
-            Number.isFinite(Date.parse(point.at)),
-          ),
-        );
-        setHistoryError("");
-      } else
-        setHistoryError(
-          h.reason instanceof Error
-            ? h.reason.message
-            : t("Traffic history could not load."),
-        );
       if (s.status === "fulfilled") setCfg(s.value);
       const failure = [ov, n, s].find((result) => result.status === "rejected");
       setMsg(
@@ -690,6 +761,7 @@ export function Dashboard() {
             onClick={() => {
               void load();
               void loadResources();
+              void loadHistory();
             }}
             disabled={busy}
           >
@@ -948,9 +1020,18 @@ export function Dashboard() {
               )}
             <TrafficChart
               points={history}
-              loading={busy}
+              recorded={
+                o
+                  ? {
+                      total: o.traffic_raw_bytes ?? 0,
+                      upload: o.traffic_upload_bytes ?? 0,
+                      download: o.traffic_download_bytes ?? 0,
+                    }
+                  : null
+              }
+              loading={historyLoading}
               error={historyError}
-              onRetry={load}
+              onRetry={loadHistory}
             />
             <div className="traffic-directions">
               <div>

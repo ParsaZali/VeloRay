@@ -362,7 +362,7 @@ func (s *Server) trafficHistoryForActor(ctx context.Context, r *http.Request, a 
 		}
 		hours = n
 	}
-	rows, e := s.Store.Pool.Query(ctx, `SELECT at,bytes,upload_bytes,download_bytes FROM vr_owner_traffic_windows WHERE owner_id=$1 AND at>now()-$2*interval '1 hour' ORDER BY at`, num(a.User, "id"), hours)
+	rows, e := s.Store.Pool.Query(ctx, `SELECT at,bytes,upload_bytes,download_bytes FROM vr_owner_traffic_windows WHERE owner_id=$1 AND at>=date_bin(interval '5 minutes',now()-$2*interval '1 hour','2000-01-01 UTC'::timestamptz) ORDER BY at`, num(a.User, "id"), hours)
 	if e != nil {
 		return nil, e
 	}

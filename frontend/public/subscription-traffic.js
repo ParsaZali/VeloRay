@@ -12,6 +12,9 @@
       downloadTraffic: "Download",
       loadingTraffic: "Loading usage history…",
       noHistory: "No usage recorded in this period yet.",
+      noTimedHistory: "No timed samples in this period.",
+      recordedTotals: "Recorded totals · outside the period chart",
+      earlier: "Earlier traffic",
       actualUsage: "Recorded server traffic",
       downloadCsv: "Download CSV",
       error:
@@ -27,6 +30,9 @@
       downloadTraffic: "دانلود",
       loadingTraffic: "در حال دریافت مصرف…",
       noHistory: "هنوز مصرفی در این بازه ثبت نشده است.",
+      noTimedHistory: "نمونه‌ای با زمان ثبت در این بازه نیست.",
+      recordedTotals: "مجموع مصرف ثبت‌شده · جدا از نمودار بازه",
+      earlier: "ترافیک قبلی",
       actualUsage: "مصرف ثبت‌شده سرور",
       downloadCsv: "دریافت CSV",
       error: "دریافت تاریخچه ناموفق بود. لینک اتصال همچنان در دسترس است.",
@@ -41,6 +47,9 @@
       downloadTraffic: "Получено",
       loadingTraffic: "Загрузка истории…",
       noHistory: "Нет данных за этот период.",
+      noTimedHistory: "Нет записей с датой за этот период.",
+      recordedTotals: "Общий учтённый трафик",
+      earlier: "Предыдущий трафик",
       actualUsage: "Данные сервера",
       downloadCsv: "Скачать CSV",
       error: "Не удалось загрузить историю. Ссылка подключения доступна.",
@@ -55,6 +64,9 @@
       downloadTraffic: "下载",
       loadingTraffic: "正在加载用量…",
       noHistory: "该时间段没有记录。",
+      noTimedHistory: "该时间段没有带时间的记录。",
+      recordedTotals: "累计记录流量",
+      earlier: "较早的流量",
       actualUsage: "服务器记录的流量",
       downloadCsv: "下载 CSV",
       error: "无法加载历史记录。订阅链接仍然可用。",
@@ -104,6 +116,10 @@
   chart.append(marks);
   const empty = byId("chart-empty"),
     loading = byId("chart-loading");
+  const recorded = document.createElement("div");
+  recorded.className = "traffic-recorded";
+  recorded.hidden = true;
+  empty.after(recorded);
   const retry = document.createElement("button");
   retry.type = "button";
   retry.id = "chart-retry";
@@ -120,10 +136,44 @@
   details.append(summary, table);
   chart.closest(".traffic-panel").append(details);
   let points = [],
+    totals = null,
     metric = "bytes",
     range = "7d",
     state = "loading",
-    controller;
+    controller,
+    pending = false;
+  const nonnegative = (value) =>
+    Number.isFinite(value) ? Math.max(0, value) : 0;
+  function renderRecorded(m) {
+    const sum =
+      totals &&
+      Math.max(totals.bytes, totals.upload_bytes + totals.download_bytes);
+    recorded.hidden = !sum || state === "ready";
+    if (recorded.hidden) return;
+    const label = document.createElement("strong");
+    label.textContent = `${m.recordedTotals}: ${bytes(sum)}`;
+    recorded.replaceChildren(label);
+    const rows = [
+      [m.uploadTraffic, totals.upload_bytes, "upload"],
+      [m.downloadTraffic, totals.download_bytes, "download"],
+      [m.earlier, sum - totals.upload_bytes - totals.download_bytes, "earlier"],
+    ];
+    for (const [name, value, className] of rows) {
+      if (!value) continue;
+      const row = document.createElement("div");
+      row.className = `traffic-recorded-row ${className}`;
+      const nameNode = document.createElement("span"),
+        bar = document.createElement("progress"),
+        count = document.createElement("b");
+      nameNode.textContent = name;
+      bar.max = sum;
+      bar.value = value;
+      bar.setAttribute("aria-hidden", "true");
+      count.textContent = bytes(value);
+      row.append(nameNode, bar, count);
+      recorded.append(row);
+    }
+  }
   const metricName = () =>
     dict()[
       metric === "bytes"
@@ -143,13 +193,21 @@
       });
     loading.hidden = state !== "loading";
     empty.hidden = state !== "empty" && state !== "error";
-    empty.textContent = state === "error" ? m.error : m.noHistory;
+    empty.textContent =
+      state === "error"
+        ? m.error
+        : totals &&
+            Math.max(totals.bytes, totals.upload_bytes, totals.download_bytes) >
+              0
+          ? m.noTimedHistory
+          : m.noHistory;
     retry.hidden = state !== "error";
     retry.textContent = m.retry;
     chart.toggleAttribute("hidden", state !== "ready");
     details.hidden = state !== "ready";
     summary.textContent = m.table;
     byId("chart-total").textContent = "";
+    renderRecorded(m);
     if (state !== "ready") return;
     const values = points.map((p) => p[metric]);
     const max = Math.max(1, ...values);
@@ -232,13 +290,17 @@
     });
     table.append(head, body);
   }
-  async function load(nextRange) {
+  async function load(nextRange, background = false) {
+    if (background && pending) return;
     controller?.abort();
     const request = new AbortController();
     controller = request;
+    pending = true;
     range = nextRange;
-    state = "loading";
-    render();
+    if (!background) {
+      state = "loading";
+      render();
+    }
     document.querySelectorAll("[data-range]").forEach((button) => {
       const selected = button.dataset.range === range;
       button.classList.toggle("is-selected", selected);
@@ -263,27 +325,39 @@
       const data = await response.json();
       if (!Array.isArray(data.points)) throw new Error("Invalid history");
       if (controller !== request) return;
-      points = data.points
-        .filter((point) => Number.isFinite(Date.parse(point.at)))
+      const valid = data.points
+        .filter((point) => point && Number.isFinite(Date.parse(point.at)))
         .map((point) => ({
           at: Date.parse(point.at),
           ...Object.fromEntries(
             ["bytes", "upload_bytes", "download_bytes"].map((key) => [
               key,
-              Number.isFinite(Number(point[key]))
-                ? Math.max(0, Number(point[key]))
-                : 0,
+              nonnegative(Number(point[key])),
             ]),
           ),
         }))
         .sort((a, b) => a.at - b.at);
+      if (data.points.length && !valid.length)
+        throw new Error("Invalid history");
+      points = valid;
+      if (data.recorded_usage && typeof data.recorded_usage === "object") {
+        totals = Object.fromEntries(
+          ["bytes", "upload_bytes", "download_bytes"].map((key) => [
+            key,
+            nonnegative(Number(data.recorded_usage[key])),
+          ]),
+        );
+      }
       state = points.length ? "ready" : "empty";
     } catch {
       if (controller !== request) return;
-      state = "error";
+      if (!background || state !== "ready") state = "error";
     } finally {
       clearTimeout(timeout);
-      if (controller === request) render();
+      if (controller === request) {
+        pending = false;
+        render();
+      }
     }
   }
   document
@@ -309,4 +383,9 @@
   });
   new ResizeObserver(render).observe(chart.parentElement);
   load(range);
+  const refresh = () => {
+    if (!document.hidden) void load(range, true);
+  };
+  setInterval(refresh, 30000);
+  document.addEventListener("visibilitychange", refresh);
 })();

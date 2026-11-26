@@ -130,6 +130,15 @@ func TestSubscriptionStatsReadOnlyTokenScopedIntegration(t *testing.T) {
 		t.Fatalf("unexpected history: %v", point)
 	}
 	w = httptest.NewRecorder()
+	s.subscriptionStats(w, httptest.NewRequest("GET", "/sub/secret?format=stats&range=1h", nil), Data{
+		"id": int64(9900043), "used_traffic_bytes": int64(8192), "raw_used_traffic_bytes": int64(4096),
+		"raw_upload_traffic_bytes": int64(1024), "raw_download_traffic_bytes": int64(2048),
+	})
+	d, e = decode(w.Body.Bytes())
+	if w.Code != 200 || e != nil || flag(d, "history_available") || len(array(d, "points")) != 0 || num(obj(d, "recorded_usage"), "bytes") != 4096 || num(obj(d, "recorded_usage"), "upload_bytes") != 1024 || num(obj(d, "recorded_usage"), "download_bytes") != 2048 {
+		t.Fatalf("recorded counters must stay separate from dated history: %d %v %v", w.Code, d, e)
+	}
+	w = httptest.NewRecorder()
 	s.subscriptionStats(w, httptest.NewRequest("HEAD", "/sub/secret?format=stats&range=7d", nil), Data{"id": int64(9900042)})
 	if w.Code != 200 || w.Body.Len() != 0 {
 		t.Fatalf("HEAD returned body / bad status %d %q", w.Code, w.Body.String())

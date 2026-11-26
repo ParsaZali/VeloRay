@@ -1308,83 +1308,6 @@ nav [aria-current="page"] .lucide {
     padding: 12px;
   }
 }
-.chart-window-control {
-  margin: 12px 8px 0;
-}
-.chart-window-track {
-  position: relative;
-  height: 36px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--muted);
-  touch-action: none;
-  user-select: none;
-  cursor: grab;
-}
-.chart-window-track:active {
-  cursor: grabbing;
-}
-.chart-window-track svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  border-radius: 8px;
-}
-.chart-window-selection {
-  position: absolute;
-  inset-block: 0;
-  background: color-mix(in srgb, var(--fg) 6%, transparent);
-  border-inline: 1px solid var(--border-strong);
-  pointer-events: none;
-}
-.chart-window-handle {
-  position: absolute;
-  top: 4px;
-  bottom: 4px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 2px;
-  width: 14px;
-  padding: 0;
-  transform: translateX(-50%);
-  border: 1px solid var(--border-strong);
-  border-radius: 5px;
-  background: var(--card);
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
-  cursor: ew-resize;
-  touch-action: none;
-}
-.chart-window-handle span {
-  height: 10px;
-  width: 1px;
-  background: var(--muted);
-  pointer-events: none;
-}
-.chart-window-handle:focus-visible {
-  outline: 2px solid var(--muted-strong);
-  outline-offset: 3px;
-}
-.chart-window-caption {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 8px;
-  font-size: 11px;
-  color: var(--muted);
-}
-.chart-window-caption button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 0;
-  background: transparent;
-  color: var(--muted-strong);
-  padding: 3px 0;
-}
 .chart-tooltip:empty {
   display: none !important;
 }
@@ -1927,16 +1850,6 @@ nav [aria-current="page"] .lucide {
 }
 .dashboard-page .traffic-chart-canvas {
   height: 260px;
-}
-.dashboard-page .chart-window-control {
-  margin-top: 4px;
-  margin-bottom: 12px;
-}
-.dashboard-page .chart-window-track {
-  height: 26px;
-}
-.dashboard-page .chart-window-caption {
-  font-size: 8px;
 }
 .dashboard-page .traffic-chart-shell .chart-mode {
   margin: 0 0 5px;

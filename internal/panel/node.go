@@ -313,11 +313,12 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 			return e
 		}
 	}
-	if e = s.recordNodeBilling(ctx, q, node, totalDelta, time.Now().UTC()); e != nil {
+	measuredAt := time.Now().UTC()
+	if e = s.recordNodeBilling(ctx, q, node, totalDelta, measuredAt); e != nil {
 		return e
 	}
+	at := measuredAt.Truncate(5 * time.Minute)
 	if totalDelta > 0 {
-		at := time.Now().UTC().Truncate(5 * time.Minute)
 		_, e = q.Exec(ctx, `INSERT INTO vr_traffic_windows(at,node_id,bytes,upload_bytes,download_bytes) VALUES($1,$2,$3,$4,$5) ON CONFLICT(at,node_id) DO UPDATE SET bytes=vr_traffic_windows.bytes+excluded.bytes,upload_bytes=vr_traffic_windows.upload_bytes+excluded.upload_bytes,download_bytes=vr_traffic_windows.download_bytes+excluded.download_bytes`, at, id, totalDelta, uploadDelta, downloadDelta)
 		if e != nil {
 			return e
@@ -327,7 +328,7 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 		if delta[0] <= 0 {
 			continue
 		}
-		_, err := q.Exec(ctx, `INSERT INTO vr_client_traffic_windows(at,principal_key,bytes,upload_bytes,download_bytes) VALUES($1,$2,$3,$4,$5) ON CONFLICT(principal_key,at) DO UPDATE SET bytes=vr_client_traffic_windows.bytes+excluded.bytes,upload_bytes=vr_client_traffic_windows.upload_bytes+excluded.upload_bytes,download_bytes=vr_client_traffic_windows.download_bytes+excluded.download_bytes`, time.Now().UTC().Truncate(5*time.Minute), key, delta[0], delta[1], delta[2])
+		_, err := q.Exec(ctx, `INSERT INTO vr_client_traffic_windows(at,principal_key,bytes,upload_bytes,download_bytes) VALUES($1,$2,$3,$4,$5) ON CONFLICT(principal_key,at) DO UPDATE SET bytes=vr_client_traffic_windows.bytes+excluded.bytes,upload_bytes=vr_client_traffic_windows.upload_bytes+excluded.upload_bytes,download_bytes=vr_client_traffic_windows.download_bytes+excluded.download_bytes`, at, key, delta[0], delta[1], delta[2])
 		if err != nil {
 			return err
 		}
@@ -336,7 +337,7 @@ func (s *Server) collect(ctx context.Context, q Query, node Data) error {
 		if owner <= 0 || delta[0] <= 0 {
 			continue
 		}
-		_, err := q.Exec(ctx, `INSERT INTO vr_owner_traffic_windows(at,owner_id,bytes,upload_bytes,download_bytes) VALUES($1,$2,$3,$4,$5) ON CONFLICT(at,owner_id) DO UPDATE SET bytes=vr_owner_traffic_windows.bytes+excluded.bytes,upload_bytes=vr_owner_traffic_windows.upload_bytes+excluded.upload_bytes,download_bytes=vr_owner_traffic_windows.download_bytes+excluded.download_bytes`, time.Now().UTC().Truncate(5*time.Minute), owner, delta[0], delta[1], delta[2])
+		_, err := q.Exec(ctx, `INSERT INTO vr_owner_traffic_windows(at,owner_id,bytes,upload_bytes,download_bytes) VALUES($1,$2,$3,$4,$5) ON CONFLICT(at,owner_id) DO UPDATE SET bytes=vr_owner_traffic_windows.bytes+excluded.bytes,upload_bytes=vr_owner_traffic_windows.upload_bytes+excluded.upload_bytes,download_bytes=vr_owner_traffic_windows.download_bytes+excluded.download_bytes`, at, owner, delta[0], delta[1], delta[2])
 		if err != nil {
 			return err
 		}

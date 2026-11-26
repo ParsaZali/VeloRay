@@ -20,6 +20,7 @@
   // The supplied legacy dashboard keeps its layout, but reads real token-scoped
   // history rather than spreading lifetime traffic over invented daily weights.
   var historyPoints = null,
+    recordedBytes = 0,
     historyPending = false,
     historyReadAt = 0;
   window.VeloRayTemplate.drawHistory = function () {
@@ -34,6 +35,7 @@
     var line = document.getElementById("chartLinePath");
     var area = document.getElementById("chartAreaPath");
     var marks = document.getElementById("chartPointsGroup");
+    if (!start || !end || !line || !area || !marks) return;
     var fa = document.documentElement.lang === "fa";
     function notice(text) {
       line.setAttribute("d", "");
@@ -45,9 +47,15 @@
     function draw() {
       if (!historyPoints.length) {
         notice(
-          fa
-            ? "هنوز مصرفی در این بازه ثبت نشده است."
-            : "No recorded usage in this period.",
+          recordedBytes > 0
+            ? (fa ? "مجموع مصرف ثبت‌شده: " : "Recorded total: ") +
+                new Intl.NumberFormat(fa ? "fa-IR" : "en-US").format(
+                  recordedBytes,
+                ) +
+                " B"
+            : fa
+              ? "هنوز مصرفی در این بازه ثبت نشده است."
+              : "No recorded usage in this period.",
         );
         return;
       }
@@ -140,9 +148,11 @@
       })
       .then(function (data) {
         if (!Array.isArray(data.points)) throw new Error("Invalid history");
+        var total = Number(data.recorded_usage && data.recorded_usage.bytes);
+        recordedBytes = Number.isFinite(total) ? Math.max(0, total) : 0;
         historyPoints = data.points
           .filter(function (p) {
-            return Number.isFinite(Date.parse(p.at));
+            return p && Number.isFinite(Date.parse(p.at));
           })
           .map(function (p) {
             return {
@@ -187,6 +197,11 @@
           retry();
         }
       });
+      var refresh = function () {
+        if (!document.hidden) window.VeloRayTemplate.drawHistory();
+      };
+      setInterval(refresh, 30000);
+      document.addEventListener("visibilitychange", refresh);
     }
   };
   function qrURL(value) {

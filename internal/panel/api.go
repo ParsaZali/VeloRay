@@ -1214,7 +1214,7 @@ func (s *Server) trafficHistory(ctx context.Context, r *http.Request) ([]Data, e
 		}
 		hours = n
 	}
-	rows, e := s.Store.Pool.Query(ctx, `SELECT at,sum(bytes)::bigint,sum(upload_bytes)::bigint,sum(download_bytes)::bigint FROM vr_traffic_windows WHERE at>now()-$1*interval '1 hour' GROUP BY at ORDER BY at`, hours)
+	rows, e := s.Store.Pool.Query(ctx, `SELECT at,sum(bytes)::bigint,sum(upload_bytes)::bigint,sum(download_bytes)::bigint FROM vr_traffic_windows WHERE at>=date_bin(interval '5 minutes',now()-$1*interval '1 hour','2000-01-01 UTC'::timestamptz) GROUP BY at ORDER BY at`, hours)
 	if e != nil {
 		return nil, e
 	}

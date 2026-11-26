@@ -182,6 +182,10 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		s.portalAsset(w, r, cfg, assetPath)
 		return
 	}
+	if r.URL.Query().Get("format") == "stats" {
+		s.subscriptionStats(w, r, c)
+		return
+	}
 	external, exportCfg, err := s.externalSubscription(ctx, c, cfg, r)
 	if err != nil {
 		s.respond(w, r, nil, 0, err)
@@ -326,9 +330,6 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request) {
 		return
 	case "qr":
 		s.subscriptionQR(w, r, c, cfg, links)
-		return
-	case "stats":
-		s.subscriptionStats(w, r, c)
 		return
 	case "json":
 		if err := s.admitSubscriptionDevice(w, r, c, cfg); err != nil {
