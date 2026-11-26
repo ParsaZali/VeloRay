@@ -424,6 +424,14 @@ test("readable dark and light palette, raw upload and download", async ({
   await expect(
     page.locator('[aria-label="Traffic chart"] canvas'),
   ).toBeVisible();
+  await expect(page.locator(".dashboard-workspace")).toHaveCSS(
+    "background-color",
+    "rgb(14, 14, 14)",
+  );
+  await expect(page.locator(".dashboard-resource").first()).toHaveCSS(
+    "background-color",
+    "rgb(33, 33, 33)",
+  );
   await preview(page, "dashboard-dark");
   expect(
     await page.evaluate(() =>

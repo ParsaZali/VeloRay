@@ -14,22 +14,28 @@ vr_log_init() {
  umask "$previous_mask"
 }
 vr_run() { "$@" >>"$VELORAY_INSTALL_LOG" 2>&1; }
+vr_stop_ticker() {
+ [[ -n "${VR_TICKER:-}" ]]||return 0
+ kill "$VR_TICKER" 2>/dev/null || true
+ wait "$VR_TICKER" 2>/dev/null || true
+ unset VR_TICKER
+}
 vr_run_visible() {
  if [[ "${VELORAY_VERBOSE:-0}" == 1 ]];then "$@" 2>&1 | tee -a "$VELORAY_INSTALL_LOG";return;fi
  if [[ ! -t 2 ]];then vr_run "$@";return;fi
- local ticker status=0 elapsed=$SECONDS
+ local status=0 elapsed=$SECONDS parent_pid=$BASHPID
  (
   trap - EXIT ERR
   trap 'if [[ -n ${pause:-} ]];then kill "$pause" 2>/dev/null || true;fi;exit 0' TERM
   while true;do
    sleep 20 & pause=$!
    wait "$pause" || exit 0
+   kill -0 "$parent_pid" 2>/dev/null || exit 0
    vr_say "  Still working ($((SECONDS-elapsed))s). Log: $VELORAY_INSTALL_LOG" "  همچنان در حال انجام ($((SECONDS-elapsed)) ثانیه). گزارش: $VELORAY_INSTALL_LOG" >&2
   done
- ) 9>&- & ticker=$!
+ ) 9>&- & VR_TICKER=$!
  vr_run "$@" || status=$?
- kill "$ticker" 2>/dev/null || true
- wait "$ticker" 2>/dev/null || true
+ vr_stop_ticker
  return "$status"
 }
 vr_error() {
@@ -57,7 +63,7 @@ HELP
 version_at_least() { [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" == "$2" ]]; }
 fetch() {
  local status=0 timeout="${3:-900}" log="${VELORAY_INSTALL_LOG:-/dev/null}"
- local -a progress=(--silent --show-error)
+ local -a progress=(--silent --show-error --no-progress-meter)
  [[ ! -t 2 ]]||progress=(--progress-bar --show-error)
  printf '  Download: %s\n' "$1" | tee -a "$log"
  curl -q --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --location "${progress[@]}" \
@@ -122,13 +128,15 @@ source /etc/os-release
 case "$(uname -m)" in x86_64) arch=amd64;node_arch=x64;xray_asset=Xray-linux-64.zip;;aarch64|arm64) arch=arm64;node_arch=arm64;xray_asset=Xray-linux-arm64-v8a.zip;;*) fail 'Unsupported CPU architecture.';;esac
 
 temporary="$(mktemp -d)"
-trap 'rm -rf -- "$temporary"' EXIT
+unset VR_TICKER
+trap 'vr_stop_ticker; rm -rf -- "$temporary"' EXIT
 export VELORAY_INSTALL_LANG="$language"
 vr_log_init install
 exec 9>/run/lock/veloray-install.lock
 flock -n 9||fail 'Another VeloRay installation is running. Wait for it to finish.'
 export VELORAY_INSTALL_LOCKED=true
 trap 'vr_error "$LINENO" "$?"' ERR
+trap 'vr_say "Installation interrupted. Log: $VELORAY_INSTALL_LOG" "نصب متوقف شد. گزارش: $VELORAY_INSTALL_LOG" >&2; exit 130' INT
 printf '\nVeloRay 1.0\n'
 vr_say 'Server installation' 'نصب روی سرور'
 vr_say "Log: $VELORAY_INSTALL_LOG" "گزارش: $VELORAY_INSTALL_LOG"

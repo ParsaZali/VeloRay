@@ -1702,19 +1702,10 @@ nav [aria-current="page"] .lucide {
 
 /* Compact dashboard: resource trends, traffic, account health and runtime details. */
 .dark .dashboard-workspace {
-  background: #191b1e;
-  background-image: none;
+  background: var(--bg);
 }
 .dark .dashboard-page {
-  --card: #232529;
-  --surface-2: #282b30;
-  --surface-3: #32363d;
-  --border: #34373d;
-  --border-subtle: #303339;
-  --muted: #949ba4;
-  --muted-strong: #c6ccd3;
   --card-shadow: none;
-  --chart-grid: #41454d;
 }
 .dashboard-page {
   min-width: 0;

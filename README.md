@@ -68,6 +68,8 @@ sudo veloray
 
 A compact management menu provides service status, logs, domain/port changes, SSL, password reset, backups, repair and updates. **Leave the new password empty to generate a random one.** Successful checks are green, warnings yellow and failures red when the terminal supports color. `NO_COLOR=1` disables colors.
 
+`sudo veloray logs` shows recent entries and returns to the shell. Add `--follow` to watch live, or use `sudo veloray logs install` to read the latest installer log. Installation prints the current step and stores the detailed output in a private log.
+
 <details>
 <summary>Useful commands</summary>
 

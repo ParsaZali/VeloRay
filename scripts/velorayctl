@@ -74,34 +74,42 @@ menu() {
  local selection value
  while true;do
   summary
-  [[ -t 0 ]]||{ vr_say "Commands: sudo veloray --help" "دستورها: sudo veloray --help";return 0; }
-  printf '\n';vr_say 'SERVICES' 'سرویس‌ها'
-  vr_say '   1  Service status' '   1  وضعیت سرویس'
-  vr_say '   2  Panel address' '   2  آدرس پنل'
-  vr_say '   3  Restart services' '   3  راه‌اندازی مجدد'
-  vr_say '   4  Start services' '   4  شروع سرویس‌ها'
-  vr_say '   5  Stop services' '   5  توقف سرویس‌ها'
-  vr_say '   6  Recent logs' '   6  آخرین گزارش‌ها'
-  printf '\n';vr_say 'ACCESS' 'دسترسی'
-  vr_say '   7  Reset administrator password' '   7  تغییر رمز مدیر'
-  vr_say '   8  Change domain or IP' '   8  تغییر دامنه یا آی‌پی'
-  vr_say '   9  Change panel port' '   9  تغییر پورت پنل'
-  vr_say '  10  HTTPS certificate' '  10  گواهی HTTPS'
-  printf '\n';vr_say 'MAINTENANCE' 'نگهداری'
-  vr_say '  11  Create backup' '  11  ساخت پشتیبان'
-  vr_say '  12  Restore backup' '  12  بازیابی پشتیبان'
-  vr_say '  13  Daily backups' '  13  پشتیبان روزانه'
-  vr_say '  14  Health check' '  14  بررسی سلامت'
-  vr_say '  15  Recover Xray' '  15  بازیابی Xray'
-  vr_say '  16  Update VeloRay' '  16  به‌روزرسانی'
-  vr_say '  17  Uninstall VeloRay' '  17  حذف نصب'
-  vr_say '  18  Automatic updates' '  18  به‌روزرسانی خودکار'
-  printf '\n';vr_say 'NETWORK' 'شبکه'
-  vr_say '  19  Inspect VPN ports' '  19  بررسی پورت‌ها'
-  vr_say '  20  Change inbound port' '  20  تغییر پورت اتصال'
-  vr_say '  21  List inbounds' '  21  لیست اتصال‌ها'
-  printf '\n';vr_say '   0  Exit' '   0  خروج'
-  read -rp "$(vr_text 'Select [0–21; Enter = exit]: ' 'انتخاب [۰ تا ۲۱؛ Enter = خروج]: ')" selection||return 0
+  cat <<'MENU'
+
+SERVICES
+   1  Service status
+   2  Panel address
+   3  Restart services
+   4  Start services
+   5  Stop services
+   6  Recent logs
+
+ACCESS
+   7  Reset administrator password
+   8  Change domain or IP
+   9  Change panel port
+  10  HTTPS certificate
+
+MAINTENANCE
+  11  Create backup
+  12  Restore backup
+  13  Daily backups
+  14  Health check
+  15  Recover Xray
+  16  Update VeloRay
+  17  Uninstall VeloRay
+  18  Automatic updates
+
+NETWORK
+  19  Inspect VPN ports
+  20  Change inbound port
+  21  List inbounds
+
+   0  Exit
+  Commands: sudo veloray --help
+MENU
+  [[ -t 0 ]]||return 0
+  read -rp 'Select [0–21; Enter = exit]: ' selection||return 0
   local -a operation=()
   case "$selection" in
    0|"") return 0;;1) operation=(status);;2) operation=(url);;3) operation=(restart);;4) operation=(start);;5) operation=(stop);;
@@ -171,7 +179,7 @@ case "$command" in
  restore) [[ $# -eq 1 ]] || { echo 'Usage: velorayctl restore FILE.tar.gz' >&2;exit 2; }
  vr_run veloray backup-verify "$1"
  vr_say 'Restore replaces current panel data and configuration. A recovery backup is created first.' 'بازیابی، اطلاعات و تنظیمات فعلی را جایگزین می‌کند؛ ابتدا پشتیبان بازیابی گرفته می‌شود.'
- read -rp "$(vr_text 'Type RESTORE to continue: ' 'برای ادامه RESTORE را وارد کنید: ')" confirmation
+ read -rp "$(vr_text 'Type RESTORE to continue: ' 'برای ادامه RESTORE را وارد کنید: ')" confirmation||exit 2
  [[ "$confirmation" == RESTORE ]]||{ vr_say 'Cancelled.' 'لغو شد.';exit 0; }
  # Always create a recovery point before replacing data and secrets.
  "$0" backup

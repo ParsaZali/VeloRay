@@ -155,13 +155,17 @@ reject 'Unknown argument' --unavailable
 if flock "$TEST_ROOT/install.lock" bash "$TEST_ROOT/bootstrap.sh" install >"$TEST_ROOT/result" 2>&1;then echo 'Concurrent installation accepted' >&2;exit 1;fi
 grep -Fq 'Another VeloRay installation is running' "$TEST_ROOT/result"
 test ! -s "$TEST_ROOT/calls";pass concurrent-installation-blocked
+printf 'unchanged\n' >"$TEST_ROOT/external.log"
+chmod 0644 "$TEST_ROOT/external.log"
 export TEST_APT_FAILURE=1
 : >"$TEST_ROOT/requests"
-if bash "$TEST_ROOT/bootstrap.sh" install >"$TEST_ROOT/result" 2>&1;then echo 'Failed packages accepted' >&2;exit 1;fi
+if VELORAY_INSTALL_LOG="$TEST_ROOT/external.log" bash "$TEST_ROOT/bootstrap.sh" install >"$TEST_ROOT/result" 2>&1;then echo 'Failed packages accepted' >&2;exit 1;fi
 if grep -Fq 'Package repository unavailable' "$TEST_ROOT/result";then echo 'Raw package errors leaked into the summary' >&2;exit 1;fi
 operation_log="$(sed -n 's/^Log: //p' "$TEST_ROOT/result" | head -n 1)"
 grep -Fq 'Package repository unavailable' "$operation_log"
 test "$(stat -c %a "$operation_log")" = 600
+test "$(stat -c %a "$TEST_ROOT/external.log")" = 644
+test "$(cat "$TEST_ROOT/external.log")" = unchanged
 grep -Fq 'Failed: Prepare system packages' "$TEST_ROOT/result"
 test ! -s "$TEST_ROOT/requests";test ! -s "$TEST_ROOT/calls"
 pass visible-package-failure-stops-installation
@@ -199,7 +203,15 @@ grep -Fq -- '--max-time 900' "$TEST_ROOT/curl-options"
 grep -F 'codeload.github.com/' "$TEST_ROOT/curl-options" | grep -Fq -- '--max-time 3600'
 if grep -vF -- '--speed-time 30 --speed-limit 1024' "$TEST_ROOT/curl-options" | grep -q .;then echo 'Download lacks a stall timeout' >&2;exit 1;fi
 if grep -vF -- '--silent --show-error --no-progress-meter' "$TEST_ROOT/curl-options" | grep -q .;then echo 'Downloads must use concise summaries and show failures' >&2;exit 1;fi
+if grep -v '^-q ' "$TEST_ROOT/curl-options" | grep -q .;then echo 'Downloads must ignore curl user configuration' >&2;exit 1;fi
 pass visible-downloads-and-stall-timeouts
+if command -v script >/dev/null;then
+ : >"$TEST_ROOT/curl-options"
+ script -q -e -c 'bash "$TEST_ROOT/bootstrap.sh" install' /dev/null </dev/null >"$TEST_ROOT/result" 2>&1
+ grep -Fq -- '--progress-bar --show-error' "$TEST_ROOT/curl-options"
+ if grep -Fq 'Checking system package repositories' "$TEST_ROOT/result";then echo 'Terminal displayed raw package output' >&2;exit 1;fi
+ pass interactive-download-progress
+fi
 export TEST_SOURCE_ROUTE=unavailable
 : >"$TEST_ROOT/calls"
 if bash -c "$(cat "$TEST_ROOT/bootstrap.sh")" @ install >"$TEST_ROOT/result" 2>&1;then echo 'Unavailable source accepted' >&2;exit 1;fi

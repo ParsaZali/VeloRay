@@ -96,7 +96,7 @@ def installation_output():
 
 def install_step(en, fa):
     global INSTALL_STEP
-    if INSTALL_LOG is not None:
+    if INSTALL_LOG is not None or sys.stdout.isatty():
         INSTALL_STEP = fa if os.environ.get('VELORAY_INSTALL_LANG') == 'fa' else en
         say('  • ' + en, '  • ' + fa)
 
@@ -755,6 +755,7 @@ def github_json(path):
 
 
 def update_source(expected=None, check_only=False):
+    install_step('Check the latest verified release', 'بررسی آخرین نسخهٔ تأییدشده')
     sha = github_json('commits/main')['sha']
     if not re.fullmatch('[a-f0-9]{40}', sha) or expected and sha != expected:
         raise ValueError('The verified main revision changed; check again')
@@ -770,7 +771,12 @@ def update_source(expected=None, check_only=False):
         return None, sha
     with tempfile.TemporaryDirectory(prefix='veloray-docker-source-') as tmp:
         archive = Path(tmp) / 'source.tar.gz'
-        run(['curl', '--proto', '=https', '--proto-redir', '=https', '-fsSL', '--retry', '2', '--connect-timeout', '15', '--max-time', '1200', f'https://codeload.github.com/{REPO}/tar.gz/{sha}', '-o', archive])
+        install_step('Download update', 'دریافت فایل به‌روزرسانی')
+        progress = ['--progress-bar'] if INSTALL_LOG is None and sys.stderr.isatty() else ['--silent']
+        run(['curl', '-q', '--proto', '=https', '--proto-redir', '=https', '--tlsv1.2', '-fSL', *progress,
+             '--retry', '2', '--retry-max-time', '120', '--connect-timeout', '15', '--max-time', '1200',
+             '--speed-time', '30', '--speed-limit', '1024', f'https://codeload.github.com/{REPO}/tar.gz/{sha}', '-o', archive])
+        install_step('Verify update checksums', 'بررسی صحت فایل‌های به‌روزرسانی')
         tree = Path(tmp) / 'source'
         tree.mkdir()
         with tarfile.open(archive) as tar:
@@ -1354,25 +1360,25 @@ def captured_project_exists():
 
 
 MENU_SECTIONS = (
-    ('Services', 'سرویس‌ها', (
-        ('1', 'Status', 'وضعیت', 'status'),
-        ('2', 'Panel address', 'آدرس پنل', 'url'),
-        ('3', 'Restart', 'راه‌اندازی مجدد', 'restart'),
-        ('4', 'Start', 'شروع', 'start'),
-        ('5', 'Stop', 'توقف', 'stop'),
-        ('6', 'Recent logs', 'آخرین گزارش‌ها', 'logs'),
+    ('Services', (
+        ('1', 'Status', 'status'),
+        ('2', 'Panel address', 'url'),
+        ('3', 'Restart', 'restart'),
+        ('4', 'Start', 'start'),
+        ('5', 'Stop', 'stop'),
+        ('6', 'Recent logs', 'logs'),
     )),
-    ('Access', 'دسترسی', (
-        ('7', 'Reset password', 'تغییر رمز', 'reset'),
-        ('8', 'Change domain or IP', 'تغییر دامنه یا آی‌پی', 'domain'),
-        ('9', 'Change panel port', 'تغییر پورت پنل', 'port'),
+    ('Access', (
+        ('7', 'Reset password', 'reset'),
+        ('8', 'Change domain or IP', 'domain'),
+        ('9', 'Change panel port', 'port'),
     )),
-    ('Maintenance', 'نگهداری', (
-        ('10', 'Backup', 'پشتیبان‌گیری', 'backup'),
-        ('11', 'Restore backup', 'بازیابی پشتیبان', 'restore'),
-        ('12', 'Health check', 'بررسی سلامت', 'doctor'),
-        ('13', 'Update VeloRay', 'به‌روزرسانی', 'update'),
-        ('14', 'Uninstall', 'حذف نصب', 'uninstall'),
+    ('Maintenance', (
+        ('10', 'Backup', 'backup'),
+        ('11', 'Restore backup', 'restore'),
+        ('12', 'Health check', 'doctor'),
+        ('13', 'Update VeloRay', 'update'),
+        ('14', 'Uninstall', 'uninstall'),
     )),
 )
 
@@ -1396,7 +1402,7 @@ def menu():
         say('Panel: ' + address, 'آدرس پنل: ' + address)
         say('Commands: sudo veloray --help', 'دستورها: sudo veloray --help')
         return
-    actions = {number: command for _, _, rows in MENU_SECTIONS for number, _, _, command in rows}
+    actions = {number: command for _, rows in MENU_SECTIONS for number, _, command in rows}
     prompts = {
         'domain': ('Public domain or IP: ', 'دامنه یا آی‌پی عمومی: '),
         'port': ('New panel port: ', 'پورت جدید پنل: '),
@@ -1407,12 +1413,12 @@ def menu():
     }
     while True:
         say('\nVeloRay 1.0 | Docker')
-        say(f'Panel: {address}', f'آدرس پنل: {address}')
-        for en, fa, rows in MENU_SECTIONS:
-            say('\n' + en, '\n' + fa, '1')
-            for number, label, translated, _ in rows:
-                say(f'  {number:>2}  {label}', f'  {number:>2}  {translated}')
-        say('\n   0  Exit', '\n   0  خروج')
+        say(f'Panel: {address}')
+        for section, rows in MENU_SECTIONS:
+            say('\n' + section, color='1')
+            for number, label, _ in rows:
+                say(f'  {number:>2}  {label}')
+        say('\n   0  Exit')
         say('  Commands: sudo veloray --help', '  دستورها: sudo veloray --help')
         choice = terminal_prompt('\nSelect [0–14; Enter = exit]: ', '\nانتخاب [۰ تا ۱۴؛ Enter = خروج]: ')
         if choice in (None, '', '0'):
