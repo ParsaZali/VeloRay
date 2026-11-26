@@ -2,7 +2,7 @@
 # Inspect Go build metadata for every engine and panel binary, including ARM64.
 set -Eeuo pipefail
 cd "$(dirname -- "${BASH_SOURCE[0]}")/.."
-expected=go1.26.10
+expected=go1.26.11
 temporary="$(mktemp -d)";trap 'rm -rf -- "$temporary"' EXIT
 for arch in amd64 arm64;do
  mkdir -p "$temporary/$arch"

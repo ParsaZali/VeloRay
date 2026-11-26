@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 arch="${1:?architecture required}";output="${2:?output directory required}"
 case "$arch" in amd64|arm64) ;;*) exit 2;;esac
-export GOTOOLCHAIN=go1.26.10
+export GOTOOLCHAIN=go1.26.11
 version="${VELORAY_XRAY_VERSION:-v26.3.27}"
 source_digest="${VELORAY_XRAY_SOURCE_SHA256:-992a4997e6bb846d11469435d687f99ef812fcde1e0a009bb8e95189ea20331d}"
 [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ && "$source_digest" =~ ^[a-f0-9]{64}$ ]]||{ echo 'Invalid Xray source version or digest' >&2;exit 2; }

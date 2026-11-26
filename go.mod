@@ -1,6 +1,6 @@
 module github.com/PaarSaAm/VeloRay
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/9seconds/mtg/v2 v2.2.8

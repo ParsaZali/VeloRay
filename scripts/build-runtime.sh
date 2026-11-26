@@ -14,7 +14,7 @@ manifest() {
 }
 if [[ "${1:-}" == --manifest ]];then manifest;exit 0;fi
 [[ $# -eq 0 ]]||{ echo 'Usage: scripts/build-runtime.sh [--manifest]' >&2;exit 2; }
-export GOTOOLCHAIN=go1.26.10
+export GOTOOLCHAIN=go1.26.11
 temporary="$(mktemp -d)";trap 'rm -rf -- "$temporary"' EXIT
 mkdir -p runtime
 manifest >"$temporary/source.SHA256SUMS"
