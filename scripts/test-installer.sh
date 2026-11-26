@@ -54,6 +54,7 @@ else
  printf '%s  %s\n' "$VELORAY_XRAY_SHA256" "$VELORAY_XRAY_ARCHIVE" | sha256sum -c - >/dev/null
 fi
 echo "panel=$VELORAY_INSTALL_LANG" >>"$TEST_ROOT/calls"
+printf 'setup=%s/%s/%s/%s\n' "${VELORAY_PUBLIC_HOST:-}" "${VELORAY_PANEL_PORT:-}" "${VELORAY_SUBSCRIPTION_PORT:-}" "${VELORAY_TLS_MODE:-}" >>"$TEST_ROOT/calls"
 PANEL
 sed 's/panel=/node=/' "$TEST_ROOT/fixture/scripts/install-panel.sh" >"$TEST_ROOT/fixture/deploy/node/install.sh"
 cat >"$TEST_ROOT/fixture/scripts/build-singbox.sh" <<'SECONDARY'
@@ -151,6 +152,8 @@ reject 'Missing value' --database
 reject 'Language must' --lang xx
 reject 'Invalid repository' --repo ../bad
 reject 'Unknown argument' --unavailable
+reject 'Invalid port' --panel-port 65536
+reject 'TLS mode must be' --tls wrong
 : >"$TEST_ROOT/calls"
 if flock "$TEST_ROOT/install.lock" bash "$TEST_ROOT/bootstrap.sh" install >"$TEST_ROOT/result" 2>&1;then echo 'Concurrent installation accepted' >&2;exit 1;fi
 grep -Fq 'Another VeloRay installation is running' "$TEST_ROOT/result"
@@ -170,6 +173,10 @@ grep -Fq 'Failed: Prepare system packages' "$TEST_ROOT/result"
 test ! -s "$TEST_ROOT/requests";test ! -s "$TEST_ROOT/calls"
 pass visible-package-failure-stops-installation
 unset TEST_APT_FAILURE
+: >"$TEST_ROOT/calls"
+bash "$TEST_ROOT/bootstrap.sh" install --host vpn.example.com --panel-port 12345 --subscription-port 54321 --tls auto >"$TEST_ROOT/result" 2>&1
+grep -Fq 'setup=vpn.example.com/12345/54321/auto' "$TEST_ROOT/calls"
+pass explicit-install-address-and-ports
 for machine in x86_64 aarch64;do
  export TEST_MACHINE="$machine"
  for mode in install node;do
@@ -428,7 +435,6 @@ cat >"$TEST_ROOT/host-tools/dropdb" <<'DROPDB'
 #!/usr/bin/env bash
 [[ "${@: -1}" == veloray ]]||exit 2
 [[ -f "$HOST_ROOT/database" ]]||exit 1
-find "$HOST_ROOT/var/lib/veloray/backups" -name 'pre-purge-*.tar.gz' | read -r backup || exit 1
 rm -f "$HOST_ROOT/database" "$HOST_ROOT/admin"
 DROPDB
 cat >"$TEST_ROOT/host-tools/dropuser" <<'DROPUSER'
@@ -534,7 +540,7 @@ mkdir -p "$HOST_ROOT/var/lib/veloray-agent"
 printf ledger >"$HOST_ROOT/var/lib/veloray-agent/state.json"
 printf 'CANCEL\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall >"$TEST_ROOT/host-result" 2>&1
 test -d "$HOST_ROOT/opt/veloray";pass uninstall-cancel
-printf 'REMOVE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall >"$TEST_ROOT/host-result" 2>&1
+printf 'REMOVE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall --keep-data >"$TEST_ROOT/host-result" 2>&1
 test ! -d "$HOST_ROOT/opt/veloray"
 test ! -f "$HOST_ROOT/etc/systemd/system/veloray-subscriptions.service"
 test ! -f "$HOST_ROOT/etc/systemd/system/veloray-subscription-endpoint.timer"
@@ -668,11 +674,11 @@ if grep -Fq 'Password:' "$TEST_ROOT/host-result";then exit 1;fi
 pass reset-rejects-ambiguous-account-before-password
 unset TEST_ADMIN_RESOLVE_FAIL TEST_CURRENT_ADMIN
 export TEST_STUCK_UNIT=xray.service
-if printf 'REMOVE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall >"$TEST_ROOT/host-result" 2>&1;then echo 'Live core removed' >&2;exit 1;fi
+if printf 'PURGE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall >"$TEST_ROOT/host-result" 2>&1;then echo 'Live core removed' >&2;exit 1;fi
 test -x "$HOST_ROOT/usr/local/bin/veloray";test -f "$HOST_ROOT/database"
 pass uninstall-refuses-to-remove-running-core
 unset TEST_STUCK_UNIT
-printf 'REMOVE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall --purge >"$TEST_ROOT/host-result" 2>&1
+printf 'REMOVE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall >"$TEST_ROOT/host-result" 2>&1
 test -f "$HOST_ROOT/database";test -f "$HOST_ROOT/etc/veloray/veloray.env"
 pass purge-needs-separate-confirmation
 # A custom database must never be dropped by the native uninstall helper.
@@ -682,16 +688,15 @@ if printf 'PURGE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall --pur
 test -f "$HOST_ROOT/database";test -f "$HOST_ROOT/admin"
 cp "$TEST_ROOT/env-before-purge" "$HOST_ROOT/etc/veloray/veloray.env"
 pass purge-rejects-custom-database
-export TEST_BACKUP_FAIL=1
-if printf 'PURGE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall --purge >"$TEST_ROOT/host-result" 2>&1;then echo 'Purge continued without backup' >&2;exit 1;fi
-test -f "$HOST_ROOT/database";test -f "$HOST_ROOT/admin";test -d "$HOST_ROOT/etc/veloray"
-unset TEST_BACKUP_FAIL
-pass purge-requires-successful-backup
-printf 'PURGE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall --purge >"$TEST_ROOT/host-result" 2>&1
+mkdir -p "$HOST_ROOT/var/lib/veloray/backups" "$HOST_ROOT/etc/nginx/conf.d"
+touch "$HOST_ROOT/var/lib/veloray/backups/fixture.tar.gz" "$HOST_ROOT/etc/nginx/conf.d/unrelated.conf"
+printf 'PURGE\n' | bash "$HOST_ROOT/usr/local/bin/velorayctl" uninstall >"$TEST_ROOT/host-result" 2>&1
 test ! -f "$HOST_ROOT/database";test ! -f "$HOST_ROOT/role";test ! -d "$HOST_ROOT/etc/veloray"
 test ! -d "$HOST_ROOT/var/lib/veloray-agent";test ! -d "$HOST_ROOT/var/lib/veloray-cores"
-find "$HOST_ROOT/var/lib/veloray/backups" -name 'pre-purge-*.tar.gz' | read -r backup
-pass purge-removes-local-state-and-keeps-private-backup
+test ! -d "$HOST_ROOT/var/lib/veloray";test ! -d "$HOST_ROOT/var/log/veloray"
+test ! -e "$HOST_ROOT/usr/local/bin/veloray";test ! -d "$HOST_ROOT/opt/veloray"
+test -f "$HOST_ROOT/etc/nginx/conf.d/unrelated.conf"
+pass purge-removes-local-state-tools-and-backups
 # The bootstrapper reinstalls bundled cores before calling install-panel.sh.
 for core in xray sing-box;do printf '#!/usr/bin/env bash\nexit 0\n' >"$HOST_ROOT/usr/local/bin/$core";chmod +x "$HOST_ROOT/usr/local/bin/$core";done
 host_install

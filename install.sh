@@ -55,6 +55,8 @@ usage() {
 VeloRay installer
   install.sh [install|node] [--mode docker|native] [--database postgresql] [--lang en|fa]
              [--repo OWNER/REPOSITORY] [--ref BRANCH_OR_TAG_OR_COMMIT]
+             [--host DOMAIN_OR_IP] [--panel-port PORT] [--subscription-port PORT]
+             [--tls auto|local]
 Docker is the default for panel installations. Existing native data is migrated with a recovery backup.
 PostgreSQL is the supported database. Default repository: ParsaZali/VeloRay, ref: main.
 Installation details go to a private log. Set VELORAY_VERBOSE=1 to also show package output.
@@ -109,9 +111,16 @@ if [[ "${1:-}" == install || "${1:-}" == node ]];then action="$1";shift;fi
 while [[ $# -gt 0 ]];do
  case "$1" in
   --help|-h) usage;exit 0;;
-  --database|--lang|--repo|--ref|--mode)
+  --database|--lang|--repo|--ref|--mode|--host|--domain|--panel-port|--subscription-port|--tls)
    [[ $# -ge 2 && -n "$2" && "$2" != --* ]]||fail "Missing value for $1."
-   case "$1" in --database) database="$2";;--lang) language="$2";;--repo) repository="$2";;--ref) reference="$2";;--mode) mode="$2";;esac
+   case "$1" in
+    --database) database="$2";;--lang) language="$2";;--repo) repository="$2";;--ref) reference="$2";;--mode) mode="$2";;
+    --host|--domain) export VELORAY_PUBLIC_HOST="$2";;
+    --panel-port|--subscription-port)
+     [[ "$2" =~ ^[0-9]{1,5}$ ]] && ((10#$2>=1 && 10#$2<=65535))||fail "Invalid port for $1."
+     if [[ "$1" == --panel-port ]];then export VELORAY_PANEL_PORT="$((10#$2))";else export VELORAY_SUBSCRIPTION_PORT="$((10#$2))";fi;;
+    --tls) [[ "$2" == auto || "$2" == local ]]||fail 'TLS mode must be auto or local.';export VELORAY_TLS_MODE="$2";;
+   esac
    shift 2;;
   *) fail "Unknown argument: $1. Run install.sh --help.";;
  esac

@@ -135,7 +135,6 @@ export function PasskeySettings() {
               className="input"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={t("My phone", "گوشی من")}
               maxLength={80}
               disabled={busy || !capable || !status?.enabled}
             />

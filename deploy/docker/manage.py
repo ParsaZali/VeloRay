@@ -31,6 +31,18 @@ CURRENT = Path('/opt/veloray/docker-current')
 STATE = Path('/var/lib/veloray/docker')
 BACKUPS = Path('/var/lib/veloray/backups')
 NGINX = Path('/etc/nginx')
+SYSTEMD = Path('/etc/systemd/system')
+BIN = Path('/usr/local/bin')
+LOGS = Path('/var/log/veloray')
+NATIVE_UNITS = (
+    'veloray-host-control.timer', 'veloray-subscription-endpoint.timer', 'veloray-reconcile.timer',
+    'veloray-host-control.service', 'veloray-subscription-endpoint.service', 'veloray-reconcile.service',
+    'veloray-web.service', 'veloray-agent.service', 'veloray-subscriptions.service',
+)
+DOCKER_UNITS = (
+    'veloray-docker-control.timer', 'veloray-docker-certificates.timer', 'veloray-auto-update.timer', 'veloray-backup.timer',
+    'veloray-docker-control.service', 'veloray-docker-certificates.service', 'veloray-auto-update.service', 'veloray-backup.service',
+)
 REPO = 'ParsaZali/VeloRay'
 SERVICES = ['proxy', 'subscriptions', 'panel', 'agent']
 DATA = {'agent': '/var/lib/veloray-agent', 'proxy': '/data'}
@@ -250,7 +262,7 @@ def configure():
         name = host(name)
     else:
         while True:
-            value = install_value('  Public domain or IP: ', '  دامنه یا آی‌پی عمومی: ')
+            value = install_value('  Domain (automatic HTTPS) or public IP: ', '  دامنه (HTTPS خودکار) یا آی‌پی عمومی: ')
             try:
                 name = host(value)
                 break
@@ -292,6 +304,10 @@ def configure():
     values['VELORAY_DATABASE_PORT'] = str(random_port([int(values['VELORAY_PANEL_PORT']), int(values['VELORAY_SUBSCRIPTION_PORT'])]))
     values['VELORAY_TEMPLATE_ROOT'] = '/etc/veloray/templates'
     values['VELORAY_PUBLIC_URL'] = origin(values)
+    if interactive:
+        say('  Panel: ' + values['VELORAY_PUBLIC_URL'], '  پنل: ' + values['VELORAY_PUBLIC_URL'])
+        sub = origin(dict(values, VELORAY_PANEL_PORT=values['VELORAY_SUBSCRIPTION_PORT']))
+        say('  Subscriptions: ' + sub, '  اشتراک: ' + sub)
     return values
 
 
@@ -460,6 +476,31 @@ def schedule(kind, action):
     run(['systemctl', 'enable', '--now', name + '.timer'])
 
 
+def activate_fresh_install(values):
+    nginx_state = nginx_plan(values['VELORAY_TLS_MODE'])
+    if os.path.lexists(NGINX / 'sites-enabled/veloray'):
+        raise ValueError('A native VeloRay nginx site still exists. Recover the native installation or remove the stale site before installing Docker')
+    saved = CONFIG / 'nginx-before-docker.json'
+    if saved.is_file():
+        nginx_state = json.loads(saved.read_text())
+    elif nginx_state['nginx']:
+        nginx_state['nginx_enabled'] = subprocess.run(['systemctl', 'is-enabled', '--quiet', 'nginx'], check=False).returncode == 0
+        atomic(saved, json.dumps(nginx_state))
+    try:
+        detach_native_nginx(nginx_state)
+        up()
+        sync_certificate()
+        if nginx_state['nginx']:
+            run(['systemctl', 'disable', 'nginx'])
+        install_tools()
+    except BaseException:
+        if nginx_state['nginx']:
+            compose('down', '--remove-orphans')
+            restore_native_nginx(nginx_state)
+            saved.unlink(missing_ok=True)
+        raise
+
+
 def install(source):
     install_step('Verify VeloRay files', 'بررسی فایل‌های VeloRay')
     sha = revision(source)
@@ -472,8 +513,7 @@ def install(source):
             install_step('Build application images', 'آماده‌سازی ایمیج‌ها')
             compose('build', 'panel', 'proxy')
             install_step('Start services and verify HTTPS', 'راه‌اندازی سرویس‌ها و بررسی HTTPS')
-            up()
-            install_tools()
+            activate_fresh_install(read_env(CONFIG / '.env'))
             (CONFIG / 'installing').unlink()
             (STATE / 'purged').unlink(missing_ok=True)
             return show_credentials(read_env(CONFIG / '.env'))
@@ -496,9 +536,7 @@ def install(source):
     install_step('Build application images', 'آماده‌سازی ایمیج‌ها')
     compose('build', 'panel', 'proxy')
     install_step('Start services and verify HTTPS', 'راه‌اندازی سرویس‌ها و بررسی HTTPS')
-    up()
-    install_tools()
-    sync_certificate()
+    activate_fresh_install(values)
     (CONFIG / 'installing').unlink()
     (STATE / 'purged').unlink(missing_ok=True)
     show_credentials(values)
@@ -901,6 +939,8 @@ def sync_certificate():
                 date = output(['openssl', 'x509', '-in', certificate, '-noout', '-enddate'], stderr=subprocess.DEVNULL, env=dict(os.environ, LC_ALL='C')).decode().strip().split('=', 1)[1]
                 expires = datetime.datetime.strptime(date, '%b %d %H:%M:%S %Y %Z')
                 is_local = 'local' in certificate.relative_to(root).parts
+                if values.get('VELORAY_TLS_MODE') == 'auto' and is_local:
+                    continue
                 preferred = is_local if values.get('VELORAY_TLS_MODE') == 'local' else not is_local
                 candidates.append((preferred, expires, certificate, key))
             except (ValueError, IndexError, subprocess.SubprocessError):
@@ -1359,6 +1399,104 @@ def captured_project_exists():
     return bool(output(['docker', 'ps', '-aq', '--filter', 'label=com.docker.compose.project=veloray']).strip() or output(['docker', 'volume', 'ls', '-q', '--filter', 'label=com.docker.compose.project=veloray']).strip())
 
 
+def stop_installation_units(units):
+    for unit in units:
+        subprocess.run(['systemctl', 'disable', '--now', unit], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    for unit in units:
+        status = subprocess.run(['systemctl', 'is-active', unit], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
+        if status.stdout.strip() not in (b'inactive', b'failed', b'unknown'):
+            raise ValueError(f'Cannot confirm {unit} stopped; installation files were kept')
+
+
+def remove_directory(path):
+    if path.is_symlink():
+        path.unlink()
+    elif path.is_dir():
+        shutil.rmtree(path)
+
+
+def archived_native_installation():
+    path = CONFIG.parent / 'veloray.env'
+    if not path.is_file():
+        return None
+    if not (STATE / 'native-migration.json').is_file():
+        raise ValueError('A separate native configuration was found; resolve it before removing the Docker installation')
+    values = read_env(path)
+    if (values.get('DATABASE_URL') or values.get('POSTGRES_HOST', '127.0.0.1') not in ('127.0.0.1', 'localhost')
+        or values.get('POSTGRES_PORT', '5432') != '5432' or values.get('POSTGRES_DB', 'veloray') != 'veloray'
+        or values.get('POSTGRES_USER', 'veloray') != 'veloray'):
+        raise ValueError('The archived native database is custom; export and remove it separately before a full uninstall')
+    return nginx_plan('local')
+
+
+def remove_archived_native(nginx_state, cores):
+    detach_native_nginx(nginx_state)
+    (NGINX / 'sites-available/veloray').unlink(missing_ok=True)
+    Path('/etc/letsencrypt/renewal-hooks/deploy/veloray-nginx').unlink(missing_ok=True)
+    for command in ('dropdb', 'dropuser'):
+        run(['runuser', '-u', 'postgres', '--', command, '-h', '/var/run/postgresql', '-p', '5432', '-U', 'postgres', '--if-exists', '--', 'veloray'])
+    for core in ('xray', 'sing-box'):
+        executable = BIN / core
+        slot = 'singbox' if core == 'sing-box' else core
+        if executable.is_symlink() and executable.readlink() == Path(f'/var/lib/veloray-cores/{slot}/current'):
+            executable.unlink()
+        if core in cores:
+            remove_directory(Path('/usr/local/etc') / core)
+    for path in ('/etc/veloray-node', '/var/lib/veloray-agent', '/var/lib/veloray-cores', '/var/lib/veloray-acme'):
+        remove_directory(Path(path))
+    (BIN / 'veloray-agent').unlink(missing_ok=True)
+
+
+def uninstall(keep_data=False):
+    if keep_data:
+        confirmed = require_terminal_confirmation(
+            'Remove containers and preserve data? Type REMOVE: ', 'برای حذف کانتینرها و حفظ داده‌ها REMOVE بنویسید: ', 'REMOVE')
+    else:
+        confirmed = require_terminal_confirmation(
+            'Permanently delete VeloRay, its database, keys and local backups? Type PURGE: ',
+            'برای حذف همیشگی VeloRay، دیتابیس، کلیدها و بکاپ‌های محلی PURGE بنویسید: ', 'PURGE')
+    if not confirmed:
+        return
+    if (CONFIG / 'migration-pending.json').exists():
+        raise ValueError('Recover the interrupted native migration before uninstalling')
+    native = None if keep_data else archived_native_installation()
+    cores = []
+    if native is not None:
+        for core in ('xray', 'sing-box'):
+            unit = SYSTEMD / f'{core}.service'
+            expected = CURRENT.parent / 'current/deploy/systemd' / unit.name
+            if unit.is_file() and expected.is_file() and unit.read_bytes() == expected.read_bytes():
+                cores.append(core)
+    units = DOCKER_UNITS + (NATIVE_UNITS + tuple(f'{core}.service' for core in cores) if native is not None else ())
+    stop_installation_units(units)
+    compose('down', '--remove-orphans', *([] if keep_data else ['--volumes']))
+    if keep_data:
+        say('VeloRay containers removed. Data and management commands were kept for reinstall.', 'کانتینرها حذف شدند؛ داده‌ها و ابزار مدیریت برای نصب دوباره حفظ شدند.', '32')
+        return
+    if captured_project_exists():
+        raise ValueError('VeloRay containers or volumes still exist; installation files were kept')
+    if native is not None:
+        remove_archived_native(native, cores)
+    prior_nginx = CONFIG / 'nginx-before-docker.json'
+    if prior_nginx.is_file():
+        restore_native_nginx(json.loads(prior_nginx.read_text()))
+    for unit in units:
+        (SYSTEMD / unit).unlink(missing_ok=True)
+    run(['systemctl', 'daemon-reload'])
+    revisions = {path.name[7:] for path in (CURRENT.parent / 'releases').glob('docker-*') if re.fullmatch(r'docker-[a-f0-9]{40}', path.name)}
+    tags = {f'{image}:{sha}' for image in ('veloray', 'veloray-proxy') for sha in revisions}
+    if tags:
+        images = output(['docker', 'image', 'ls', '--format', '{{.Repository}}:{{.Tag}}']).decode().splitlines()
+        for tag in sorted(tags.intersection(images)):
+            if subprocess.run(['docker', 'image', 'rm', tag], check=False).returncode:
+                say(f'Could not remove shared image {tag}. Docker did not force its removal.', color='33')
+    for path in (CONFIG.parent, CURRENT.parent, STATE.parent, LOGS):
+        remove_directory(path)
+    for name in ('veloray', 'velorayctl'):
+        (BIN / name).unlink(missing_ok=True)
+    say('VeloRay removed. The next installation starts with no saved VeloRay data.', 'VeloRay حذف شد؛ نصب بعدی بدون دادهٔ ذخیره‌شده شروع می‌شود.', '32')
+
+
 MENU_SECTIONS = (
     ('Services', (
         ('1', 'Status', 'status'),
@@ -1474,15 +1612,21 @@ def main():
   update | auto-update enable|disable|status|check|run
   backup-schedule daily|off|status
   certificate-sync | certificate-import HOST CERTIFICATE KEY
-  uninstall [--purge]''')
+  uninstall [--keep-data]''')
     parser.add_argument('command', nargs='?', default='menu')
     parser.add_argument('values', nargs='*')
     parser.add_argument('--source', type=Path)
-    parser.add_argument('--purge', action='store_true')
+    removal = parser.add_mutually_exclusive_group()
+    removal.add_argument('--purge', action='store_true', help='alias for complete uninstall')
+    removal.add_argument('--keep-data', action='store_true', help='remove containers but retain VeloRay data')
     parser.add_argument('--follow', action='store_true', help='follow service logs until Ctrl+C')
     args = parser.parse_args()
     if args.command == 'help':
         return parser.print_help()
+    if (args.purge or args.keep_data) and args.command != 'uninstall':
+        parser.error('removal options are only available with uninstall')
+    if args.command == 'uninstall' and args.values:
+        parser.error('use veloray uninstall [--keep-data]')
     if args.follow:
         if args.command != 'logs':
             parser.error('--follow is only available with logs')
@@ -1595,25 +1739,7 @@ def main():
         elif command == 'backup-schedule':
             return schedule('backup', {'daily': 'enable', 'off': 'disable'}.get(values[0] if values else 'status', values[0] if values else 'status'))
         elif command == 'uninstall':
-            confirmation = 'PURGE' if args.purge else 'REMOVE'
-            if not require_terminal_confirmation(
-                'Delete VeloRay containers, database, keys and volumes? Type PURGE: ' if args.purge else 'Remove VeloRay containers; preserve all data? Type REMOVE: ',
-                'برای حذف کانتینرها و داده‌ها PURGE بنویسید: ' if args.purge else 'برای حذف کانتینرها و حفظ داده‌ها REMOVE بنویسید: ',
-                confirmation,
-            ):
-                return
-            if args.purge:
-                backup()
-            compose('down', '--remove-orphans', *(['--volumes'] if args.purge else []))
-            run(['systemctl', 'disable', '--now', 'veloray-docker-control.timer'])
-            for timer in ('veloray-auto-update.timer', 'veloray-backup.timer', 'veloray-docker-certificates.timer'):
-                subprocess.run(['systemctl', 'disable', '--now', timer], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-            if args.purge:
-                atomic(STATE / 'purged', time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
-                shutil.rmtree(CONFIG)
-                say('VeloRay application data removed. Recovery backups and Docker itself were preserved.', 'اطلاعات VeloRay حذف شد؛ بکاپ‌های بازیابی و خود Docker حفظ شدند.', '32')
-                return
-            say('VeloRay containers removed. Database, keys, volumes and backups were preserved. Reinstall to resume.', 'کانتینرها حذف شدند؛ اطلاعات، کلیدها و بکاپ‌ها حفظ شدند. با نصب مجدد ادامه دهید.', '32')
+            return uninstall(args.keep_data)
         else:
             raise ValueError('Use sudo veloray --help or sudo veloray for the management menu')
 

@@ -1347,7 +1347,6 @@ function ClientModal({
               className="input"
               value={editor.name}
               onChange={(e) => set("name", e.target.value)}
-              placeholder={t("e.g. Arman - iPhone")}
               required
             />
           </label>

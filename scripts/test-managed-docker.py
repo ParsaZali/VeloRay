@@ -221,7 +221,7 @@ try:
             shared_nginx = nginx_fixture()
             verify_foreign_nginx()
         if mode == 'retained':
-            subprocess.run(['/usr/local/bin/veloray', 'uninstall'], input=b'REMOVE\n', check=True)
+            subprocess.run(['/usr/local/bin/veloray', 'uninstall', '--keep-data'], input=b'REMOVE\n', check=True)
             assert not Path('/usr/local/bin/veloray').exists()
     elif mode == 'fresh':
         shared_nginx = nginx_fixture()
@@ -290,14 +290,21 @@ try:
     subprocess.run(['/usr/local/bin/veloray', 'restart'], check=True)
     login(password)
     assert request('GET', '/api/clients/' + str(previous['id']))['credential'] == previous['credential']
-    subprocess.run(['/usr/local/bin/veloray', 'uninstall'], input=b'REMOVE\n', check=True)
+    subprocess.run(['/usr/local/bin/veloray', 'uninstall', '--keep-data'], input=b'REMOVE\n', check=True)
     with tempfile.TemporaryDirectory(prefix='veloray-retained-backup-') as tmp:
         subprocess.run(['/usr/local/bin/veloray', 'backup', str(Path(tmp) / 'removed.tar.gz')], check=True)
         assert (Path(tmp) / 'removed.tar.gz').is_file()
     install_panel('docker')
     login(password)
     assert request('GET', '/api/clients/' + str(previous['id']))['credential'] == previous['credential']
-    subprocess.run(['/usr/local/bin/veloray', 'uninstall', '--purge'], input=b'PURGE\n', check=True)
+    subprocess.run(['/usr/local/bin/veloray', 'uninstall'], input=b'PURGE\n', check=True)
+    for path in ('/etc/veloray', '/opt/veloray', '/var/lib/veloray', '/var/log/veloray', '/usr/local/bin/veloray', '/usr/local/bin/velorayctl', '/etc/systemd/system/veloray-docker-control.timer'):
+        assert not Path(path).exists(), f'Full uninstall left {path}'
+    assert not m.captured_project_exists(), 'VeloRay containers or volumes remain'
+    for number in (25443, 100, 8610, 8612, 9191):
+        with socket.socket() as listener:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind(('127.0.0.1', number))
     install_panel('docker')
     login(env['VELORAY_ADMIN_PASSWORD'])
     assert request('GET', '/api/clients') == [], 'Archived native users returned after explicit purge'

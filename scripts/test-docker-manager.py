@@ -160,6 +160,54 @@ class ManagerTests(unittest.TestCase):
             m.restore_native_nginx(state)
         run.assert_not_called()
 
+    def test_complete_uninstall_removes_owned_files_but_not_shared_services(self):
+        base = self.root / 'owned'
+        paths = {
+            'CONFIG': base / 'etc/veloray/docker', 'CURRENT': base / 'opt/veloray/docker-current',
+            'STATE': base / 'var/veloray/docker', 'SYSTEMD': base / 'systemd',
+            'LOGS': base / 'logs/veloray', 'BIN': base / 'bin',
+        }
+        for key, path in paths.items():
+            (path.parent if key == 'CURRENT' else path).mkdir(parents=True, exist_ok=True)
+        for path in (paths['CONFIG']/'.env', paths['STATE']/'cache', paths['LOGS']/'install.log',
+                     paths['BIN']/'veloray', paths['BIN']/'velorayctl', paths['SYSTEMD']/'veloray-docker-control.timer',
+                     paths['SYSTEMD']/'nginx.service', paths['BIN']/'docker'):
+            path.touch()
+        local_backup = paths['STATE'].parent / 'local-backup.tar.gz'
+        local_backup.touch()
+        with (patch.multiple(m, **paths), patch.object(m, 'compose') as compose, patch.object(m, 'run') as run,
+              patch.object(m, 'stop_installation_units') as stop, patch.object(m, 'captured_project_exists', return_value=False),
+              patch.object(m, 'require_terminal_confirmation', side_effect=[False, True, True]), redirect_stdout(io.StringIO())):
+            m.uninstall()
+            compose.assert_not_called()
+            m.uninstall(keep_data=True)
+            compose.assert_called_once_with('down', '--remove-orphans')
+            self.assertTrue(local_backup.is_file())
+            self.assertTrue((paths['BIN']/'veloray').is_file())
+            m.uninstall()
+            compose.assert_called_with('down', '--remove-orphans', '--volumes')
+            run.assert_called_once_with(['systemctl', 'daemon-reload'])
+            stop.assert_called_with(m.DOCKER_UNITS)
+        for path in (paths['CONFIG'].parent, paths['CURRENT'].parent, paths['STATE'].parent, paths['LOGS'],
+                     paths['BIN']/'veloray', paths['BIN']/'velorayctl', paths['SYSTEMD']/'veloray-docker-control.timer'):
+            self.assertFalse(path.exists(), path)
+        self.assertTrue((paths['SYSTEMD']/'nginx.service').is_file())
+        self.assertTrue((paths['BIN']/'docker').is_file())
+
+    def test_fresh_domain_install_restores_default_nginx_on_failure(self):
+        plan = {'nginx': True, 'nginx_reload': False, 'nginx_site': None}
+        with (patch.object(m, 'nginx_plan', return_value=plan), patch.object(m, 'detach_native_nginx') as detach,
+              patch.object(m, 'restore_native_nginx') as restore, patch.object(m, 'compose') as compose,
+              patch.object(m, 'up', side_effect=ValueError('HTTPS failed')), patch.object(m, 'install_tools') as tools,
+              patch.object(m.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0))):
+            with self.assertRaisesRegex(ValueError, 'HTTPS failed'):
+                m.activate_fresh_install({'VELORAY_TLS_MODE': 'auto'})
+            detach.assert_called_once_with(dict(plan, nginx_enabled=True))
+            compose.assert_called_once_with('down', '--remove-orphans')
+            restore.assert_called_once_with(dict(plan, nginx_enabled=True))
+            tools.assert_not_called()
+        self.assertFalse((self.config/'nginx-before-docker.json').exists())
+
     def test_automatic_tls_rejects_shared_sites_before_changes_and_lists_names(self):
         self.nginx_fixture()
         with patch.object(m, 'run'), patch.object(m, 'output', return_value=b''), patch.object(m.subprocess, 'run', return_value=subprocess.CompletedProcess([],0)), self.assertRaises(ValueError) as error:

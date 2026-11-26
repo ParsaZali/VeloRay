@@ -1156,7 +1156,7 @@ test("subscription dashboard supports chart, four languages, search, QR and mobi
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/portal-modern-preview");
   await expect(page.locator('[data-portal-version="2"]')).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Arman" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Parsa" })).toBeVisible();
   await expect(page.locator(".stat-date")).toHaveText("No expiry");
   await expect(page.locator("#traffic-chart")).toBeVisible();
   await expect(page.locator("#chart-total")).toContainText("MB");
@@ -1269,7 +1269,7 @@ test("simple subscription page has persistent themes, copying, QR and no horizon
   await page.goto("/simple-preview");
   await expect(page.locator("#chart-points circle")).toHaveCount(1);
   await expect(page.locator("#traffic-chart")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Arman" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Parsa" })).toBeVisible();
   await expect(page.locator("#traffic-chart")).toHaveCount(1);
   await page
     .getByRole("group", { name: "Appearance", exact: true })

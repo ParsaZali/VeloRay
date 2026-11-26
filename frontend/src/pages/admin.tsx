@@ -620,7 +620,6 @@ export function AdminPage() {
                   aria-describedby="ldap-binding-hint"
                   maxLength={1024}
                   autoComplete="off"
-                  placeholder="uid=alice,ou=people,dc=example,dc=com"
                   onChange={(e) =>
                     setEditor({ ...editor, ldap_dn: e.target.value })
                   }

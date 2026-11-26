@@ -16,7 +16,7 @@ import (
 func portalFixture(t *testing.T) (*Server, Data, Data, Data, Data) {
 	t.Helper()
 	c := defaults("clients")
-	c["name"] = "Arman"
+	c["name"] = "Parsa"
 	c["credential"] = uuid()
 	c["subscription_token"] = strings.Repeat("s", 32)
 	c["used_traffic_bytes"] = int64(1 << 30)
@@ -38,7 +38,7 @@ func TestSimplePortalDefaultAndCustomFallback(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatal(w.Code)
 	}
-	for _, value := range []string{"subscription-simple.css", "subscription-simple.js", "appearance", "5.0 GB", "4.0 GB", "Arman", "profile-0"} {
+	for _, value := range []string{"subscription-simple.css", "subscription-simple.js", "appearance", "5.0 GB", "4.0 GB", "Parsa", "profile-0"} {
 		if !strings.Contains(w.Body.String(), value) {
 			t.Fatal("missing", value)
 		}

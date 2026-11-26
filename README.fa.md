@@ -34,6 +34,13 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/insta
 
 برای HTTPS خودکار، دامنه باید به سرور اشاره کند و پورت‌های ۸۰ و ۴۴۳ آزاد و قابل دسترس باشند. نصب با آی‌پی نیز از گواهی محلی استفاده می‌کند. پورت عمومی از فهرست پورت‌های CDN انتخاب نمی‌شود؛ هر پورت آزاد و مجاز سیستم را می‌توانید تعیین کنید.
 
+برای تعیین دامنه و هر دو پورت هنگام نصب تازه:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/install.sh) \
+  --lang fa --host panel.example.com --panel-port 8443 --subscription-port 8444
+```
+
 ### به‌روزرسانی پنل
 
 ```bash
@@ -44,9 +51,9 @@ sudo veloray update
 
 ### حذف و نصب دوباره
 
-دستور `sudo veloray uninstall` سرویس‌ها و فایل‌های برنامه را حذف می‌کند؛ **کاربران، کانفیگ‌های VPN، کلیدها و بکاپ‌ها حفظ می‌شوند** و با نصب دوباره برمی‌گردند. دستور `sudo veloray reset` مدیر فعلی را حتی پس از تغییر نام کاربری تشخیص می‌دهد. اگر چند مدیر دارید، با `sudo veloray admin-list` نام‌ها را ببینید و `sudo veloray reset USERNAME` را اجرا کنید.
+دستور `sudo veloray uninstall` پس از تأیید **PURGE**، سرویس‌ها، کانتینرها، داده‌ها، کلیدها و بکاپ‌های محلی VeloRay را حذف می‌کند. اگر بکاپ لازم دارید، اول آن را خارج از `/var/lib/veloray` کپی کنید. بسته‌های مشترک، دیتابیس خارجی و گواهی‌هایی که جداگانه مدیریت می‌شوند دست‌نخورده می‌مانند.
 
-برای نصب از صفر، دستور `sudo veloray uninstall --purge` پس از تأیید **PURGE** و ساخت بکاپ خصوصی، دیتابیس محلی پیش‌فرض، تنظیمات و کلیدها را پاک می‌کند. بکاپ‌ها باقی می‌مانند. دیتابیس سفارشی باید دستی بررسی و حذف شود.
+برای حفظ داده‌ها و کلیدها، از `sudo veloray uninstall --keep-data` و تأیید **REMOVE** استفاده کنید. دستور `sudo veloray reset` مدیر فعلی را تشخیص می‌دهد. اگر چند مدیر دارید، از `sudo veloray admin-list` و `sudo veloray reset USERNAME` استفاده کنید.
 
 ### کنسول مدیریت
 

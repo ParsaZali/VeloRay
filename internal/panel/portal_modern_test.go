@@ -11,7 +11,7 @@ import (
 func TestModernSubscriptionPortalHasNativeStatisticsAndSafeMarkup(t *testing.T) {
 	server := &Server{Config: Config{PublicURL: "https://panel.example"}}
 	client := defaults("clients")
-	client["name"] = "Arman"
+	client["name"] = "Parsa"
 	client["subscription_token"] = strings.Repeat("x", 32)
 	client["credential"] = uuid()
 	client["used_traffic_bytes"] = int64(2 << 30)
@@ -44,7 +44,7 @@ func TestModernSubscriptionPortalHasNativeStatisticsAndSafeMarkup(t *testing.T) 
 		"data-chart-url=\"/sub/", "format=stats", "traffic-chart",
 		"profile-list", "profile-search", "protocol-filter", "copy-all", "copy-subscription",
 		"data-range=\"90d\"", "id=\"qr-dialog\"", "portal-language", "toggle-theme",
-		"2.0 GB", "8.0 GB", "1.0 GB", "Arman", "Primary", "2 / 3", "id=\"last-activity\"",
+		"2.0 GB", "8.0 GB", "1.0 GB", "Parsa", "Primary", "2 / 3", "id=\"last-activity\"",
 	} {
 		if !strings.Contains(html, needle) {
 			t.Fatalf("modern portal missing %q", needle)

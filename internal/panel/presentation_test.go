@@ -50,7 +50,7 @@ func TestIntegrationHealthReportsDatabaseAndPanelUptime(t *testing.T) {
 func TestCompactPortalPreservesDownloadsAndEscapesNames(t *testing.T) {
 	server := &Server{Config: Config{PublicURL: "https://panel.example"}}
 	client := defaults("clients")
-	client["name"] = "Arman"
+	client["name"] = "Parsa"
 	client["credential"] = uuid()
 	client["subscription_token"] = strings.Repeat("a", 32)
 	client["used_traffic_bytes"] = int64(3 << 30)

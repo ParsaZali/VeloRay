@@ -677,7 +677,6 @@ billed|محاسبه‌شده
 clients|کلاینت
 clients ·|کلاینت ·
 days|روز
-e.g. Arman - iPhone|مثلاً آرمان - گوشی
 gRPC service|سرویس جی‌آرپی‌سی
 listeners across|اینباند روی
 nodes|نود

@@ -104,7 +104,7 @@ func run() error {
   veloray inbound-port ID PORT     Change an inbound port and update its links
   veloray update [DIRECTORY]       Install an update with a recovery backup
   veloray auto-update enable|disable|status|check|run
-  veloray uninstall [--purge]      Remove programs; --purge also resets local data
+  veloray uninstall [--keep-data]  Remove VeloRay and local data (requires PURGE)
 
 Development: serve | migrate | bootstrap | bootstrap-if-empty | bootstrap-local | reconcile | version
 Run veloray serve explicitly to start the application in the foreground.`)

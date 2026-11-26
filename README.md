@@ -42,6 +42,13 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/insta
 
 No Go or Node.js installation is needed when using the verified runtime bundles. Available public ports are accepted without a Cloudflare CDN port filter.
 
+To provide the domain and both ports on a fresh install:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/ParsaZali/VeloRay/main/install.sh) \
+  --host panel.example.com --panel-port 8443 --subscription-port 8444
+```
+
 ### Update
 
 ```bash
@@ -56,9 +63,9 @@ Managed Docker and native installations also support **Settings → System → P
 
 ### Removal and reinstall
 
-`sudo veloray uninstall` stops and removes the services and program files while **keeping users, VPN configurations, keys and backups**. Reinstalling reuses this data. `sudo veloray reset` detects the current administrator even after a username change; use `sudo veloray admin-list` and `sudo veloray reset USERNAME` when multiple administrators exist.
+`sudo veloray uninstall` requires typing **PURGE**. It removes VeloRay services, containers, managed data, keys and local backups. Copy any backup you need outside `/var/lib/veloray` first. Shared packages, external databases and independently managed certificates are left alone.
 
-For a fresh installation, `sudo veloray uninstall --purge` requires typing **PURGE** and a successful private recovery backup before deleting the installer-managed local database, configuration and keys. Backups are kept. Custom databases require manual removal.
+Use `sudo veloray uninstall --keep-data` and type **REMOVE** to keep data and keys for reinstall. `sudo veloray reset` detects the current administrator; with multiple administrators, see `sudo veloray admin-list` and use `sudo veloray reset USERNAME`.
 
 ### Server console
 
