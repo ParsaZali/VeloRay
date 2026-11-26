@@ -9,10 +9,11 @@ import { useLocale, tx } from "@/lib/i18n";
 import { can, useSession } from "@/lib/session";
 import { SubscriptionCheck } from "@/components/subscription-check";
 import { Dialog } from "@/components/common/dialog";
-import { FormEvent, useEffect, useMemo, useState, useRef } from "react";
+import { FormEvent, useEffect, useId, useMemo, useState, useRef } from "react";
 import {
   Check,
   Copy,
+  Dices,
   ExternalLink,
   Globe,
   MonitorSmartphone,
@@ -1290,8 +1291,16 @@ function ClientModal({
 }) {
   useLocale();
   const session = useSession();
+  const nameId = useId();
   const set = (k: keyof Editor, v: string | number | boolean) =>
     setEditor({ ...editor, [k]: v });
+  function generateName() {
+    const suffix = Array.from(
+      crypto.getRandomValues(new Uint8Array(5)),
+      (byte) => byte.toString(16).padStart(2, "0"),
+    ).join("");
+    set("name", `client-${suffix}`);
+  }
   const ib = inbounds.find((i) => String(i.id) === editor.inbound);
   const grants = new Set([
     ...(editor.inbound_ids || []),
@@ -1341,15 +1350,33 @@ function ClientModal({
       </div>
       <form onSubmit={onSubmit}>
         <div className="grid gap-4 p-5 sm:grid-cols-2">
-          <label className="label sm:col-span-2">
-            {editor.count !== undefined ? t("Name prefix") : t("Client name")}
-            <Input
-              className="input"
-              value={editor.name}
-              onChange={(e) => set("name", e.target.value)}
-              required
-            />
-          </label>
+          <div className="sm:col-span-2">
+            <label className="label" htmlFor={nameId}>
+              {editor.count !== undefined ? t("Name prefix") : t("Client name")}
+            </label>
+            <div className="mt-[0.45rem] flex items-stretch gap-2">
+              <Input
+                id={nameId}
+                className="min-w-0 flex-1"
+                dir="auto"
+                value={editor.name}
+                onChange={(e) => set("name", e.target.value)}
+                required
+              />
+              {!editor.id && editor.count === undefined && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-auto w-[42px] shrink-0"
+                  title={t("Generate random name", "ساخت نام تصادفی")}
+                  onClick={generateName}
+                  disabled={busy}
+                >
+                  <Dices size={17} aria-hidden="true" />
+                </Button>
+              )}
+            </div>
+          </div>
           {editor.count !== undefined && (
             <label className="label sm:col-span-2">
               {t("Number of clients")}
